@@ -165,6 +165,8 @@ Use this template:
 **Findings Summary:** {N} Critical, {N} Important, {N} Minor | **Confidence range:** {min}-{max}
 ```
 
+**Note:** When the user selects "Full review post" (option 1) from the action menu, use the **Summary Comment Template** and **Inline Discussion Thread Template** from SKILL.md Phase 6 to format the posted content. The summary is an overview, the inline threads are technical and actionable — one per finding, never batched.
+
 ---
 
 ## Verdict Decision Logic

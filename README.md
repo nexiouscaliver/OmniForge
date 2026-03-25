@@ -229,18 +229,21 @@ OmniReview automatically reduces confidence for common false positive categories
 
 ## What Happens After Review
 
-OmniReview never takes action without your approval. After presenting the report, you get a structured action menu with **8 options**:
+OmniReview never takes action without your approval. After presenting the report, you get a structured action menu with **9 options**:
 
 | # | Action | What It Does |
 |---|--------|-------------|
-| 1 | **Post summary comment** | Posts the consolidated review summary as a top-level comment on the MR |
-| 2 | **Post inline findings** | Creates individual discussion threads on specific lines of the diff, so the MR author sees findings right where the code is |
-| 3 | **Create GitLab issues** | Opens new GitLab issues for Critical or Important findings, automatically linked back to the MR for traceability |
-| 4 | **Approve the MR** | Approves the merge request (only when you explicitly choose this) |
-| 5 | **Open in browser** | Opens the MR in your default browser for manual inspection |
-| 6 | **Re-review a specific area** | Dispatches a single focused agent to take a deeper look at one particular file or concern |
-| 7 | **Verify a concern** | Runs a targeted check on something specific you want validated |
-| 8 | **Done** | Finish the review — no further action needed |
+| 1 | **Full review post** (Recommended) | Posts a concise overview comment on the MR **plus** individual inline discussion threads on each finding — one thread per issue, placed on the exact diff line. This is the most common action. |
+| 2 | **Post summary only** | Posts just the overview comment as a top-level MR note — no inline threads |
+| 3 | **Post inline findings only** | Creates only the inline discussion threads on diff lines — no summary comment |
+| 4 | **Create GitLab issues** | Opens new GitLab issues for Critical or Important findings, automatically linked back to the MR for traceability |
+| 5 | **Approve the MR** | Approves the merge request (only when you explicitly choose this) |
+| 6 | **Open in browser** | Opens the MR in your default browser for manual inspection |
+| 7 | **Re-review a specific area** | Dispatches a single focused agent to take a deeper look at one particular file or concern |
+| 8 | **Verify a concern** | Runs a targeted check on something specific you want validated |
+| 9 | **Done** | Finish the review — no further action needed |
+
+**Option 1 is what most people want** — it gives the MR author a high-level overview comment to understand the review at a glance, plus detailed technical threads on the exact lines where issues were found. Each inline thread includes what was found, why it matters, and a specific recommendation with code suggestions where applicable. Multiple threads on the same file are encouraged — each finding gets its own thread so it can be discussed and resolved independently.
 
 You can select multiple actions in sequence. The menu returns after each action until you choose "Done."
 
@@ -373,7 +376,7 @@ OmniReview/
 - [x] GitLab MR review via `glab` CLI
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
-- [x] 8-option post-review action menu
+- [x] 9-option post-review action menu
 - [ ] GitHub PR support via `gh` CLI
 - [ ] Cursor IDE integration
 - [ ] Gemini CLI agent compatibility

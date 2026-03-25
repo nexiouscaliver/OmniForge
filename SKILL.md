@@ -258,24 +258,104 @@ After presenting the full report, offer structured actions:
 ```
 What would you like to do?
 
-1. Post summary as MR comment
-2. Post individual findings as inline discussion threads
-3. Create GitLab issues for Critical/Important items
-4. Approve the MR
-5. Open MR in browser
-6. Re-review a specific area (single focused agent)
-7. Verify a specific concern (run a targeted check)
-8. Done — no action needed
+1. Full review post — summary comment + inline discussion threads (Recommended)
+2. Post summary only (overview comment, no inline threads)
+3. Post inline findings only (discussion threads, no summary)
+4. Create GitLab issues for Critical/Important items
+5. Approve the MR
+6. Open MR in browser
+7. Re-review a specific area (single focused agent)
+8. Verify a specific concern (run a targeted check)
+9. Done — no action needed
 ```
 
 Wait for user choice. Execute chosen action(s). Return to menu until user selects "Done".
+
+### Option 1: Full Review Post (Recommended)
+
+This is the most common action. It posts everything in one go:
+
+1. Post the **summary comment** (overview template below) as a top-level MR note via `glab mr note`
+2. For **EACH finding** with confidence >= 70, post a separate **inline discussion thread** on the relevant diff line via `glab api`
+3. Report back: "Posted summary comment + {N} inline discussion threads"
+
+**Do NOT batch findings.** Each finding gets its own thread so the MR author can resolve them independently. Multiple threads on the same file = expected and encouraged.
+
+### Summary Comment Template
+
+The summary is an **overview** — a high-level snapshot for anyone (author, reviewer, PM) to quickly understand the MR state. Keep it concise. The detail lives in the inline threads.
+
+```markdown
+## OmniReview
+
+**Verdict:** {APPROVE | APPROVE_WITH_FIXES | REQUEST_CHANGES | BLOCK}
+
+### Overview
+
+{2-4 sentences: what this MR does, the overall quality assessment, and the key risk areas if any}
+
+### At a Glance
+
+| | Count |
+|---|---|
+| Critical | {N} |
+| Important | {N} |
+| Minor | {N} |
+
+### Strengths
+{Top 2-3 things done well — brief, specific}
+
+### Key Concerns
+{Top 2-3 most important findings — one line each, referencing the inline threads for detail}
+
+### Security
+{1-2 sentences: security posture assessment. "No security concerns found." or "See inline threads for {N} security findings."}
+
+---
+*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*
+*Confidence threshold: 70/100 | {N} findings above threshold*
+```
+
+### Inline Discussion Thread Template
+
+Each thread is **technical and actionable**. One thread per finding. Don't hold back — post as many threads as there are findings.
+
+```markdown
+**{SEVERITY}** — {short_title}
+
+**What:** {1-2 sentence description of the issue}
+
+**Why it matters:** {impact — what could go wrong}
+
+**Recommendation:**
+\`\`\`{language}
+{code suggestion or description of fix}
+\`\`\`
+
+Confidence: {score}/100 | Found by: {agent_name(s)}
+```
+
+**For security findings, also include:**
+```markdown
+**Attack scenario:** {how this could be exploited}
+```
+
+**Rules for inline threads:**
+- Post each finding as a **separate** discussion thread on the relevant diff line
+- Use `glab api` with position data to place the thread on the exact line
+- If a finding spans multiple lines, place it on the most relevant line
+- Multiple threads on the same file = expected and encouraged
+- Don't merge or batch findings — each gets its own thread for independent resolution
+- Severity tag at the start: **Critical**, **Important**, or **Minor**
+- Include code suggestions in fenced blocks where applicable
 
 ### Action Commands
 
 | Action | Command |
 |--------|---------|
-| Summary comment | `glab mr note {id} -m "{summary}"` |
-| Inline discussion | `glab api projects/:fullpath/merge_requests/{iid}/discussions --method POST` with position data |
+| Full review post | `glab mr note` (summary) + `glab api` (inline threads, one per finding) |
+| Summary only | `glab mr note {id} -m "{summary}"` |
+| Inline only | `glab api projects/:fullpath/merge_requests/{iid}/discussions --method POST` (per finding) |
 | Create issue | `glab issue create -t "[MR !{id}] {title}" -d "{desc}"` |
 | Approve | `glab mr approve {id}` |
 | Open browser | `glab mr view {id} -w` |
