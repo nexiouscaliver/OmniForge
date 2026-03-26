@@ -1,6 +1,9 @@
 {
   "omnireview": {
-    "command": "python3",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/tools/omnireview_mcp_server.py"]
+    "command": "uv",
+    "args": [
+      "run", "--with", "mcp[cli]",
+      "python3", "${CLAUDE_PLUGIN_ROOT}/tools/omnireview_mcp_server.py"
+    ]
   }
 }

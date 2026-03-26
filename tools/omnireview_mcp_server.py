@@ -51,6 +51,7 @@ async def run_subprocess(args: list, cwd: str, timeout: int = 60):
     proc = await asyncio.create_subprocess_exec(
         *args,
         cwd=cwd,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
