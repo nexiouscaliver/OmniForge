@@ -367,6 +367,7 @@ Confidence: {score}/100 | Found by: {agent_name(s)}
 | Full review post | `mcp__omnireview__post_full_review(mr_id, summary, findings_json, repo_root)` |
 | Summary only | `mcp__omnireview__post_review_summary(mr_id, summary, repo_root)` |
 | Inline thread | `mcp__omnireview__post_inline_thread(mr_id, file_path, line_number, body, repo_root)` |
+| Create issue | `mcp__omnireview__create_linked_issue(mr_id, title, description, labels, repo_root)` |
 
 For `post_full_review`, the `findings` parameter is a JSON string of an array:
 ```json
@@ -384,7 +385,7 @@ The MCP tools automatically fetch diff position SHAs, URL-encode the project pat
 |--------|---------|
 | Summary | `glab mr note {id} -m "{summary}"` |
 | Inline thread | `glab api projects/:fullpath/merge_requests/{iid}/discussions --method POST --raw-field "body={text}" --raw-field "position[position_type]=text" --raw-field "position[base_sha]={sha}" --raw-field "position[head_sha]={sha}" --raw-field "position[start_sha]={sha}" --raw-field "position[new_path]={file}" --raw-field "position[new_line]={line}"` |
-| Create issue | `glab issue create -t "[MR !{id}] {title}" -d "{desc}"` |
+| Create issue | `glab issue create -t "[MR !{id}] {title}" -d "{desc}" --linked-mr {id} --no-editor` |
 | Approve | `glab mr approve {id}` |
 | Open browser | `glab mr view {id} -w` |
 

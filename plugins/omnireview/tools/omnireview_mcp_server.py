@@ -588,6 +588,67 @@ async def _post_full_review(
     }
 
 
+# ── Issue Creation ────────────────────────────────────────
+
+
+async def _create_linked_issue(
+    mr_id: str,
+    title: str,
+    description: str,
+    labels: str,
+    repo_root: str,
+) -> dict:
+    """Create a GitLab issue linked to an MR via --linked-mr flag."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not title or not title.strip():
+        return {
+            "success": False,
+            "error": "Issue title is empty.",
+            "error_type": "validation_error",
+        }
+
+    args = [
+        "glab", "issue", "create",
+        "--title", title,
+        "--description", description or "",
+        "--linked-mr", mr_id,
+        "--no-editor",
+    ]
+    if labels and labels.strip():
+        args.extend(["--label", labels])
+
+    r = await run_exec(args, cwd=repo_root)
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to create issue: {r.stderr}",
+            "error_type": "issue_creation_failed",
+        }
+
+    # Parse issue URL from glab output
+    issue_url = ""
+    for line in r.stdout.strip().split("\n"):
+        for word in line.split():
+            if word.startswith("http"):
+                issue_url = word
+                break
+        if issue_url:
+            break
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "issue_url": issue_url,
+        "output": r.stdout.strip(),
+        "action": "issue_created",
+    }
+
+
 # ── FastMCP Server ────────────────────────────────────────
 
 from mcp.server.fastmcp import FastMCP
@@ -714,6 +775,30 @@ async def map_diff_lines(diff_text: str) -> str:
         diff_text: Raw unified diff text (from fetch_mr_data response's "diff" field)
     """
     result = parse_diff_line_map(diff_text)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def create_linked_issue(
+    mr_id: str,
+    title: str,
+    description: str,
+    labels: str,
+    repo_root: str,
+) -> str:
+    """Create a GitLab issue linked to a merge request.
+
+    The issue is automatically linked to the MR via GitLab's --linked-mr flag,
+    so anyone viewing the issue can navigate to the original MR.
+
+    Args:
+        mr_id: Merge request number the issue relates to
+        title: Issue title (e.g., '[MR !136] Missing null check in auth handler')
+        description: Issue body with finding details, impact, and recommendation
+        labels: Comma-separated labels (e.g., 'omnireview,bug') or empty string for none
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _create_linked_issue(mr_id, title, description, labels, repo_root)
     return json.dumps(result, indent=2)
 
 
