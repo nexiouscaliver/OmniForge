@@ -350,7 +350,6 @@ Confidence: {score}/100 | Found by: {agent_name(s)}
 
 **Rules for inline threads:**
 - Post each finding as a **separate** discussion thread on the relevant diff line
-- Use `glab api` with position data to place the thread on the exact line
 - If a finding spans multiple lines, place it on the most relevant line
 - Multiple threads on the same file = expected and encouraged
 - Don't merge or batch findings — each gets its own thread for independent resolution
@@ -359,11 +358,30 @@ Confidence: {score}/100 | Found by: {agent_name(s)}
 
 ### Action Commands
 
+**If MCP tools are available** (recommended — handles all GitLab API complexity automatically):
+
+| Action | MCP Tool |
+|--------|----------|
+| Full review post | `mcp__omnireview__post_full_review(mr_id, summary, findings_json, repo_root)` |
+| Summary only | `mcp__omnireview__post_review_summary(mr_id, summary, repo_root)` |
+| Inline thread | `mcp__omnireview__post_inline_thread(mr_id, file_path, line_number, body, repo_root)` |
+
+For `post_full_review`, the `findings` parameter is a JSON string of an array:
+```json
+[
+  {"file_path": "src/app.py", "line_number": 42, "body": "**Important** — Missing null check\n\n**What:** ..."},
+  {"file_path": "src/app.py", "line_number": 87, "body": "**Minor** — Magic number\n\n**What:** ..."}
+]
+```
+
+The MCP tools automatically fetch diff position SHAs, URL-encode the project path, and construct the GitLab API request. The model only needs to provide the text and line numbers.
+
+**Fallback (no MCP server):**
+
 | Action | Command |
 |--------|---------|
-| Full review post | `glab mr note` (summary) + `glab api` (inline threads, one per finding) |
-| Summary only | `glab mr note {id} -m "{summary}"` |
-| Inline only | `glab api projects/:fullpath/merge_requests/{iid}/discussions --method POST` (per finding) |
+| Summary | `glab mr note {id} -m "{summary}"` |
+| Inline thread | `glab api projects/:fullpath/merge_requests/{iid}/discussions --method POST --raw-field "body={text}" --raw-field "position[position_type]=text" --raw-field "position[base_sha]={sha}" --raw-field "position[head_sha]={sha}" --raw-field "position[start_sha]={sha}" --raw-field "position[new_path]={file}" --raw-field "position[new_line]={line}"` |
 | Create issue | `glab issue create -t "[MR !{id}] {title}" -d "{desc}"` |
 | Approve | `glab mr approve {id}` |
 | Open browser | `glab mr view {id} -w` |

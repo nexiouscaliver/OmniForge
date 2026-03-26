@@ -339,6 +339,175 @@ async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
     }
 
 
+# ── Posting Tool Implementations ──────────────────────────
+
+
+async def _get_mr_diff_refs(mr_id: str, repo_root: str) -> dict:
+    """Fetch diff_refs (base_sha, head_sha, start_sha) for an MR."""
+    r = await run_exec(
+        ["glab", "mr", "view", mr_id, "-F", "json"], cwd=repo_root
+    )
+    if r.returncode != 0:
+        return None
+    metadata = json.loads(r.stdout)
+    diff_refs = metadata.get("diff_refs", {})
+    return {
+        "base_sha": diff_refs.get("base_sha", ""),
+        "head_sha": diff_refs.get("head_sha", ""),
+        "start_sha": diff_refs.get("start_sha", ""),
+        "iid": str(metadata.get("iid", mr_id)),
+    }
+
+
+async def _post_review_summary(mr_id: str, summary: str, repo_root: str) -> dict:
+    """Post a top-level summary comment on an MR."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not summary or not summary.strip():
+        return {"success": False, "error": "Summary text is empty.", "error_type": "validation_error"}
+
+    r = await run_exec(
+        ["glab", "mr", "note", mr_id, "-m", summary],
+        cwd=repo_root,
+    )
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to post summary: {r.stderr}",
+            "error_type": "post_failed",
+        }
+
+    return {"success": True, "mr_id": mr_id, "action": "summary_posted"}
+
+
+async def _post_inline_thread(
+    mr_id: str,
+    file_path: str,
+    line_number: int,
+    body: str,
+    repo_root: str,
+) -> dict:
+    """Post an inline discussion thread on a specific diff line."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not body or not body.strip():
+        return {"success": False, "error": "Thread body is empty.", "error_type": "validation_error"}
+    if line_number < 1:
+        return {"success": False, "error": "line_number must be >= 1.", "error_type": "validation_error"}
+
+    # Fetch diff refs (SHAs needed for position data)
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs:
+        return {
+            "success": False,
+            "error": f"Could not fetch diff refs for MR !{mr_id}.",
+            "error_type": "mr_not_found",
+        }
+
+    # glab api uses :fullpath placeholder which auto-resolves to the project path
+    r = await run_exec(
+        [
+            "glab", "api",
+            f"projects/:fullpath/merge_requests/{diff_refs['iid']}/discussions",
+            "--method", "POST",
+            "--raw-field", f"body={body}",
+            "--raw-field", "position[position_type]=text",
+            "--raw-field", f"position[base_sha]={diff_refs['base_sha']}",
+            "--raw-field", f"position[head_sha]={diff_refs['head_sha']}",
+            "--raw-field", f"position[start_sha]={diff_refs['start_sha']}",
+            "--raw-field", f"position[new_path]={file_path}",
+            "--raw-field", f"position[new_line]={line_number}",
+        ],
+        cwd=repo_root,
+    )
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to post thread on {file_path}:{line_number}: {r.stderr}",
+            "error_type": "post_failed",
+        }
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "file": file_path,
+        "line": line_number,
+        "action": "inline_thread_posted",
+    }
+
+
+async def _post_full_review(
+    mr_id: str,
+    summary: str,
+    findings: list,
+    repo_root: str,
+) -> dict:
+    """Post a full review: summary comment + inline threads for each finding.
+
+    findings: list of dicts with file_path (str), line_number (int), body (str).
+    """
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    results = {"summary": None, "threads": [], "errors": []}
+
+    # Post summary
+    summary_result = await _post_review_summary(mr_id, summary, repo_root)
+    results["summary"] = summary_result
+    if not summary_result["success"]:
+        results["errors"].append(f"Summary: {summary_result['error']}")
+
+    # Post each finding as an inline thread
+    for i, finding in enumerate(findings):
+        fp = finding.get("file_path", "")
+        ln = finding.get("line_number", 0)
+        body = finding.get("body", "")
+
+        if not fp or not body or ln < 1:
+            results["errors"].append(
+                f"Finding {i+1}: missing file_path, line_number, or body"
+            )
+            results["threads"].append({
+                "success": False, "index": i + 1, "error": "invalid finding",
+            })
+            continue
+
+        thread_result = await _post_inline_thread(mr_id, fp, ln, body, repo_root)
+        results["threads"].append({
+            "success": thread_result["success"],
+            "index": i + 1,
+            "file": fp,
+            "line": ln,
+            "error": thread_result.get("error", ""),
+        })
+        if not thread_result["success"]:
+            results["errors"].append(
+                f"Finding {i+1} ({fp}:{ln}): {thread_result['error']}"
+            )
+
+    posted = sum(1 for t in results["threads"] if t["success"])
+
+    return {
+        "success": len(results["errors"]) == 0,
+        "mr_id": mr_id,
+        "summary_posted": results["summary"]["success"] if results["summary"] else False,
+        "threads_posted": posted,
+        "threads_total": len(findings),
+        "errors": results["errors"],
+    }
+
+
 # ── FastMCP Server ────────────────────────────────────────
 
 from mcp.server.fastmcp import FastMCP
@@ -382,6 +551,74 @@ async def cleanup_review_worktrees(mr_id: str, repo_root: str) -> str:
         repo_root: Absolute path to the git repository root
     """
     result = await _cleanup_review_worktrees(mr_id, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def post_review_summary(mr_id: str, summary: str, repo_root: str) -> str:
+    """Post a top-level summary comment on a GitLab MR.
+
+    Args:
+        mr_id: Merge request number
+        summary: The formatted summary text to post as an MR comment
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _post_review_summary(mr_id, summary, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def post_inline_thread(
+    mr_id: str,
+    file_path: str,
+    line_number: int,
+    body: str,
+    repo_root: str,
+) -> str:
+    """Post an inline discussion thread on a specific line of an MR diff.
+
+    The tool automatically fetches the required SHA values and constructs
+    the GitLab API position data. Just provide the file, line, and text.
+
+    Args:
+        mr_id: Merge request number
+        file_path: Path to the file in the diff (e.g., 'src/app.py')
+        line_number: Line number in the new version of the file
+        body: The formatted finding text to post as a discussion thread
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _post_inline_thread(mr_id, file_path, line_number, body, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def post_full_review(
+    mr_id: str,
+    summary: str,
+    findings: str,
+    repo_root: str,
+) -> str:
+    """Post a complete review: summary comment + inline threads for each finding.
+
+    This is the recommended way to post review results. Posts the summary as
+    a top-level MR comment, then creates individual inline discussion threads
+    for each finding on the exact diff line.
+
+    Args:
+        mr_id: Merge request number
+        summary: The formatted summary text for the top-level comment
+        findings: JSON string of an array of findings, each with: file_path (str), line_number (int), body (str)
+        repo_root: Absolute path to the git repository root
+    """
+    try:
+        findings_list = json.loads(findings)
+    except (json.JSONDecodeError, TypeError):
+        return json.dumps({
+            "success": False,
+            "error": "findings must be a valid JSON array string",
+            "error_type": "validation_error",
+        }, indent=2)
+    result = await _post_full_review(mr_id, summary, findings_list, repo_root)
     return json.dumps(result, indent=2)
 
 
