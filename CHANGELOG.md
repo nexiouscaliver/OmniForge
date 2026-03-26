@@ -5,6 +5,24 @@ All notable changes to OmniReview will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-03-26
+
+### Added
+- `map_diff_lines` MCP tool — parses unified diffs and returns exact changed line numbers per file, ensuring inline threads always land on valid diff lines
+- `fetch_mr_data` now includes `diff_line_map` in its response (line map comes free with MR data)
+- 11 new tests for diff line mapping (67 total)
+
+### Changed
+- MCP server now exposes 7 tools (was 6)
+- README updated with `map_diff_lines` in tools table and roadmap
+
+### Fixed
+- `_get_mr_diff_refs` now returns structured error dict instead of `None` with JSON parse safety
+- `_post_inline_thread` caller updated to check `diff_refs.get("success")` instead of truthiness (bug: error dict was truthy, causing `KeyError: 'iid'`)
+- Subprocess output decode uses `errors="replace"` to prevent crashes on non-UTF-8 characters
+
+---
+
 ## [1.2.0] - 2026-03-26
 
 ### Added

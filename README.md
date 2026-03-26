@@ -163,21 +163,23 @@ Each agent gets its own complete copy of your repository through [git worktrees]
 
 ### Built-in MCP Tool Server
 
-OmniReview includes a Python [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that runs as a local child process alongside Claude Code. Instead of executing 25+ individual shell commands for worktree management and MR data fetching, the MCP server exposes 6 dedicated tools that Claude calls directly:
+OmniReview includes a Python [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that runs as a local child process alongside Claude Code. Instead of executing 25+ individual shell commands for worktree management and MR data fetching, the MCP server exposes 7 dedicated tools that Claude calls directly:
 
 | Tool | What It Does | Replaces |
 |------|-------------|----------|
-| `fetch_mr_data` | Fetches MR metadata, comments, diff, commits, and file list in a single structured call | 6 separate `glab`/`git` commands |
+| `fetch_mr_data` | Fetches MR metadata, comments, diff, commits, file list, and diff line map in a single structured call | 6 separate `glab`/`git` commands |
 | `create_review_worktrees` | Atomically creates 3 isolated worktrees with stale cleanup, gitignore management, and absolute path resolution | 12 manual `git worktree` commands |
 | `cleanup_review_worktrees` | Force-removes all worktrees with fallback cleanup, guaranteed to leave no stale state | 7 cleanup commands |
 | `post_full_review` | Posts summary comment + inline discussion threads for all findings in one call | Manual GitLab API construction |
 | `post_review_summary` | Posts a top-level MR overview comment | `glab mr note` |
-| `post_inline_thread` | Posts an inline discussion thread on a specific diff line | Complex `glab api` POST calls |
+| `post_inline_thread` | Posts an inline discussion thread on a specific diff line with auto-fetched SHA position data | Complex `glab api` POST calls |
+| `map_diff_lines` | Parses a diff and returns exact changed line numbers per file — ensures inline threads land on valid lines | Manual diff line counting |
 
 The MCP server is security-hardened and performance-optimized:
 - **Injection Protection:** All subprocess calls use `create_subprocess_exec` (argument list, no shell interpretation).
 - **Resilient Decoding:** Subprocess output uses `errors="replace"` to prevent crashes on non-UTF-8 characters.
 - **Efficient Posting:** `post_full_review` fetches MR metadata once and reuses it for all inline threads, drastically reducing API latency.
+- **Accurate Line Mapping:** `map_diff_lines` parses hunk headers to return exact added/modified line numbers per file, so inline threads always land on valid diff lines — even when cheaper models are used.
 - **Auto-Truncation:** Large diffs are capped at 10,000 lines to prevent context overflow while agents explore full files in worktrees.
 
 When Claude Code launches OmniReview, it automatically spawns the MCP server via `uv` (Python package runner), which resolves the `mcp` dependency on the fly — no manual package installation needed.
@@ -452,8 +454,9 @@ OmniReview/                                         # Marketplace root
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
 - [x] 9-option post-review action menu
-- [x] MCP tool server (fetch_mr_data, create/cleanup worktrees, posting tools)
+- [x] MCP tool server (7 tools: fetch, worktrees, posting, diff line mapping)
 - [x] Security-hardened subprocess execution (no shell injection)
+- [x] Diff line mapping for accurate inline thread placement
 - [ ] GitHub PR support via `gh` CLI
 - [ ] Cursor IDE integration
 - [ ] Gemini CLI agent compatibility
