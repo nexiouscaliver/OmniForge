@@ -204,3 +204,135 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
         "assignees": [a.get("username", "") for a in metadata.get("assignees", [])],
         "reviewers": [r.get("username", "") for r in metadata.get("reviewers", [])],
     }
+
+
+async def _create_review_worktrees(mr_id: str, source_branch: str, repo_root: str) -> dict:
+    """Create 3 isolated git worktrees for OmniReview agents."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+        source_branch = validate_branch_name(source_branch)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    worktrees_dir = os.path.join(repo_root, ".worktrees")
+    os.makedirs(worktrees_dir, exist_ok=True)
+
+    # Ensure .worktrees/ is in .gitignore
+    gitignore_path = os.path.join(repo_root, ".gitignore")
+    result = await run_exec(["git", "check-ignore", "-q", ".worktrees"], cwd=repo_root)
+    if result.returncode != 0:
+        existing = ""
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, "r") as f:
+                existing = f.read()
+        prefix = "" if existing.endswith("\n") or not existing else "\n"
+        with open(gitignore_path, "a") as f:
+            f.write(f"{prefix}.worktrees/\n")
+
+    # Clean stale worktrees
+    stale_count = 0
+    for wt_type in WORKTREE_TYPES:
+        name = f"omni-{wt_type}-{mr_id}"
+        path = os.path.join(worktrees_dir, name)
+        if os.path.exists(path):
+            await run_exec(
+                ["git", "worktree", "remove", path, "--force"],
+                cwd=repo_root, timeout=30,
+            )
+            stale_count += 1
+            if os.path.exists(path):
+                shutil.rmtree(path, ignore_errors=True)
+
+    await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+
+    # Fetch source branch
+    fetch = await run_exec(
+        ["git", "fetch", "origin", source_branch],
+        cwd=repo_root, timeout=120,
+    )
+    if fetch.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to fetch branch: origin/{source_branch}",
+            "error_type": "fetch_failed",
+        }
+
+    # Create 3 worktrees
+    created = {}
+    for wt_type in WORKTREE_TYPES:
+        name = f"omni-{wt_type}-{mr_id}"
+        path = os.path.join(worktrees_dir, name)
+        r = await run_exec(
+            ["git", "worktree", "add", path,
+             f"origin/{source_branch}", "--detach"],
+            cwd=repo_root, timeout=30,
+        )
+        if r.returncode != 0:
+            for _, cp in created.items():
+                await run_exec(
+                    ["git", "worktree", "remove", cp, "--force"],
+                    cwd=repo_root, timeout=30,
+                )
+            await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+            return {
+                "success": False,
+                "error": f"Failed to create worktree '{name}': {r.stderr}",
+                "error_type": "worktree_creation_failed",
+                "partial_worktrees": created,
+                "cleanup_performed": True,
+            }
+        created[wt_type] = os.path.abspath(path)
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "worktrees": created,
+        "source_branch": source_branch,
+        "stale_cleaned": stale_count,
+    }
+
+
+async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
+    """Remove all OmniReview worktrees for a given MR."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    worktrees_dir = os.path.join(repo_root, ".worktrees")
+    removed = []
+    already_clean = []
+    errors = []
+
+    for wt_type in WORKTREE_TYPES:
+        name = f"omni-{wt_type}-{mr_id}"
+        path = os.path.join(worktrees_dir, name)
+
+        if not os.path.exists(path):
+            already_clean.append(name)
+            continue
+
+        await run_exec(
+            ["git", "worktree", "remove", path, "--force"],
+            cwd=repo_root, timeout=30,
+        )
+
+        if os.path.exists(path):
+            try:
+                shutil.rmtree(path)
+            except Exception as e:
+                errors.append(f"Failed to remove {name}: {e}")
+                continue
+
+        removed.append(name)
+
+    await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+
+    return {
+        "success": len(errors) == 0,
+        "removed": removed,
+        "already_clean": already_clean,
+        "errors": errors,
+    }
