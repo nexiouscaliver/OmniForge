@@ -59,33 +59,31 @@ digraph omnireview_flow {
 
 Fetch ALL data before dispatching agents. Agents get data injected — they never re-fetch.
 
-```bash
-# 1. Verify glab is authenticated
-glab auth status
+**If MCP tools are available** (plugin install), use the single tool call:
 
-# 2. MR metadata (JSON for structured parsing)
-MR_JSON=$(glab mr view {id} -F json)
-
-# 3. MR with all comments and discussions
-MR_COMMENTS=$(glab mr view {id} -c)
-
-# 4. Raw diff
-MR_DIFF=$(glab mr diff {id} --raw)
-
-# 5. Extract source/target branches from JSON, then get commit list
-git fetch origin {source_branch}
-COMMITS=$(git log --oneline origin/{target_branch}..origin/{source_branch})
+```
+mcp__omnireview__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
 ```
 
-Construct context package:
-- MR title, description, labels, assignees, reviewers
-- All discussion threads (resolved and unresolved)
-- Full diff (raw)
-- Commit list with messages and SHAs
-- Source branch, target branch, pipeline status
-- List of files changed
+Returns a structured JSON package with: mr_id, title, author, source_branch, target_branch, pipeline_status, description, comments, diff, diff_line_count, diff_too_large, diff_truncated, commits, files_changed, labels, assignees, reviewers.
 
-**If diff is too large (>10000 lines as measured by `glab mr diff {id} --raw | wc -l`):** Summarize the diff and provide agents with the file list only. Each agent explores full files in their worktree.
+If `diff_too_large` is true, the diff is auto-truncated to 10,000 lines. Agents explore full files in their worktrees instead.
+
+**Error handling:** If the tool returns `success: false`, check `error_type`:
+- `auth_failure` — Tell user to run `glab auth login`
+- `mr_not_found` — Verify MR number and repository
+- `validation_error` — Check input format
+
+**Fallback (personal skill install without MCP server):** Use bash commands directly:
+
+```bash
+glab auth status
+glab mr view {id} -F json
+glab mr view {id} -c
+glab mr diff {id} --raw
+git fetch origin {source_branch} {target_branch}
+git log --oneline origin/{target_branch}..origin/{source_branch}
+```
 
 ---
 
@@ -93,30 +91,38 @@ Construct context package:
 
 **REQUIRED SUB-SKILL:** Follow `superpowers:using-git-worktrees` pattern.
 
+**If MCP tools are available** (plugin install), use the single tool call:
+
+```
+mcp__omnireview__create_review_worktrees(
+    mr_id="{id}",
+    source_branch="{from Phase 1 response}",
+    repo_root="{cwd}"
+)
+```
+
+Returns absolute paths for all 3 worktrees:
+- `worktrees.analyst` — MR Analyst (OmniReview)
+- `worktrees.codebase` — Codebase Reviewer (OmniReview)
+- `worktrees.security` — Security Reviewer (OmniReview)
+
+The tool automatically: ensures `.worktrees/` exists and is gitignored, cleans stale worktrees from crashed runs, fetches the source branch, creates 3 detached worktrees, resolves absolute paths.
+
+**Error handling:** If creation fails partway, the tool auto-cleans any partially created worktrees and returns `cleanup_performed: true`.
+
+**Fallback (personal skill install without MCP server):**
+
 ```bash
-# Ensure .worktrees/ exists and is in .gitignore
 mkdir -p .worktrees
 git check-ignore -q .worktrees 2>/dev/null || echo ".worktrees/" >> .gitignore
-
-# Clean up any stale worktrees from a previous crashed OmniReview run
 git worktree remove .worktrees/omni-analyst-{id} --force 2>/dev/null
 git worktree remove .worktrees/omni-codebase-{id} --force 2>/dev/null
 git worktree remove .worktrees/omni-security-{id} --force 2>/dev/null
 git worktree prune
-
-# Fetch MR source branch
 git fetch origin {source_branch}
-
-# Create 3 worktrees on the MR source branch
 git worktree add .worktrees/omni-analyst-{id} origin/{source_branch} --detach
 git worktree add .worktrees/omni-codebase-{id} origin/{source_branch} --detach
 git worktree add .worktrees/omni-security-{id} origin/{source_branch} --detach
-```
-
-Use `--detach` to avoid branch name conflicts. Each agent gets full repo at the MR's HEAD.
-
-**IMPORTANT:** Convert worktree paths to absolute paths before injecting into agent prompts:
-```bash
 ANALYST_PATH=$(cd .worktrees/omni-analyst-{id} && pwd)
 CODEBASE_PATH=$(cd .worktrees/omni-codebase-{id} && pwd)
 SECURITY_PATH=$(cd .worktrees/omni-security-{id} && pwd)
@@ -368,16 +374,21 @@ Confidence: {score}/100 | Found by: {agent_name(s)}
 
 **ALWAYS runs, regardless of success or failure.**
 
+**If MCP tools are available:**
+
+```
+mcp__omnireview__cleanup_review_worktrees(mr_id="{id}", repo_root="{cwd}")
+```
+
+The tool force-removes all 3 worktrees, cleans leftover directories, and prunes git worktree references. Reports what was removed vs. already clean.
+
+**Fallback (personal skill install without MCP server):**
+
 ```bash
-# Remove worktrees
 git worktree remove .worktrees/omni-analyst-{id} --force 2>/dev/null
 git worktree remove .worktrees/omni-codebase-{id} --force 2>/dev/null
 git worktree remove .worktrees/omni-security-{id} --force 2>/dev/null
-
-# Clean up any leftover directories
 rm -rf .worktrees/omni-analyst-{id} .worktrees/omni-codebase-{id} .worktrees/omni-security-{id} 2>/dev/null
-
-# Prune stale worktree references
 git worktree prune
 ```
 
