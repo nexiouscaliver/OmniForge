@@ -1,7 +1,7 @@
 {
   "name": "omnireview",
   "description": "Multi-agent adversarial merge request review — dispatches 3 parallel agents in isolated worktrees for code, security, and process review of GitLab MRs",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "author": {
     "name": "Shahil Kadia",
     "email": "shahilkadia@gmail.com"

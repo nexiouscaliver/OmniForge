@@ -5,6 +5,31 @@ All notable changes to OmniReview will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-26
+
+### Added
+- 3 new MCP posting tools for cheaper model compatibility:
+  - `post_review_summary` — post top-level MR summary comment
+  - `post_inline_thread` — post inline discussion thread on exact diff line (auto-fetches SHAs, constructs position data)
+  - `post_full_review` — combined: summary + all inline threads in one call
+- Marketplace distribution format (`marketplace.json` + `plugins/omnireview/` subdirectory)
+- CLAUDE.md for Claude Code development guidance
+- 13 new tests for posting tools (56 total)
+
+### Changed
+- Restructured repo from flat layout to official Anthropic plugin marketplace format
+- SKILL.md Phase 6 action commands now reference MCP posting tools (with bash fallback)
+- MCP server now exposes 6 tools (was 3)
+- Installation via `claude plugin marketplace add` + `claude plugin install`
+
+### Fixed
+- stdin inheritance bug: subprocesses no longer consume MCP JSON-RPC pipe (`stdin=DEVNULL`)
+- Dependency resolution: `.mcp.json` uses `uv run --with mcp[cli]` instead of bare `python3`
+- Missing `{SOURCE_BRANCH}`/`{TARGET_BRANCH}` placeholders in MR Analyst template
+- `.gitignore` now covers `.venv/`, `.worktrees/`, `.DS_Store`
+
+---
+
 ## [1.0.0] - 2026-03-26
 
 ### Added
