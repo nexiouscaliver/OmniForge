@@ -217,3 +217,72 @@ class TestCleanupReviewWorktrees:
         assert result["success"] is True
         assert len(result["already_clean"]) == 3
         assert len(result["removed"]) == 0
+
+    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_rmtree_failure_reports_error(self, mock_run, tmp_path):
+        """When git worktree remove fails AND shutil.rmtree fails, error is reported."""
+        repo = _make_repo(tmp_path)
+        worktrees_dir = os.path.join(repo, ".worktrees")
+        os.makedirs(worktrees_dir, exist_ok=True)
+
+        # Create 1 worktree dir that will be stubborn
+        stubborn = os.path.join(worktrees_dir, "omni-analyst-42")
+        os.makedirs(stubborn)
+
+        def side_effect(args, cwd=None, timeout=60):
+            if args[:2] == ["git", "worktree"] and "remove" in args:
+                # Simulate git worktree remove failing (dir still exists)
+                return _make_result(1, stderr="error: failed to remove")
+            if args[:2] == ["git", "worktree"] and "prune" in args:
+                return _make_result(0)
+            return _make_result(0)
+
+        mock_run.side_effect = side_effect
+
+        # Patch shutil.rmtree to raise an exception
+        with patch("omnireview_mcp_server.shutil.rmtree", side_effect=PermissionError("Permission denied")):
+            result = asyncio.run(
+                _cleanup_review_worktrees("42", repo)
+            )
+
+        assert result["success"] is False
+        assert len(result["errors"]) >= 1
+        assert "omni-analyst-42" in result["errors"][0]
+
+    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_gitignore_updated_when_not_present(self, mock_run, tmp_path):
+        """When .worktrees/ is not gitignored, it gets added to .gitignore."""
+        repo = _make_repo(tmp_path)
+        gitignore = os.path.join(repo, ".gitignore")
+        with open(gitignore, "w") as f:
+            f.write("node_modules/\n")
+
+        call_log = []
+
+        def side_effect(args, cwd=None, timeout=60):
+            call_log.append(args)
+            cmd = " ".join(args)
+            if "check-ignore" in cmd:
+                return _make_result(1)  # NOT ignored
+            if "prune" in cmd:
+                return _make_result(0)
+            if "fetch" in cmd:
+                return _make_result(0)
+            if "worktree" in cmd and "add" in cmd:
+                path = args[3]
+                os.makedirs(path, exist_ok=True)
+                return _make_result(0)
+            return _make_result(0)
+
+        mock_run.side_effect = side_effect
+
+        result = asyncio.run(
+            _create_review_worktrees("42", "feature/test", repo)
+        )
+
+        assert result["success"] is True
+        # Verify .gitignore was updated
+        with open(gitignore) as f:
+            content = f.read()
+        assert ".worktrees/" in content
+        assert content.endswith("\n")  # properly terminated

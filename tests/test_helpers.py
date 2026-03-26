@@ -70,6 +70,13 @@ class TestParseCommits:
         result = parse_commits(log)
         assert result == [{"sha": "abc1234", "message": ""}]
 
+    def test_trailing_newlines_ignored(self):
+        log = "abc1234 feat: first\ndef5678 fix: second\n\n"
+        result = parse_commits(log)
+        assert len(result) == 2
+        assert result[0]["sha"] == "abc1234"
+        assert result[1]["sha"] == "def5678"
+
 
 # ── truncate_diff_if_needed ───────────────────────────────
 

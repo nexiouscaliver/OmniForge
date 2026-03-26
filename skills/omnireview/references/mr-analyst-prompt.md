@@ -16,6 +16,8 @@ You may freely explore the full codebase from this location using Read, Grep, Gl
 ## Discussions and Comments
 {MR_COMMENTS}
 
+## Source Branch: `{SOURCE_BRANCH}` → Target: `{TARGET_BRANCH}`
+
 ## Commits (oldest first)
 {COMMIT_LIST}
 
