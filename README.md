@@ -163,7 +163,7 @@ Each agent gets its own complete copy of your repository through [git worktrees]
 
 ### Built-in MCP Tool Server
 
-OmniReview includes a Python [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that runs as a local child process alongside Claude Code. Instead of executing 25+ individual shell commands for worktree management and MR data fetching, the MCP server exposes 7 dedicated tools that Claude calls directly:
+OmniReview includes a Python [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that runs as a local child process alongside Claude Code. Instead of executing 25+ individual shell commands for worktree management and MR data fetching, the MCP server exposes 8 dedicated tools that Claude calls directly:
 
 | Tool | What It Does | Replaces |
 |------|-------------|----------|
@@ -173,6 +173,7 @@ OmniReview includes a Python [MCP (Model Context Protocol)](https://modelcontext
 | `post_full_review` | Posts summary comment + inline discussion threads for all findings in one call | Manual GitLab API construction |
 | `post_review_summary` | Posts a top-level MR overview comment | `glab mr note` |
 | `post_inline_thread` | Posts an inline discussion thread on a specific diff line with auto-fetched SHA position data | Complex `glab api` POST calls |
+| `create_linked_issue` | Creates a GitLab issue linked to the source MR via `--linked-mr`, with title, description, and labels | Manual `glab issue create` with flags |
 | `map_diff_lines` | Parses a diff and returns exact changed line numbers per file — ensures inline threads land on valid lines | Manual diff line counting |
 
 The MCP server is security-hardened and performance-optimized:
@@ -454,7 +455,7 @@ OmniReview/                                         # Marketplace root
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
 - [x] 9-option post-review action menu
-- [x] MCP tool server (7 tools: fetch, worktrees, posting, diff line mapping)
+- [x] MCP tool server (8 tools: fetch, worktrees, posting, issue creation, diff line mapping)
 - [x] Security-hardened subprocess execution (no shell injection)
 - [x] Diff line mapping for accurate inline thread placement
 - [ ] GitHub PR support via `gh` CLI
