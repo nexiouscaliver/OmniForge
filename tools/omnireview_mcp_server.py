@@ -336,3 +336,55 @@ async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
         "already_clean": already_clean,
         "errors": errors,
     }
+
+
+# ── FastMCP Server ────────────────────────────────────────
+
+from mcp.server.fastmcp import FastMCP
+
+mcp_server = FastMCP("omnireview")
+
+
+@mcp_server.tool()
+async def fetch_mr_data(mr_id: str, repo_root: str) -> str:
+    """Fetch all GitLab MR data (metadata, comments, diff, commits) in one call.
+
+    Args:
+        mr_id: Merge request number (e.g., '136' or '!136')
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _fetch_mr_data(mr_id, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def create_review_worktrees(
+    mr_id: str, source_branch: str, repo_root: str
+) -> str:
+    """Create 3 isolated git worktrees for OmniReview agents.
+
+    Args:
+        mr_id: Merge request number
+        source_branch: MR source branch (from fetch_mr_data response)
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _create_review_worktrees(mr_id, source_branch, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def cleanup_review_worktrees(mr_id: str, repo_root: str) -> str:
+    """Remove all OmniReview worktrees for a given MR.
+
+    Args:
+        mr_id: Merge request number
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _cleanup_review_worktrees(mr_id, repo_root)
+    return json.dumps(result, indent=2)
+
+
+# ── Entry Point ───────────────────────────────────────────
+
+if __name__ == "__main__":
+    mcp_server.run()
