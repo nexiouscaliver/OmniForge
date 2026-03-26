@@ -36,10 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cleanup_omnifix_worktrees` MCP tool — clean up fix worktrees and temp branches
 - 3 subagent prompt templates: triage-agent, fix-agent, verify-agent
 - 20 new tests for discussion tools and cleanup (92 total)
+- `gitlab-mr` skill — automates GitLab merge request creation via `glab` CLI with auto-populated title/description from commits, draft support, labels, assignees, and more
 
 ### Changed
 - MCP server now exposes 12 tools (was 8)
 - README updated with OmniFix section, expanded tools table, updated roadmap
+- README updated with new "Included Skills" section documenting both `/omnireview` and `/gitlab-mr`
+- Project structure in README and CONTRIBUTING updated to show `skills/gitlab-mr/` directory
 
 ---
 

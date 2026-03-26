@@ -440,6 +440,51 @@ If the skill is installed correctly, Claude will recognize the command and ask f
 
 ---
 
+## Included Skills
+
+OmniReview includes two complementary skills for GitLab workflows:
+
+### `/omnireview` — MR Review
+
+Multi-agent adversarial review of merge requests. See [How It Works](#how-it-works) for details.
+
+### `/gitlab-mr` — MR Creation
+
+Automates GitLab merge request creation using the `glab` CLI with auto-populated title and description from commits.
+
+**Basic usage:**
+```bash
+/gitlab-mr
+```
+
+**What it does:**
+- Auto-populates MR title from the first commit message
+- Auto-populates description from all commit messages (including bodies)
+- Pushes the branch if needed
+- Supports draft MRs, labels, assignees, reviewers, and more
+
+**Example invocations:**
+```bash
+# Create MR from current branch
+/gitlab-mr
+
+# Create draft MR with labels
+/gitlab-mr --draft -l bug,needs-review
+
+# Create MR for a specific issue
+/gitlab-mr -i 42 --copy-issue-labels
+
+# Create MR targeting staging branch, assign to user
+/gitlab-mr -b staging -a john
+```
+
+**Prerequisites:**
+- `glab` CLI installed and authenticated
+- On a feature branch (not main/master)
+- Has commits to create MR from
+
+---
+
 ## Usage
 
 ### Basic Usage
@@ -488,6 +533,8 @@ OmniReview/                                         # Marketplace root
         omnifix-gitlab/                             # Fix skill (7-phase fix flow)
           SKILL.md
           references/                               # Triage, fix, verify agent prompts
+        gitlab-mr/
+          SKILL.md                                  # MR creation skill (glab CLI)
       .mcp.json                                     # MCP server registration
       tools/
         omnireview_mcp_server.py                    # Python MCP server (12 tools, FastMCP)
@@ -506,6 +553,7 @@ OmniReview/                                         # Marketplace root
 
 - [x] Claude Code plugin (marketplace install)
 - [x] GitLab MR review via `glab` CLI
+- [x] GitLab MR creation skill (`/gitlab-mr`)
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
 - [x] 9-option post-review action menu
