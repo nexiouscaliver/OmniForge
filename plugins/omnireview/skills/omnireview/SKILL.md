@@ -67,7 +67,9 @@ Fetch ALL data before dispatching agents. Agents get data injected — they neve
 mcp__omnireview__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
 ```
 
-Returns a structured JSON package with: mr_id, title, author, source_branch, target_branch, pipeline_status, description, comments, diff, diff_line_count, diff_too_large, diff_truncated, commits, files_changed, labels, assignees, reviewers.
+Returns a structured JSON package with: mr_id, title, author, source_branch, target_branch, pipeline_status, description, comments, diff, diff_line_count, diff_too_large, diff_truncated, **diff_line_map**, commits, files_changed, labels, assignees, reviewers.
+
+**IMPORTANT: `diff_line_map` is already included in this response.** It contains exact changed line numbers per file (added_lines, all_new_lines, hunks). When posting inline threads, use these line numbers directly — do NOT call `map_diff_lines` separately. The standalone `map_diff_lines` tool is only for re-parsing if you have a diff string from another source.
 
 If `diff_too_large` is true, the diff is auto-truncated to 10,000 lines. Agents explore full files in their worktrees instead.
 
@@ -290,6 +292,8 @@ This is the most common action. It posts everything in one go:
 **Do NOT batch findings.** Each finding gets its own thread so the MR author can resolve them independently. Multiple threads on the same file = expected and encouraged.
 
 **Implementation:** Use the `mcp__omnireview__post_full_review` tool which handles the summary and all inline threads efficiently in a single tool call.
+
+**Line numbers:** Use the `diff_line_map` from the `fetch_mr_data` response (Phase 1) to get valid line numbers for each file. The `added_lines` array contains exact line numbers where code was added — use these for `line_number` in findings. Do NOT call `map_diff_lines` separately — the data is already available from Phase 1.
 
 ### Summary Comment Template
 
