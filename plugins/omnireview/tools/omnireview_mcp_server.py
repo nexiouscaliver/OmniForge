@@ -824,6 +824,76 @@ async def _resolve_discussion(
     }
 
 
+# ── OmniFix Cleanup ─────────────────────────────────────
+
+
+async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
+    """Remove all OmniFix worktrees and temp branches for a given MR."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    worktrees_dir = os.path.join(repo_root, ".worktrees")
+    removed = []
+    already_clean = []
+    errors = []
+
+    # 1. Remove fix worktree: .worktrees/omnifix-{mr_id}
+    fix_name = f"omnifix-{mr_id}"
+    fix_path = os.path.join(worktrees_dir, fix_name)
+    if os.path.exists(fix_path):
+        await run_exec(
+            ["git", "worktree", "remove", fix_path, "--force"],
+            cwd=repo_root, timeout=30,
+        )
+        if os.path.exists(fix_path):
+            try:
+                shutil.rmtree(fix_path)
+            except Exception as e:
+                errors.append(f"Failed to remove {fix_name}: {e}")
+        if not os.path.exists(fix_path):
+            removed.append(fix_name)
+    else:
+        already_clean.append(fix_name)
+
+    # 2. Remove triage worktrees: .worktrees/omnifix-triage-{mr_id}-*
+    if os.path.isdir(worktrees_dir):
+        import glob
+        triage_pattern = os.path.join(worktrees_dir, f"omnifix-triage-{mr_id}-*")
+        for triage_path in glob.glob(triage_pattern):
+            triage_name = os.path.basename(triage_path)
+            await run_exec(
+                ["git", "worktree", "remove", triage_path, "--force"],
+                cwd=repo_root, timeout=30,
+            )
+            if os.path.exists(triage_path):
+                try:
+                    shutil.rmtree(triage_path)
+                except Exception as e:
+                    errors.append(f"Failed to remove {triage_name}: {e}")
+            if not os.path.exists(triage_path):
+                removed.append(triage_name)
+
+    # 3. Delete temp branch (ignore error if doesn't exist)
+    await run_exec(
+        ["git", "branch", "-D", f"omnifix-temp-{mr_id}"],
+        cwd=repo_root, timeout=10,
+    )
+
+    # 4. Prune
+    await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+
+    return {
+        "success": len(errors) == 0,
+        "mr_id": mr_id,
+        "removed": removed,
+        "already_clean": already_clean,
+        "errors": errors,
+    }
+
+
 # ── FastMCP Server ────────────────────────────────────────
 
 from mcp.server.fastmcp import FastMCP
@@ -1021,6 +1091,21 @@ async def resolve_discussion(
         repo_root: Absolute path to the git repository root
     """
     result = await _resolve_discussion(mr_id, discussion_id, resolved, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> str:
+    """Remove all OmniFix worktrees and temp branches for a given MR.
+
+    Cleans up: fix worktree (.worktrees/omnifix-{mr_id}), triage worktrees
+    (.worktrees/omnifix-triage-{mr_id}-*), and the temp branch (omnifix-temp-{mr_id}).
+
+    Args:
+        mr_id: Merge request number
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _cleanup_omnifix_worktrees(mr_id, repo_root)
     return json.dumps(result, indent=2)
 
 
