@@ -448,8 +448,7 @@ OmniReview includes two complementary skills for GitLab workflows:
 
 Multi-agent adversarial review of merge requests. See [How It Works](#how-it-works) for details.
 
-### `/gitlab-mr` — MR Creation
-
+### `/gitlab-mr-create` — MR Creation
 Automates GitLab merge request creation using the `glab` CLI with auto-populated title and description from commits.
 
 **Basic usage:**
@@ -533,8 +532,8 @@ OmniReview/                                         # Marketplace root
         omnifix-gitlab/                             # Fix skill (7-phase fix flow)
           SKILL.md
           references/                               # Triage, fix, verify agent prompts
-        gitlab-mr/
-          SKILL.md                                  # MR creation skill (glab CLI)
+        gitlab-mr-create/
+          SKILL.md                                  # MR creation skill (glab CLI, MCP-powered)
       .mcp.json                                     # MCP server registration
       tools/
         omnireview_mcp_server.py                    # Python MCP server (12 tools, FastMCP)
@@ -553,7 +552,7 @@ OmniReview/                                         # Marketplace root
 
 - [x] Claude Code plugin (marketplace install)
 - [x] GitLab MR review via `glab` CLI
-- [x] GitLab MR creation skill (`/gitlab-mr`)
+- [x] GitLab MR creation skill (`/gitlab-mr-create` with MCP tool
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
 - [x] 9-option post-review action menu

@@ -130,8 +130,8 @@ OmniReview/
         codebase-reviewer-prompt.md   # Codebase Reviewer agent template
         security-reviewer-prompt.md   # Security Reviewer agent template
         consolidation-guide.md        # Consolidation algorithm and report format
-    skills/gitlab-mr/
-      SKILL.md                        # MR creation skill (glab CLI)
+    skills/gitlab-mr-create/
+      SKILL.md                        # MR creation skill (glab CLI, MCP-powered)
     .mcp.json                         # MCP server registration
     tools/
       omnireview_mcp_server.py        # Python MCP server (3 tools)
