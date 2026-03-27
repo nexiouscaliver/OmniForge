@@ -1,5 +1,5 @@
 ---
-name: omnireview
+name: omnireview-gitlab
 description: Use when reviewing a GitLab merge request, performing code review on an MR, checking MR security, or when given a GitLab MR number or URL to review
 argument-hint: <mr-number>
 allowed-tools: [Read, Glob, Grep, Bash, Agent, Write, Edit]
