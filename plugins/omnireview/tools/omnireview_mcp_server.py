@@ -779,6 +779,51 @@ async def _reply_to_discussion(
     }
 
 
+async def _resolve_discussion(
+    mr_id: str, discussion_id: str, resolved: bool, repo_root: str
+) -> dict:
+    """Resolve or unresolve a discussion thread."""
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs or not diff_refs.get("success"):
+        return {
+            "success": False,
+            "error": diff_refs.get("error", f"Could not fetch MR !{mr_id}.") if diff_refs else f"Could not fetch MR !{mr_id}.",
+            "error_type": diff_refs.get("error_type", "mr_not_found") if diff_refs else "mr_not_found",
+        }
+    iid = diff_refs["iid"]
+
+    resolved_str = "true" if resolved else "false"
+    r = await run_exec(
+        [
+            "glab", "api",
+            f"projects/:fullpath/merge_requests/{iid}/discussions/{discussion_id}",
+            "--method", "PUT",
+            "--raw-field", f"resolved={resolved_str}",
+        ],
+        cwd=repo_root,
+    )
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to {'resolve' if resolved else 'unresolve'} discussion: {r.stderr}",
+            "error_type": "resolve_failed",
+        }
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "discussion_id": discussion_id,
+        "resolved": resolved,
+        "action": "discussion_resolved" if resolved else "discussion_unresolved",
+    }
+
+
 # ── FastMCP Server ────────────────────────────────────────
 
 from mcp.server.fastmcp import FastMCP
@@ -960,6 +1005,22 @@ async def reply_to_discussion(
         repo_root: Absolute path to the git repository root
     """
     result = await _reply_to_discussion(mr_id, discussion_id, body, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def resolve_discussion(
+    mr_id: str, discussion_id: str, resolved: bool, repo_root: str
+) -> str:
+    """Resolve or unresolve a discussion thread on a GitLab MR.
+
+    Args:
+        mr_id: Merge request number
+        discussion_id: The discussion thread ID
+        resolved: True to resolve, False to unresolve
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _resolve_discussion(mr_id, discussion_id, resolved, repo_root)
     return json.dumps(result, indent=2)
 
 
