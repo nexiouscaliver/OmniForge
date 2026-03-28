@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `truncate_diff_if_needed` now checks both line count and character count
 - OmniReview SKILL.md adds "Large Diff Strategy" section for context-efficient agent dispatch
 - Triage agent prompt confidence scale now includes verdict implications
+- **SKILL.md context reduction** — phase-specific detail extracted to `./references/` for dynamic loading (omnireview -25%, omnifix -22%). New files: `posting-guide.md`, `approval-guide.md`, `commit-and-post-guide.md`
+- False Positive Auto-Reduction rules added to `consolidation-guide.md` (were only in SKILL.md before)
 
 ---
 
