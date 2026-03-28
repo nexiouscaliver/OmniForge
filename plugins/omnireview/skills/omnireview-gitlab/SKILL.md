@@ -204,39 +204,9 @@ For each agent, fill the template placeholders:
 
 ## Phase 4: Consolidation
 
-Follow `./references/consolidation-guide.md` for the full algorithm.
+**Threshold: 70.** Only findings with confidence >= 70 appear in the final report.
 
-### Confidence Scoring
-
-Each agent assigns confidence (0-100) per finding:
-
-| Score | Meaning | Threshold |
-|-------|---------|-----------|
-| 90-100 | Verified with code evidence | Include |
-| 70-89 | Strong signal, likely real | Include |
-| 50-69 | Possible, needs judgment | Filtered out |
-| < 50 | Noise | Filtered out |
-
-**Threshold: 70.** Only findings >= 70 appear in the final report.
-
-### Cross-Correlation
-
-- Same area flagged by 2 agents: **+15 confidence** (cap 100)
-- Same area flagged by 3 agents: **+25 confidence** (cap 100)
-- Contradictory findings: Present both, mark "needs human judgment"
-
-### False Positive Auto-Reduction (-30 confidence)
-
-- Pre-existing issues (code predates this MR per `git blame`)
-- Linter/CI-catchable issues
-- Pure style nitpicks without functional impact
-- Issues already resolved in MR discussions
-
-### Deduplication
-
-- Group by file:line proximity (within 5 lines = same area)
-- Merge overlapping findings, keep highest severity
-- Preserve unique insights from each agent
+Follow `./references/consolidation-guide.md` for the full algorithm — confidence scoring, cross-correlation (+15 for 2 agents, +25 for 3), false positive auto-reduction, deduplication, verdict logic, and report composition.
 
 ---
 

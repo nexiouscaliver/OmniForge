@@ -67,6 +67,17 @@ When agents reach different conclusions about the same area:
 
 ---
 
+## Step 3e: False Positive Auto-Reduction
+
+Apply a -30 confidence penalty to findings that match any of these patterns:
+
+- Pre-existing issues (code predates this MR per `git blame`)
+- Linter/CI-catchable issues (should be caught by tooling, not review)
+- Pure style nitpicks without functional impact
+- Issues already resolved in MR discussions
+
+---
+
 ## Step 4: Deduplication
 
 When findings overlap:
