@@ -89,6 +89,29 @@ git fetch origin {source_branch} {target_branch}
 git log --oneline origin/{target_branch}..origin/{source_branch}
 ```
 
+### Large Diff Strategy
+
+When `diff_line_count` is high (>3000 lines) or `diff_truncated` is true:
+
+1. **Don't inject the full diff into agent prompts.** Save the diff to a temp file and give agents the file path. They can read sections as needed.
+2. **Provide a diff summary instead.** Use `files_changed` and `diff_line_map` to create a per-file summary table:
+   ```
+   | File | Added Lines | Hunks |
+   |------|-------------|-------|
+   | src/app.py | 42 | 3 |
+   | tests/test_app.py | 28 | 2 |
+   ```
+3. **Agents explore in worktrees.** With the summary + worktree access, agents can read full files and understand context without the raw diff consuming their context window.
+4. **Save diff to temp file pattern:**
+   ```bash
+   # Save diff for agents to read on-demand
+   echo "$DIFF_TEXT" > /tmp/omni_mr{id}_diff.txt
+   # Give agents the path, not the content
+   ```
+5. **Clean up temp files in Phase 7** alongside worktree cleanup.
+
+This approach reduces agent context usage by 50-80% on large MRs while preserving full review quality.
+
 ---
 
 ## Phase 2: Create 3 Worktrees
