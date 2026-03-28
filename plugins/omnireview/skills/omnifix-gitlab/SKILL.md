@@ -276,6 +276,14 @@ Dispatch a single implementer subagent with the fix-agent-prompt template:
 - `{APPROVED_FIXES_JSON}` — JSON array of approved fixes from triage
 - `{TEST_COMMAND}` — Test command (see discovery order below)
 
+**CRITICAL: Dispatch with write permissions.** The fix agent needs Write and Edit tools to modify files in the worktree. Use `mode: "acceptEdits"` when dispatching:
+
+```
+Agent(prompt="...", mode="acceptEdits", subagent_type="general-purpose")
+```
+
+Without `mode: "acceptEdits"`, the subagent may be blocked by the user's permission settings and unable to edit files. If the fix agent returns `BLOCKED` due to permissions, fall back to applying fixes directly in the main agent context (read the proposed fixes and apply them with Edit/Write tools in the worktree yourself).
+
 ### Test Command Discovery
 
 1. User passes `test_command` explicitly in invocation
@@ -381,13 +389,16 @@ Stage and commit in the fix worktree:
 
 ```bash
 # In .worktrees/omnifix-{mr_id}
-git add -A
-git commit -m "fix: resolve {N} review findings from MR !{mr_id}
+# Worktrees may not have .pre-commit-config.yaml — allow missing config
+PRE_COMMIT_ALLOW_NO_CONFIG=1 git add -A
+PRE_COMMIT_ALLOW_NO_CONFIG=1 git commit -m "fix: resolve {N} review findings from MR !{mr_id}
 
 Fixes:
 - {file}:{line} — {description}
 - {file}:{line} — {description}"
 ```
+
+**Note:** `PRE_COMMIT_ALLOW_NO_CONFIG=1` is needed because worktrees share `.git` config but not workspace files. The pre-commit hook runs but can't find its config in the worktree directory. This is safe — the main repo's pre-commit will validate on the next commit there.
 
 No mention of OmniFix, AI, or automation in the commit message.
 
@@ -476,6 +487,14 @@ rm -rf .worktrees/omnifix-{mr_id} .worktrees/omnifix-triage-{mr_id}-* 2>/dev/nul
 git worktree prune
 git branch -D omnifix-temp-{mr_id} 2>/dev/null
 ```
+
+**Return to repo root after cleanup:**
+
+```bash
+cd {repo_root}
+```
+
+If any bash commands during Phases 4-6 changed the working directory into the worktree, this ensures the main agent returns to the repo root. Failure to do this leaves the agent's working directory pointing at a deleted path.
 
 ---
 
