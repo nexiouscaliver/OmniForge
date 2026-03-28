@@ -16,6 +16,15 @@
     <a href="https://github.com/nexiouscaliver/OmniReview/releases/latest">
       <img src="https://img.shields.io/github/v/release/nexiouscaliver/OmniReview?label=latest&color=brightgreen" alt="Latest Release">
     </a>
+    <a href="https://github.com/nexiouscaliver/OmniReview/blob/main/LICENSE">
+      <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT">
+    </a>
+    <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
+    <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiLz48L3N2Zz4=" alt="Claude Code Plugin">
+    <img src="https://img.shields.io/badge/MCP_Tools-12-orange" alt="12 MCP Tools">
+    <a href="https://github.com/nexiouscaliver/OmniReview/pulls">
+      <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome">
+    </a>
   </p>
 </p>
 
