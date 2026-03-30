@@ -1220,12 +1220,14 @@ def validate_title(title: str) -> str:
 
 
 def validate_labels(labels: str) -> str:
-    """Validate labels format (comma-separated)."""
+    """Validate labels format (comma-separated) and reject control characters."""
     if not labels:
         return ""
-    # Labels should be alphanumeric, hyphens, underscores, and commas
-    if re.search(r'[^a-zA-Z0-9_\-,\s]', labels):
-        raise ValueError(f"Invalid label characters: {labels}")
+    # Allow GitLab-style labels (including punctuation like "type::bug", "group/backend").
+    # Since arguments are passed via create_subprocess_exec (no shell), we only block
+    # control characters (including newlines) which can break CLI parsing.
+    if re.search(r'[\x00-\x1F\x7F]', labels):
+        raise ValueError(f"Invalid control characters in labels: {labels!r}")
     return labels.strip()
 
 
@@ -1254,6 +1256,8 @@ async def _create_gitlab_mr(
         repo_root = validate_repo_root(repo_root)
         if target_branch:
             target_branch = validate_target_branch(target_branch)
+        if source_branch:
+            source_branch = validate_branch_name(source_branch)
         if title:
             title = validate_title(title)
         if labels:
@@ -1262,12 +1266,15 @@ async def _create_gitlab_mr(
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
     # Build the command args safely (list of strings, no shell interpretation)
-    args = ["glab", "mr", "create", "--yes"]
+    # --web already skips all prompts that --yes skips, so they conflict
+    args = ["glab", "mr", "create"]
+    if not web:
+        args.append("--yes")
 
     # Add flags
     if fill:
         args.append("--fill")
-    if fill_commit_body:
+    if fill and fill_commit_body:
         args.append("--fill-commit-body")
     if push:
         args.append("--push")

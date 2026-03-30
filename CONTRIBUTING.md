@@ -123,37 +123,44 @@ OmniReview/
     marketplace.json                  # Marketplace registry
   plugins/omnireview/                 # The plugin
     .claude-plugin/plugin.json        # Plugin metadata
-    skills/omnireview/
-      SKILL.md                        # Main orchestration (7-phase flow)
-      references/
-        mr-analyst-prompt.md          # MR Analyst agent template
-        codebase-reviewer-prompt.md   # Codebase Reviewer agent template
-        security-reviewer-prompt.md   # Security Reviewer agent template
-        consolidation-guide.md        # Consolidation algorithm and report format
-    skills/gitlab-mr-create/
-      SKILL.md                        # MR creation skill (glab CLI, MCP-powered)
+    skills/
+      omnireview-gitlab/
+        SKILL.md                      # Review skill (7-phase review flow)
+        references/
+          mr-analyst-prompt.md        # MR Analyst agent template
+          codebase-reviewer-prompt.md # Codebase Reviewer agent template
+          security-reviewer-prompt.md # Security Reviewer agent template
+          consolidation-guide.md      # Consolidation algorithm and report format
+      omnifix-gitlab/
+        SKILL.md                      # Fix skill (7-phase fix flow)
+        references/
+          triage-agent-prompt.md      # Triage agent template
+          fix-agent-prompt.md         # Fix agent template
+          verify-agent-prompt.md      # Verify agent template
+      omnicreate/
+        SKILL.md                      # MR creation skill (glab CLI, MCP-powered)
     .mcp.json                         # MCP server registration
     tools/
-      omnireview_mcp_server.py        # Python MCP server (3 tools)
+      omnireview_mcp_server.py        # Python MCP server (13 tools)
       requirements.txt
-    tests/                            # Unit tests (43 tests)
+    tests/                            # Unit tests (92+ tests)
 ```
 
 ### SKILL.md
 
-The main entry point at `plugins/omnireview/skills/omnireview/SKILL.md`. Contains the 7-phase workflow, error handling, action menu, rationalization defenses, and integration references. This is what Claude reads when the skill is invoked.
+The main entry point at `plugins/omnireview/skills/omnireview-gitlab/SKILL.md`. Contains the 7-phase workflow, error handling, action menu, rationalization defenses, and integration references. This is what Claude reads when the skill is invoked.
 
 ### Agent Prompt Templates
 
-Files in `plugins/omnireview/skills/omnireview/references/`. Each `*-prompt.md` is a template filled with MR data and sent to a subagent. Templates use `{PLACEHOLDER}` syntax for variable injection.
+Files in `plugins/omnireview/skills/omnireview-gitlab/references/`. Each `*-prompt.md` is a template filled with MR data and sent to a subagent. Templates use `{PLACEHOLDER}` syntax for variable injection.
 
 ### MCP Tool Server
 
-`plugins/omnireview/tools/omnireview_mcp_server.py` — a Python FastMCP server exposing 3 tools. Registered via `plugins/omnireview/.mcp.json`. Claude Code spawns it automatically using `uv`.
+`plugins/omnireview/tools/omnireview_mcp_server.py` — a Python FastMCP server exposing 13 tools. Registered via `plugins/omnireview/.mcp.json`. Claude Code spawns it automatically using `uv`.
 
 ### Consolidation Guide
 
-`plugins/omnireview/skills/omnireview/references/consolidation-guide.md` — the algorithm for merging findings from all three agents.
+`plugins/omnireview/skills/omnireview-gitlab/references/consolidation-guide.md` — the algorithm for merging findings from all three agents.
 
 ---
 
@@ -207,7 +214,7 @@ The highest-impact contributions right now are **new platform integrations**. He
    - Update MCP tools in `plugins/omnireview/tools/omnireview_mcp_server.py` to support `gh` calls
    - Update action menu commands accordingly
 
-2. Agent prompt templates in `plugins/omnireview/skills/omnireview/references/` can be largely reused — the core review logic is platform-agnostic. Only the MR-specific terminology needs changing (MR → PR, merge request → pull request).
+2. Agent prompt templates in `plugins/omnireview/skills/omnireview-gitlab/references/` can be largely reused — the core review logic is platform-agnostic. Only the MR-specific terminology needs changing (MR → PR, merge request → pull request).
 
 3. Add installation instructions for the new platform.
 
