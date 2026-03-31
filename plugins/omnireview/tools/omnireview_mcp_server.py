@@ -1132,6 +1132,210 @@ async def cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> str:
     return json.dumps(result, indent=2)
 
 
+@mcp_server.tool()
+async def create_gitlab_mr(
+    repo_root: str,
+    title: str = "",
+    description: str = "",
+    target_branch: str = "main",
+    source_branch: str = "",
+    assignees: str = "",
+    reviewers: str = "",
+    labels: str = "",
+    draft: bool = False,
+    fill: bool = True,
+    fill_commit_body: bool = True,
+    push: bool = True,
+    related_issue: str = "",
+    copy_issue_labels: bool = False,
+    remove_source_branch: bool = False,
+    squash_before_merge: bool = False,
+    milestone: str = "",
+    web: bool = False,
+) -> str:
+    """Create a GitLab merge request using glab CLI with safe execution.
+
+    This tool wraps glab mr create with proper validation and safe subprocess execution.
+    It auto-populates title and description from commit messages when fill=True.
+
+    Args:
+        repo_root: Absolute path to the git repository root
+        title: Custom MR title (overrides --fill if provided)
+        description: Custom MR description (overrides --fill if provided)
+        target_branch: Target branch for the MR (default: main)
+        source_branch: Source branch for the MR (default: current branch)
+        assignees: Comma-separated usernames to assign
+        reviewers: Comma-separated usernames to request review from
+        labels: Comma-separated label names
+        draft: Whether to create as draft MR
+        fill: Auto-populate title and description from commits
+        fill_commit_body: Include commit bodies in description
+        push: Push the branch if not already pushed
+        related_issue: Issue number to link MR to
+        copy_issue_labels: Copy labels from related issue
+        remove_source_branch: Delete source branch after merge
+        squash_before_merge: Squash commits when merging
+        milestone: Milestone ID or title
+        web: Open in browser for editing
+    """
+    result = await _create_gitlab_mr(
+        repo_root=repo_root,
+        title=title if title else None,
+        description=description if description else None,
+        target_branch=target_branch,
+        source_branch=source_branch if source_branch else None,
+        assignees=assignees if assignees else None,
+        reviewers=reviewers if reviewers else None,
+        labels=labels if labels else None,
+        draft=draft,
+        fill=fill,
+        fill_commit_body=fill_commit_body,
+        push=push,
+        related_issue=related_issue if related_issue else None,
+        copy_issue_labels=copy_issue_labels,
+        remove_source_branch=remove_source_branch,
+        squash_before_merge=squash_before_merge,
+        milestone=milestone if milestone else None,
+        web=web,
+    )
+    return json.dumps(result, indent=2)
+
+
+# ── GitLab MR Creation ─────────────────────────────────
+
+
+def validate_target_branch(branch: str) -> str:
+    """Validate target branch name contains no shell metacharacters."""
+    return validate_branch_name(branch)
+
+
+def validate_title(title: str) -> str:
+    """Validate MR title is not empty and contains no shell metacharacters."""
+    if not title or not title.strip():
+        raise ValueError("MR title cannot be empty.")
+    # Allow basic punctuation but block shell metacharacters
+    if re.search(r'[;&|$`\\]', title):
+        raise ValueError(f"Invalid characters in title: {title}")
+    return title.strip()
+
+
+def validate_labels(labels: str) -> str:
+    """Validate labels format (comma-separated) and reject control characters."""
+    if not labels:
+        return ""
+    # Allow GitLab-style labels (including punctuation like "type::bug", "group/backend").
+    # Since arguments are passed via create_subprocess_exec (no shell), we only block
+    # control characters (including newlines) which can break CLI parsing.
+    if re.search(r'[\x00-\x1F\x7F]', labels):
+        raise ValueError(f"Invalid control characters in labels: {labels!r}")
+    return labels.strip()
+
+
+async def _create_gitlab_mr(
+    repo_root: str,
+    title: str = None,
+    description: str = None,
+    target_branch: str = "main",
+    source_branch: str = None,
+    assignees: str = None,
+    reviewers: str = None,
+    labels: str = None,
+    draft: bool = False,
+    fill: bool = True,
+    fill_commit_body: bool = True,
+    push: bool = True,
+    related_issue: str = None,
+    copy_issue_labels: bool = False,
+    remove_source_branch: bool = False,
+    squash_before_merge: bool = False,
+    milestone: str = None,
+    web: bool = False,
+) -> dict:
+    """Create a GitLab merge request using glab CLI safely."""
+    try:
+        repo_root = validate_repo_root(repo_root)
+        if target_branch:
+            target_branch = validate_target_branch(target_branch)
+        if source_branch:
+            source_branch = validate_branch_name(source_branch)
+        if title:
+            title = validate_title(title)
+        if labels:
+            labels = validate_labels(labels)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    # Build the command args safely (list of strings, no shell interpretation)
+    # --web already skips all prompts that --yes skips, so they conflict
+    args = ["glab", "mr", "create"]
+    if not web:
+        args.append("--yes")
+
+    # Add flags
+    if fill:
+        args.append("--fill")
+    if fill and fill_commit_body:
+        args.append("--fill-commit-body")
+    if push:
+        args.append("--push")
+    if draft:
+        args.append("--draft")
+    if web:
+        args.append("--web")
+    if remove_source_branch:
+        args.append("--remove-source-branch")
+    if squash_before_merge:
+        args.append("--squash-before-merge")
+    if copy_issue_labels and related_issue:
+        args.append("--copy-issue-labels")
+
+    # Add options with values
+    if target_branch:
+        args.extend(["--target-branch", target_branch])
+    if source_branch:
+        args.extend(["--source-branch", source_branch])
+    if title:
+        args.extend(["--title", title])
+    if description:
+        args.extend(["--description", description])
+    if assignees:
+        args.extend(["--assignee", assignees])
+    if reviewers:
+        args.extend(["--reviewer", reviewers])
+    if labels:
+        args.extend(["--label", labels])
+    if related_issue:
+        args.extend(["--related-issue", related_issue])
+    if milestone:
+        args.extend(["--milestone", milestone])
+
+    r = await run_exec(args, cwd=repo_root, timeout=120)
+
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to create MR: {r.stderr}",
+            "error_type": "mr_creation_failed",
+        }
+
+    # Parse MR URL from output
+    mr_url = ""
+    for line in r.stdout.strip().split("\n"):
+        for word in line.split():
+            if word.startswith("http"):
+                mr_url = word
+                break
+        if mr_url:
+            break
+
+    return {
+        "success": True,
+        "mr_url": mr_url,
+        "output": r.stdout.strip(),
+        "action": "mr_created",
+    }
+
+
 # ── Entry Point ───────────────────────────────────────────
 
 if __name__ == "__main__":

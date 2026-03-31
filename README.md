@@ -440,6 +440,54 @@ If the skill is installed correctly, Claude will recognize the command and ask f
 
 ---
 
+## Included Skills
+
+OmniReview includes three complementary skills for GitLab workflows:
+
+### `/omnireview` — MR Review
+
+Multi-agent adversarial review of merge requests. See [How It Works](#how-it-works) for details.
+
+### `/omnifix` — Automated Fix
+
+Automated review finding fixer — triages findings, applies fixes, verifies, and resolves discussion threads.
+
+### `/omnicreate` — MR Creation
+Automates GitLab merge request creation using the `glab` CLI with auto-populated title and description from commits.
+
+**Basic usage:**
+```bash
+/omnicreate
+```
+
+**What it does:**
+- Auto-populates MR title from the first commit message
+- Auto-populates description from all commit messages (including bodies)
+- Pushes the branch if needed
+- Supports draft MRs, labels, assignees, reviewers, and more
+
+**Example invocations:**
+```bash
+# Create MR from current branch
+/omnicreate
+
+# Create draft MR with labels
+/omnicreate --draft -l bug,needs-review
+
+# Create MR for a specific issue
+/omnicreate -i 42 --copy-issue-labels
+
+# Create MR targeting staging branch, assign to user
+/omnicreate -b staging -a john
+```
+
+**Prerequisites:**
+- `glab` CLI installed and authenticated
+- On a feature branch (not main/master)
+- Has commits to create MR from
+
+---
+
 ## Usage
 
 ### Basic Usage
@@ -488,9 +536,11 @@ OmniReview/                                         # Marketplace root
         omnifix-gitlab/                             # Fix skill (7-phase fix flow)
           SKILL.md
           references/                               # Triage, fix, verify agent prompts
+        omnicreate/
+          SKILL.md                                  # MR creation skill (glab CLI, MCP-powered)
       .mcp.json                                     # MCP server registration
       tools/
-        omnireview_mcp_server.py                    # Python MCP server (12 tools, FastMCP)
+        omnireview_mcp_server.py                    # Python MCP server (13 tools, FastMCP)
         requirements.txt                            # Python dependencies (mcp>=1.0.0)
       tests/                                        # Unit tests (92 tests, mocked subprocess)
   docs/                                             # Design specs and implementation plans
@@ -506,10 +556,11 @@ OmniReview/                                         # Marketplace root
 
 - [x] Claude Code plugin (marketplace install)
 - [x] GitLab MR review via `glab` CLI
+- [x] GitLab MR creation skill (`/omnicreate` with MCP tool)
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
 - [x] 9-option post-review action menu
-- [x] MCP tool server (12 tools: fetch, worktrees, posting, issues, diff mapping, discussions, fix cleanup)
+- [x] MCP tool server (13 tools: fetch, worktrees, posting, issues, diff mapping, discussions, fix cleanup, MR creation)
 - [x] Security-hardened subprocess execution (no shell injection)
 - [x] Diff line mapping for accurate inline thread placement
 - [x] OmniFix: automated review finding fixer (triage, fix, verify, resolve)
