@@ -21,7 +21,7 @@
     </a>
     <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
     <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-    <img src="https://img.shields.io/badge/MCP_Tools-12-orange" alt="12 MCP Tools">
+    <img src="https://img.shields.io/badge/MCP_Tools-13-orange" alt="12 MCP Tools">
     <a href="https://github.com/nexiouscaliver/OmniReview/pulls">
       <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome">
     </a>
@@ -542,7 +542,7 @@ OmniReview/                                         # Marketplace root
       tools/
         omnireview_mcp_server.py                    # Python MCP server (13 tools, FastMCP)
         requirements.txt                            # Python dependencies (mcp>=1.0.0)
-      tests/                                        # Unit tests (92 tests, mocked subprocess)
+      tests/                                        # Unit tests (116 tests, mocked subprocess)
   docs/                                             # Design specs and implementation plans
   README.md                                         # This file
   CONTRIBUTING.md                                   # Contribution guidelines

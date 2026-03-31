@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-OmniReview is a Claude Code plugin distributed as its own marketplace. It contains two skills:
+OmniReview is a Claude Code plugin distributed as its own marketplace. It contains three skills:
 - **omnireview-gitlab** — dispatches 3 parallel AI review agents in isolated git worktrees to adversarially review GitLab MRs
 - **omnifix-gitlab** — automates fixing review findings with parallel triage subagents, sequential fixing, verification, and thread resolution
+- **omnicreate** — automates GitLab MR creation via `glab` CLI with auto-populated title/description from commits
 
 ## Repository Layout
 
@@ -25,8 +26,10 @@ This repo has two layers: the **marketplace root** and the **plugin** inside it.
       omnifix-gitlab/                   ← Fix skill (7-phase fix workflow)
         SKILL.md
         references/                     ← 5 files: 3 agent prompts + approval guide + commit/post guide
-    tools/omnireview_mcp_server.py      ← Python MCP server (FastMCP, 12 tools)
-    tests/                              ← 99 unit tests
+      omnicreate/                       ← MR creation skill
+        SKILL.md
+    tools/omnireview_mcp_server.py      ← Python MCP server (FastMCP, 13 tools)
+    tests/                              ← 116 unit tests
 ```
 
 The marketplace wrapper exists because `claude plugin marketplace add` requires plugins in subdirectories — it doesn't support a plugin at repo root.
@@ -70,7 +73,7 @@ Both skills support MCP tools (plugin install) with bash fallback (personal skil
 
 ### MCP Server (`tools/omnireview_mcp_server.py`)
 
-Single-file FastMCP server with 12 tools. The structure follows a pattern:
+Single-file FastMCP server with 13 tools. The structure follows a pattern:
 
 - **Validators** (`validate_mr_id`, `validate_repo_root`, `validate_branch_name`) — called at the top of every tool function
 - **`run_subprocess`** (aliased as `run_exec`) — all external commands go through this. Uses `create_subprocess_exec` (argument list, never shell), `stdin=DEVNULL` (prevents MCP pipe inheritance), and `asyncio.wait_for` timeout
@@ -95,6 +98,7 @@ Single-file FastMCP server with 12 tools. The structure follows a pattern:
 | `reply_to_discussion` | Fix |
 | `resolve_discussion` | Fix |
 | `cleanup_omnifix_worktrees` | Fix |
+| `create_gitlab_mr` | Create |
 
 ### Key Invariant: `./references/` Paths
 
