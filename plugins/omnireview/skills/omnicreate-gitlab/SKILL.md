@@ -1,6 +1,6 @@
 ---
-name: omnicreate
-description: This skill should be used when the user asks to "create MR", "create merge request", "glab mr", "create GitLab MR", "open merge request", "submit MR", or "omnicreate". Automates MR creation via the MCP tool (mcp__omnireview__create_gitlab_mr) with auto-populated title/description from commits, branch management, and optional reviewers/assignees. Supports draft MRs, work-in-progress MRs, issue linking, and more.
+name: omnicreate-gitlab
+description: This skill should be used when the user asks to "create MR", "create merge request", "glab mr", "create GitLab MR", "open merge request", "submit MR", or "omnicreate" or "omnicreate-gitlab". Automates MR creation via the MCP tool (mcp__omnireview__create_gitlab_mr) with auto-populated title/description from commits, branch management, and optional reviewers/assignees. Supports draft MRs, work-in-progress MRs, issue linking, and more.
 version: 1.3.0
 license: Apache-2.0
 allowed-tools: Bash, mcp__omnireview__create_gitlab_mr

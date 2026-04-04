@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 OmniReview is a Claude Code plugin distributed as its own marketplace. It contains three skills:
 - **omnireview-gitlab** — dispatches 3 parallel AI review agents in isolated git worktrees to adversarially review GitLab MRs
 - **omnifix-gitlab** — automates fixing review findings with parallel triage subagents, sequential fixing, verification, and thread resolution
-- **omnicreate** — automates GitLab MR creation via `glab` CLI with auto-populated title/description from commits
+- **omnicreate-gitlab** — automates GitLab MR creation via `glab` CLI with auto-populated title/description from commits
 
 ## Repository Layout
 
@@ -26,7 +26,7 @@ This repo has two layers: the **marketplace root** and the **plugin** inside it.
       omnifix-gitlab/                   ← Fix skill (7-phase fix workflow)
         SKILL.md
         references/                     ← 5 files: 3 agent prompts + approval guide + commit/post guide
-      omnicreate/                       ← MR creation skill
+      omnicreate-gitlab/                 ← MR creation skill
         SKILL.md
     tools/omnireview_mcp_server.py      ← Python MCP server (FastMCP, 13 tools)
     tests/                              ← 116 unit tests

@@ -137,7 +137,7 @@ OmniReview/
           triage-agent-prompt.md      # Triage agent template
           fix-agent-prompt.md         # Fix agent template
           verify-agent-prompt.md      # Verify agent template
-      omnicreate/
+      omnicreate-gitlab/
         SKILL.md                      # MR creation skill (glab CLI, MCP-powered)
     .mcp.json                         # MCP server registration
     tools/

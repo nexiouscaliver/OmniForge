@@ -27,14 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.0] - 2026-04-01
 
 ### Added
-- **omnicreate** skill — automates GitLab merge request creation via `glab` CLI with auto-populated title/description from commits, draft support, labels, assignees, and more
+- **omnicreate-gitlab** skill — automates GitLab merge request creation via `glab` CLI with auto-populated title/description from commits, draft support, labels, assignees, and more
 - `create_gitlab_mr` MCP tool — safe MR creation via MCP server instead of raw bash commands
 - 17 new tests for MR creation tool (116 total)
 
 ### Changed
 - MCP server now exposes 13 tools (was 12)
-- README updated with new "Included Skills" section documenting `/omnireview`, `/omnifix`, and `/omnicreate`
-- Project structure in README and CONTRIBUTING updated to show `skills/omnicreate/` directory
+- README updated with new "Included Skills" section documenting `/omnireview`, `/omnifix`, and `/omnicreate-gitlab`
+- Project structure in README and CONTRIBUTING updated to show `skills/omnicreate-gitlab/` directory
 
 ---
 

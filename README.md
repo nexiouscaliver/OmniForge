@@ -452,12 +452,12 @@ Multi-agent adversarial review of merge requests. See [How It Works](#how-it-wor
 
 Automated review finding fixer — triages findings, applies fixes, verifies, and resolves discussion threads.
 
-### `/omnicreate` — MR Creation
+### `/omnicreate-gitlab` — MR Creation
 Automates GitLab merge request creation using the `glab` CLI with auto-populated title and description from commits.
 
 **Basic usage:**
 ```bash
-/omnicreate
+/omnicreate-gitlab
 ```
 
 **What it does:**
@@ -469,16 +469,16 @@ Automates GitLab merge request creation using the `glab` CLI with auto-populated
 **Example invocations:**
 ```bash
 # Create MR from current branch
-/omnicreate
+/omnicreate-gitlab
 
 # Create draft MR with labels
-/omnicreate --draft -l bug,needs-review
+/omnicreate-gitlab --draft -l bug,needs-review
 
 # Create MR for a specific issue
-/omnicreate -i 42 --copy-issue-labels
+/omnicreate-gitlab -i 42 --copy-issue-labels
 
 # Create MR targeting staging branch, assign to user
-/omnicreate -b staging -a john
+/omnicreate-gitlab -b staging -a john
 ```
 
 **Prerequisites:**
@@ -536,7 +536,7 @@ OmniReview/                                         # Marketplace root
         omnifix-gitlab/                             # Fix skill (7-phase fix flow)
           SKILL.md
           references/                               # Triage, fix, verify agent prompts
-        omnicreate/
+        omnicreate-gitlab/
           SKILL.md                                  # MR creation skill (glab CLI, MCP-powered)
       .mcp.json                                     # MCP server registration
       tools/
@@ -556,7 +556,7 @@ OmniReview/                                         # Marketplace root
 
 - [x] Claude Code plugin (marketplace install)
 - [x] GitLab MR review via `glab` CLI
-- [x] GitLab MR creation skill (`/omnicreate` with MCP tool)
+- [x] GitLab MR creation skill (`/omnicreate-gitlab` with MCP tool)
 - [x] 3 parallel agents with worktree isolation
 - [x] Confidence scoring and cross-correlation
 - [x] 9-option post-review action menu
