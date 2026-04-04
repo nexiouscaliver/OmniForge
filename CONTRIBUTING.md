@@ -109,7 +109,7 @@ To test your changes:
 
 1. Load the plugin: `claude --plugin-dir plugins/omnireview`
 2. Open Claude Code in a GitLab repository
-3. Run `/omnireview {MR_NUMBER}` against a real MR
+3. Run `/omnireview-gitlab {MR_NUMBER}` against a real MR
 4. Verify all 7 phases execute correctly
 5. Check that your changes produce the expected improvement
 

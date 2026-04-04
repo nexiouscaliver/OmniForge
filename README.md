@@ -433,7 +433,7 @@ rm -rf OmniReview
 Once restarted, open Claude Code in any GitLab repository and type:
 
 ```
-/omnireview
+/omnireview-gitlab
 ```
 
 If the skill is installed correctly, Claude will recognize the command and ask for an MR number.
@@ -444,11 +444,11 @@ If the skill is installed correctly, Claude will recognize the command and ask f
 
 OmniReview includes three complementary skills for GitLab workflows:
 
-### `/omnireview` — MR Review
+### `/omnireview-gitlab` — MR Review
 
 Multi-agent adversarial review of merge requests. See [How It Works](#how-it-works) for details.
 
-### `/omnifix` — Automated Fix
+### `/omnifix-gitlab` — Automated Fix
 
 Automated review finding fixer — triages findings, applies fixes, verifies, and resolves discussion threads.
 
@@ -496,7 +496,7 @@ Navigate to your GitLab project directory and run:
 
 ```bash
 # Using the slash command
-/omnireview 136
+/omnireview-gitlab 136
 
 # Or just ask naturally
 Review MR !136

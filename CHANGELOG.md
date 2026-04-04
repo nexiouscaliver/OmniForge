@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - MCP server now exposes 13 tools (was 12)
-- README updated with new "Included Skills" section documenting `/omnireview`, `/omnifix`, and `/omnicreate-gitlab`
+- README updated with new "Included Skills" section documenting `/omnireview-gitlab`, `/omnifix-gitlab`, and `/omnicreate-gitlab`
 - Project structure in README and CONTRIBUTING updated to show `skills/omnicreate-gitlab/` directory
 
 ---
