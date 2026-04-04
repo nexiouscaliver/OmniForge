@@ -217,7 +217,7 @@ class TestFetchMrDiscussions:
         assert general_discs[0]["line_number"] is None
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_skips_omnireview_summary(self, mock_run, tmp_path):
+    def test_skips_omniforge_summary(self, mock_run, tmp_path):
         """General discussion starting with '## OmniForge' appears as type='general' with resolvable=False."""
         from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)

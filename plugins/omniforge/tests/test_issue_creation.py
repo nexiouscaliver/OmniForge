@@ -42,7 +42,7 @@ class TestCreateLinkedIssue:
             "136",
             "[MR !136] Missing null check",
             "The auth handler does not check for null user.",
-            "omnireview,bug",
+            "omniforge,bug",
             repo,
         ))
         assert result["success"] is True
@@ -56,7 +56,7 @@ class TestCreateLinkedIssue:
         assert "--linked-mr" in call_args
         assert "136" in call_args
         assert "--label" in call_args
-        assert "omnireview,bug" in call_args
+        assert "omniforge,bug" in call_args
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_no_labels(self, mock_run, tmp_path):
