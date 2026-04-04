@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-OmniReview is a Claude Code plugin distributed as its own marketplace. It contains three skills:
+OmniForge is a Claude Code plugin distributed as its own marketplace. It contains three skills:
 - **omnireview-gitlab** — dispatches 3 parallel AI review agents in isolated git worktrees to adversarially review GitLab MRs
 - **omnifix-gitlab** — automates fixing review findings with parallel triage subagents, sequential fixing, verification, and thread resolution
 - **omnicreate-gitlab** — automates GitLab MR creation via `glab` CLI with auto-populated title/description from commits
@@ -15,8 +15,8 @@ This repo has two layers: the **marketplace root** and the **plugin** inside it.
 
 ```
 /                                    ← Marketplace root
-  .claude-plugin/marketplace.json       ← Points to ./plugins/omnireview
-  plugins/omnireview/                   ← THE PLUGIN
+  .claude-plugin/marketplace.json       ← Points to ./plugins/omniforge
+  plugins/omniforge/                    ← THE PLUGIN
     .claude-plugin/plugin.json
     .mcp.json                           ← Spawns the MCP server via uv
     skills/
@@ -28,7 +28,7 @@ This repo has two layers: the **marketplace root** and the **plugin** inside it.
         references/                     ← 5 files: 3 agent prompts + approval guide + commit/post guide
       omnicreate-gitlab/                 ← MR creation skill
         SKILL.md
-    tools/omnireview_mcp_server.py      ← Python MCP server (FastMCP, 13 tools)
+    tools/omniforge_mcp_server.py       ← Python MCP server (FastMCP, 13 tools)
     tests/                              ← 116 unit tests
 ```
 
@@ -38,28 +38,28 @@ The marketplace wrapper exists because `claude plugin marketplace add` requires 
 
 ### Run tests
 ```bash
-cd plugins/omnireview && python -m pytest tests/ -v
+cd plugins/omniforge && python -m pytest tests/ -v
 ```
 
 ### Run a single test
 ```bash
-cd plugins/omnireview && python -m pytest tests/test_discussions.py::TestFetchMrDiscussions::test_success -v
+cd plugins/omniforge && python -m pytest tests/test_discussions.py::TestFetchMrDiscussions::test_success -v
 ```
 
 ### Start MCP server manually (for testing)
 ```bash
-uv run --with "mcp[cli]" python3 plugins/omnireview/tools/omnireview_mcp_server.py
+uv run --with "mcp[cli]" python3 plugins/omniforge/tools/omniforge_mcp_server.py
 ```
 
 ### Load plugin locally (without installing)
 ```bash
-claude --plugin-dir plugins/omnireview
+claude --plugin-dir plugins/omniforge
 ```
 
 ### Install as marketplace plugin
 ```bash
-claude plugin marketplace add https://github.com/nexiouscaliver/OmniReview.git
-claude plugin install omnireview@omnireview-marketplace
+claude plugin marketplace add https://github.com/nexiouscaliver/OmniForge.git
+claude plugin install omniforge@omniforge-marketplace
 ```
 
 ## Architecture
@@ -71,7 +71,7 @@ claude plugin install omnireview@omnireview-marketplace
 
 Both skills support MCP tools (plugin install) with bash fallback (personal skill install).
 
-### MCP Server (`tools/omnireview_mcp_server.py`)
+### MCP Server (`tools/omniforge_mcp_server.py`)
 
 Single-file FastMCP server with 13 tools. The structure follows a pattern:
 
@@ -82,7 +82,7 @@ Single-file FastMCP server with 13 tools. The structure follows a pattern:
 - **FastMCP wrappers** — thin `@mcp_server.tool()` decorated functions that call internal implementations and `json.dumps` the result
 - **Entry point** — `mcp_server.run()` at the bottom
 
-### 12 MCP Tools
+### 13 MCP Tools
 
 | Tool | Used By |
 |------|---------|
@@ -106,7 +106,7 @@ Each SKILL.md references its supporting files as `./references/filename.md`. The
 
 ## Testing
 
-Tests mock `run_exec` via `unittest.mock.patch("omnireview_mcp_server.run_exec")`. Test files use `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))` to import from the tools directory.
+Tests mock `run_exec` via `unittest.mock.patch("omniforge_mcp_server.run_exec")`. Test files use `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))` to import from the tools directory.
 
 When adding new MCP tools: write the `_internal` implementation function first with tests mocking `run_exec`, then add the thin `@mcp_server.tool()` wrapper.
 

@@ -1,9 +1,39 @@
 # Changelog
 
-All notable changes to OmniReview will be documented in this file.
+All notable changes to OmniForge will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.0] - 2026-04-05
+
+### BREAKING CHANGES
+- **Project renamed from OmniReview to OmniForge** — reflects the full MR lifecycle toolkit (review, fix, create)
+- Plugin name: `omnireview` → `omniforge`
+- Plugin directory: `plugins/omnireview/` → `plugins/omniforge/`
+- Marketplace name: `omnireview-marketplace` → `omniforge-marketplace`
+- MCP server: `omnireview_mcp_server.py` → `omniforge_mcp_server.py`
+- MCP tool prefix: `mcp__omnireview__*` → `mcp__omniforge__*`
+
+### Migration
+Existing users must uninstall and reinstall:
+```bash
+# Remove old installation
+claude plugin uninstall omnireview
+claude plugin marketplace remove omnireview-marketplace
+
+# Install new
+claude plugin marketplace add https://github.com/nexiouscaliver/OmniForge.git
+claude plugin install omniforge@omniforge-marketplace
+```
+
+### Changed
+- README fully rewritten to reflect OmniForge as MR lifecycle toolkit
+- Plugin description updated to cover all 3 skills
+- Keywords expanded for better discoverability
+- Version bumped to 2.0.0 (semver major)
+
+---
 
 ## [1.4.0] - 2026-03-29
 
@@ -17,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `truncate_diff_if_needed` now checks both line count and character count
-- OmniReview SKILL.md adds "Large Diff Strategy" section for context-efficient agent dispatch
+- OmniForge SKILL.md adds "Large Diff Strategy" section for context-efficient agent dispatch
 - Triage agent prompt confidence scale now includes verdict implications
 - **SKILL.md context reduction** — phase-specific detail extracted to `./references/` for dynamic loading (omnireview -25%, omnifix -22%). New files: `posting-guide.md`, `approval-guide.md`, `commit-and-post-guide.md`
 - False Positive Auto-Reduction rules added to `consolidation-guide.md` (were only in SKILL.md before)
@@ -100,7 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `post_review_summary` — post top-level MR summary comment
   - `post_inline_thread` — post inline discussion thread on exact diff line (auto-fetches SHAs, constructs position data)
   - `post_full_review` — combined: summary + all inline threads in one call
-- Marketplace distribution format (`marketplace.json` + `plugins/omnireview/` subdirectory)
+- Marketplace distribution format (`marketplace.json` + `plugins/omniforge/` subdirectory)
 - CLAUDE.md for Claude Code development guidance
 - 13 new tests for posting tools (56 total)
 
