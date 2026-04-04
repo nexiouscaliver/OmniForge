@@ -1,6 +1,6 @@
 # Contributing to OmniForge
 
-Thank you for considering contributing to OmniForge. Every contribution — whether it's a bug report, feature request, documentation fix, or code change — helps make code reviews better for everyone.
+Thank you for considering contributing to OmniForge. Every contribution — whether it's a bug report, feature request, documentation fix, or code change — helps make the merge request lifecycle better for everyone.
 
 ## Table of Contents
 
@@ -278,7 +278,7 @@ refactor: simplify confidence scoring algorithm
 
 ## Code of Conduct
 
-Be respectful, constructive, and inclusive. We're all here to make code reviews better.
+Be respectful, constructive, and inclusive. We're all here to make the merge request workflow better.
 
 - Be kind in issue discussions and PR reviews
 - Assume good intent

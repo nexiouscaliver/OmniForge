@@ -1,6 +1,6 @@
 ---
 name: omnireview-gitlab
-description: Use when reviewing a GitLab merge request, performing code review on an MR, checking MR security, or when given a GitLab MR number or URL to review
+description: Use when reviewing a GitLab merge request (OmniForge). Dispatches 3 parallel adversarial agents for code, security, and process review with confidence-scored findings
 argument-hint: <mr-number>
 allowed-tools: [Read, Glob, Grep, Bash, Agent, Write, Edit]
 ---
