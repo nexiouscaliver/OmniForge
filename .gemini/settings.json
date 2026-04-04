@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "omniforge": {
+      "command": "python3",
+      "args": [
+        "plugins/omniforge/tools/omniforge_mcp_server.py"
+      ]
+    }
+  }
+}

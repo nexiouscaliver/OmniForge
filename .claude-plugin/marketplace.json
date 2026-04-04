@@ -1,18 +1,18 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "omnireview-marketplace",
-  "description": "OmniReview — multi-agent adversarial merge request review",
+  "name": "omniforge-marketplace",
+  "description": "OmniForge — AI-powered merge request toolkit for GitLab",
   "owner": {
     "name": "Shahil Kadia",
     "email": "shahilkadia@gmail.com"
   },
   "plugins": [
     {
-      "name": "omnireview",
-      "description": "Multi-agent adversarial merge request review — 3 parallel agents, 3 worktrees, 1 consolidated report for GitLab MRs",
-      "source": "./plugins/omnireview",
+      "name": "omniforge",
+      "description": "AI-powered merge request toolkit — review MRs with 3 parallel adversarial agents, auto-fix review findings, and create MRs from commits. 13 MCP tools, git worktree isolation, confidence-scored findings.",
+      "source": "./plugins/omniforge",
       "category": "development",
-      "homepage": "https://github.com/nexiouscaliver/OmniReview"
+      "homepage": "https://github.com/nexiouscaliver/OmniForge"
     }
   ]
 }

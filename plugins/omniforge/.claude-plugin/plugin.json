@@ -1,21 +1,24 @@
 {
-  "name": "omnireview",
-  "description": "Multi-agent adversarial merge request review — dispatches 3 parallel agents in isolated worktrees for code, security, and process review of GitLab MRs. Includes omnicreate-gitlab skill for automated MR creation.",
-  "version": "1.5.0",
+  "name": "omniforge",
+  "description": "AI-powered merge request toolkit — review MRs with 3 parallel adversarial agents, auto-fix review findings, and create MRs from commits. 13 MCP tools, git worktree isolation, confidence-scored findings.",
+  "version": "2.0.0",
   "author": {
     "name": "Shahil Kadia",
     "email": "shahilkadia@gmail.com"
   },
-  "homepage": "https://github.com/nexiouscaliver/OmniReview",
-  "repository": "https://github.com/nexiouscaliver/OmniReview",
+  "homepage": "https://github.com/nexiouscaliver/OmniForge",
+  "repository": "https://github.com/nexiouscaliver/OmniForge",
   "license": "MIT",
   "keywords": [
-    "code-review",
     "merge-request",
     "gitlab",
+    "code-review",
     "security",
     "multi-agent",
+    "auto-fix",
+    "mr-creation",
+    "worktree",
     "owasp",
-    "worktree"
+    "mcp"
   ]
 }
