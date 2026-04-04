@@ -47,7 +47,7 @@ git push origin omnifix-temp-{mr_id}:{source_branch}
 For each fixed finding, follow the `_post_full_review` error-handling pattern — collect errors per thread, continue with remaining, report summary:
 
 ```
-mcp__omnireview__reply_to_discussion(
+mcp__omniforge__reply_to_discussion(
     mr_id="{id}",
     discussion_id="{discussion_id}",
     body="Fixed in commit {sha}: {description}",
@@ -60,7 +60,7 @@ Retry once for 5xx errors with 2-second delay.
 ### Resolve Threads (if user opted in at Phase 3)
 
 ```
-mcp__omnireview__resolve_discussion(
+mcp__omniforge__resolve_discussion(
     mr_id="{id}",
     discussion_id="{discussion_id}",
     resolved=true,

@@ -1,9 +1,9 @@
 ---
 name: omnicreate-gitlab
-description: This skill should be used when the user asks to "create MR", "create merge request", "glab mr", "create GitLab MR", "open merge request", "submit MR", or "omnicreate" or "omnicreate-gitlab". Automates MR creation via the MCP tool (mcp__omnireview__create_gitlab_mr) with auto-populated title/description from commits, branch management, and optional reviewers/assignees. Supports draft MRs, work-in-progress MRs, issue linking, and more.
+description: This skill should be used when the user asks to "create MR", "create merge request", "glab mr", "create GitLab MR", "open merge request", "submit MR", or "omnicreate" or "omnicreate-gitlab". Automates MR creation via the MCP tool (mcp__omniforge__create_gitlab_mr) with auto-populated title/description from commits, branch management, and optional reviewers/assignees. Supports draft MRs, work-in-progress MRs, issue linking, and more.
 version: 1.3.0
 license: Apache-2.0
-allowed-tools: Bash, mcp__omnireview__create_gitlab_mr
+allowed-tools: Bash, mcp__omniforge__create_gitlab_mr
 ---
 
 # GitLab Merge Request Creator
@@ -21,7 +21,7 @@ allowed-tools: Bash, mcp__omnireview__create_gitlab_mr
 
 ## Your Task
 
-Create a GitLab merge request using the `mcp__omnireview__create_gitlab_mr` MCP tool.
+Create a GitLab merge request using the `mcp__omniforge__create_gitlab_mr` MCP tool.
 
 > **Why MCP instead of raw bash?**
 > The MCP tool validates all inputs, uses safe subprocess execution (no shell interpretation), and provides structured error output — making it safe for use by all models without risk of shell injection.
@@ -45,7 +45,7 @@ Before creating the MR, verify:
 - [ ] No uncommitted changes (warn if present)
 - [ ] Branch has upstream or can be pushed
 
-### MCP Tool: `mcp__omnireview__create_gitlab_mr`
+### MCP Tool: `mcp__omniforge__create_gitlab_mr`
 
 Use this tool for all MR creation. It wraps `glab mr create` safely.
 
@@ -81,13 +81,13 @@ Use this tool for all MR creation. It wraps `glab mr create` safely.
 3. **Check for changes**: If no commits, inform user they need to commit changes first
 4. **Warn about uncommitted changes**: If working directory is dirty, warn user before proceeding
 5. **Get repo root**: Run `git rev-parse --show-toplevel` to obtain the absolute path
-6. **Call MCP tool**: Invoke `mcp__omnireview__create_gitlab_mr` with `repo_root` and any user-specified options
+6. **Call MCP tool**: Invoke `mcp__omniforge__create_gitlab_mr` with `repo_root` and any user-specified options
 7. **Report output**: Show the MR URL, number, and any relevant details from the tool response
 
 ### Common Patterns
 
 **Default MR (auto-filled from commits):**
-→ Call `mcp__omnireview__create_gitlab_mr` with just `repo_root`
+→ Call `mcp__omniforge__create_gitlab_mr` with just `repo_root`
 
 **MR for a specific target branch with assignee:**
 → `repo_root`, `target_branch="staging"`, `assignees="john"`

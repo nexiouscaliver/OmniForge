@@ -5,7 +5,7 @@ argument-hint: <mr-number>
 allowed-tools: [Read, Glob, Grep, Bash, Agent, Write, Edit]
 ---
 
-# OmniReview
+# OmniForge
 
 > **Multi-agent adversarial MR review — 3 parallel agents, 3 worktrees, 1 consolidated report.**
 
@@ -13,7 +13,7 @@ Dispatch 3 parallel specialized agents in isolated git worktrees to perform adve
 
 **Core principle:** Independent adversarial review + confidence filtering + worktree isolation = high-signal feedback with minimal noise.
 
-**Announce at start:** "I'm using OmniReview to review MR !{id}."
+**Announce at start:** "I'm using OmniForge to review MR !{id}."
 
 ## Prerequisites
 
@@ -35,10 +35,10 @@ digraph omnireview_flow {
 
     gather [label="Phase 1: Gather MR Data\nglab mr view + diff + comments"];
     worktrees [label="Phase 2: Create 3 Worktrees\n(on MR source branch)"];
-    dispatch [label="Phase 3: Dispatch 3 OmniReview Agents\nIN PARALLEL"];
-    analyst [label="MR Analyst (OmniReview)\n(worktree 1)"];
-    codebase [label="Codebase Reviewer (OmniReview)\n(worktree 2)"];
-    security [label="Security Reviewer (OmniReview)\n(worktree 3)"];
+    dispatch [label="Phase 3: Dispatch 3 OmniForge Agents\nIN PARALLEL"];
+    analyst [label="MR Analyst (OmniForge)\n(worktree 1)"];
+    codebase [label="Codebase Reviewer (OmniForge)\n(worktree 2)"];
+    security [label="Security Reviewer (OmniForge)\n(worktree 3)"];
     consolidate [label="Phase 4: Consolidation\nconfidence scoring + cross-correlation"];
     report [label="Phase 5: Present Report\n(NEVER auto-post)"];
     action [label="Phase 6: Action Menu\n(user chooses)"];
@@ -64,7 +64,7 @@ Fetch ALL data before dispatching agents. Agents get data injected — they neve
 **If MCP tools are available** (plugin install), use the single tool call:
 
 ```
-mcp__omnireview__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
+mcp__omniforge__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
 ```
 
 Returns a structured JSON package with: mr_id, title, author, source_branch, target_branch, pipeline_status, description, comments, diff, diff_line_count, diff_too_large, diff_truncated, **diff_line_map**, commits, files_changed, labels, assignees, reviewers.
@@ -121,7 +121,7 @@ This approach reduces agent context usage by 50-80% on large MRs while preservin
 **If MCP tools are available** (plugin install), use the single tool call:
 
 ```
-mcp__omnireview__create_review_worktrees(
+mcp__omniforge__create_review_worktrees(
     mr_id="{id}",
     source_branch="{from Phase 1 response}",
     repo_root="{cwd}"
@@ -129,9 +129,9 @@ mcp__omnireview__create_review_worktrees(
 ```
 
 Returns absolute paths for all 3 worktrees:
-- `worktrees.analyst` — MR Analyst (OmniReview)
-- `worktrees.codebase` — Codebase Reviewer (OmniReview)
-- `worktrees.security` — Security Reviewer (OmniReview)
+- `worktrees.analyst` — MR Analyst (OmniForge)
+- `worktrees.codebase` — Codebase Reviewer (OmniForge)
+- `worktrees.security` — Security Reviewer (OmniForge)
 
 The tool automatically: ensures `.worktrees/` exists and is gitignored, cleans stale worktrees from crashed runs, fetches the source branch, creates 3 detached worktrees, resolves absolute paths.
 
@@ -157,7 +157,7 @@ SECURITY_PATH=$(cd .worktrees/omni-security-{id} && pwd)
 
 ---
 
-## Phase 3: Dispatch 3 OmniReview Agents in Parallel
+## Phase 3: Dispatch 3 OmniForge Agents in Parallel
 
 **REQUIRED SUB-SKILL:** Use `superpowers:dispatching-parallel-agents` pattern.
 
@@ -168,17 +168,17 @@ Dispatch all 3 agents simultaneously using the **Agent tool** (NOT TaskCreate �
 - MR comments/discussions (all 3 agents, not just the MR Analyst)
 - Confidence scoring instructions
 
-### Agent 1: MR Analyst (OmniReview)
+### Agent 1: MR Analyst (OmniForge)
 - **Template:** `./references/mr-analyst-prompt.md`
 - **Worktree:** `.worktrees/omni-analyst-{id}`
 - **Focus:** Process quality — commit-by-commit analysis, MR description, discussions, scope
 
-### Agent 2: Codebase Reviewer (OmniReview)
+### Agent 2: Codebase Reviewer (OmniForge)
 - **Template:** `./references/codebase-reviewer-prompt.md`
 - **Worktree:** `.worktrees/omni-codebase-{id}`
 - **Focus:** Code quality — architecture, logic, testing, patterns, DRY, performance
 
-### Agent 3: Security Reviewer (OmniReview)
+### Agent 3: Security Reviewer (OmniForge)
 - **Template:** `./references/security-reviewer-prompt.md`
 - **Worktree:** `.worktrees/omni-security-{id}`
 - **Focus:** Security — OWASP Top 10, secrets, auth/authz, injection, data exposure
@@ -213,7 +213,7 @@ For each agent, fill the template placeholders:
 ## Phase 5: Present Report
 
 ```markdown
-## OmniReview Report: !{id} — {title}
+## OmniForge Report: !{id} — {title}
 
 **Branch:** {source} → {target} | **Author:** {author} | **Pipeline:** {status}
 
@@ -238,16 +238,16 @@ Each: file:line | description | why it matters | how to fix | confidence | sourc
 [Optimizations, documentation, code clarity]
 
 ### MR Process Notes
-[From MR Analyst (OmniReview): commit quality, description, unresolved discussions]
+[From MR Analyst (OmniForge): commit quality, description, unresolved discussions]
 
 ### Security Assessment
-[From Security Reviewer (OmniReview): OWASP findings, posture assessment]
+[From Security Reviewer (OmniForge): OWASP findings, posture assessment]
 
 ### Recommendations
 [Future improvements beyond this MR's scope]
 
 ### Agent Agreement Matrix
-| File/Area | MR Analyst (OmniReview) | Codebase (OmniReview) | Security (OmniReview) | Consensus |
+| File/Area | MR Analyst (OmniForge) | Codebase (OmniForge) | Security (OmniForge) | Consensus |
 ```
 
 **CRITICAL: Present the report FIRST. Never auto-post anything.**
@@ -289,7 +289,7 @@ Post summary comment + individual inline threads for each finding >= 70 confiden
 **If MCP tools are available:**
 
 ```
-mcp__omnireview__cleanup_review_worktrees(mr_id="{id}", repo_root="{cwd}")
+mcp__omniforge__cleanup_review_worktrees(mr_id="{id}", repo_root="{cwd}")
 ```
 
 The tool force-removes all 3 worktrees, cleans leftover directories, and prunes git worktree references. Reports what was removed vs. already clean.
@@ -329,9 +329,9 @@ git worktree prune
 |-------|------|-----|
 | 1. Gather | Fetch MR data | `glab mr view/diff` (JSON + raw) |
 | 2. Setup | Create 3 worktrees | `git worktree add --detach` (×3) |
-| 3. Review | Dispatch OmniReview agents | Agent tool parallel (×3, opus model) |
+| 3. Review | Dispatch OmniForge agents | Agent tool parallel (×3, opus model) |
 | 4. Merge | Consolidate findings | Confidence score + cross-correlate + dedup |
-| 5. Report | Present OmniReview report | Structured markdown with verdict |
+| 5. Report | Present OmniForge report | Structured markdown with verdict |
 | 6. Act | User chooses | `glab mr note/approve`, `glab issue create` |
 | 7. Clean | Remove worktrees | `git worktree remove --force` (×3) + prune |
 
@@ -340,12 +340,12 @@ git worktree prune
 ## The "Small MR" Trap
 
 ```
-EVERY MR gets the full OmniReview process. No exceptions.
+EVERY MR gets the full OmniForge process. No exceptions.
 ```
 
 The most dangerous rationalization is: "This MR is small/simple, I'll just do a quick review." This is exactly when issues get missed — when you assume simplicity means safety.
 
-**Baseline testing proved this.** Without OmniReview, an agent reviewing a "simple" 86-line CI/CD change:
+**Baseline testing proved this.** Without OmniForge, an agent reviewing a "simple" 86-line CI/CD change:
 - Skipped worktree isolation ("unnecessary overhead")
 - Skipped parallel agents ("scope was small enough")
 - Skipped confidence scoring ("informal severity labels are fine")
@@ -354,7 +354,7 @@ The most dangerous rationalization is: "This MR is small/simple, I'll just do a 
 
 A CI/CD file change can expose secrets, break production deployments, or modify security configurations. "Small" does not mean "safe."
 
-**The rule:** Every MR gets 3 OmniReview agents, 3 worktrees, confidence scoring, and the full report. The overhead is minutes. The cost of a missed issue is hours or days.
+**The rule:** Every MR gets 3 OmniForge agents, 3 worktrees, confidence scoring, and the full report. The overhead is minutes. The cost of a missed issue is hours or days.
 
 ---
 
@@ -374,7 +374,7 @@ A CI/CD file change can expose secrets, break production deployments, or modify 
 | "Relative paths are fine for worktrees" | Agents need absolute paths to reliably navigate. Always convert to absolute. |
 | "I'll use TaskCreate to track the agents" | TaskCreate tracks YOUR work. Use the Agent tool to dispatch subagents. Different tools, different purposes. |
 
-**All of these mean: Follow the 7-phase OmniReview process. No shortcuts.**
+**All of these mean: Follow the 7-phase OmniForge process. No shortcuts.**
 
 ---
 
@@ -397,7 +397,7 @@ A CI/CD file change can expose secrets, break production deployments, or modify 
 - Inject context into agent prompts (don't make agents re-fetch)
 - Use confidence scoring with threshold 70
 - Cross-correlate findings across agents
-- Present full OmniReview report before any action
+- Present full OmniForge report before any action
 - Ask user which actions to take via the action menu
 - Clean up all worktrees regardless of outcome
 - Use `glab` for all GitLab operations
@@ -412,8 +412,8 @@ A CI/CD file change can expose secrets, break production deployments, or modify 
 - `superpowers:requesting-code-review` — Review output format (Strengths/Issues/Assessment)
 - `superpowers:verification-before-completion` — Evidence-based findings
 
-**OmniReview Agent Templates:**
-- `./references/mr-analyst-prompt.md` — MR Analyst (OmniReview)
-- `./references/codebase-reviewer-prompt.md` — Codebase Reviewer (OmniReview)
-- `./references/security-reviewer-prompt.md` — Security Reviewer (OmniReview)
+**OmniForge Agent Templates:**
+- `./references/mr-analyst-prompt.md` — MR Analyst (OmniForge)
+- `./references/codebase-reviewer-prompt.md` — Codebase Reviewer (OmniForge)
+- `./references/security-reviewer-prompt.md` — Security Reviewer (OmniForge)
 - `./references/consolidation-guide.md` — Cross-correlation and report format

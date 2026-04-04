@@ -1,4 +1,4 @@
-# OmniReview Posting Guide
+# OmniForge Posting Guide
 
 Reference for Phase 6 — templates, formatting rules, and commands for posting review results.
 
@@ -14,7 +14,7 @@ This is the most common action. It posts everything in one go:
 
 **Do NOT batch findings.** Each finding gets its own thread so the MR author can resolve them independently. Multiple threads on the same file = expected and encouraged.
 
-**Implementation:** Use the `mcp__omnireview__post_full_review` tool which handles the summary and all inline threads efficiently in a single tool call.
+**Implementation:** Use the `mcp__omniforge__post_full_review` tool which handles the summary and all inline threads efficiently in a single tool call.
 
 **Line numbers:** Use the `diff_line_map` from the `fetch_mr_data` response (Phase 1) to get valid line numbers for each file. The `added_lines` array contains exact line numbers where code was added — use these for `line_number` in findings. Do NOT call `map_diff_lines` separately — the data is already available from Phase 1.
 
@@ -23,7 +23,7 @@ This is the most common action. It posts everything in one go:
 The summary is an **overview** — a high-level snapshot for anyone (author, reviewer, PM) to quickly understand the MR state. Keep it concise. The detail lives in the inline threads.
 
 ```markdown
-## OmniReview
+## OmniForge
 
 **Verdict:** {APPROVE | APPROVE_WITH_FIXES | REQUEST_CHANGES | BLOCK}
 
@@ -91,10 +91,10 @@ Confidence: {score}/100 | Found by: {agent_name(s)}
 
 | Action | MCP Tool |
 |--------|----------|
-| Full review post | `mcp__omnireview__post_full_review(mr_id, summary, findings_json, repo_root)` |
-| Summary only | `mcp__omnireview__post_review_summary(mr_id, summary, repo_root)` |
-| Inline thread | `mcp__omnireview__post_inline_thread(mr_id, file_path, line_number, body, repo_root)` |
-| Create issue | `mcp__omnireview__create_linked_issue(mr_id, title, description, labels, repo_root)` |
+| Full review post | `mcp__omniforge__post_full_review(mr_id, summary, findings_json, repo_root)` |
+| Summary only | `mcp__omniforge__post_review_summary(mr_id, summary, repo_root)` |
+| Inline thread | `mcp__omniforge__post_inline_thread(mr_id, file_path, line_number, body, repo_root)` |
+| Create issue | `mcp__omniforge__create_linked_issue(mr_id, title, description, labels, repo_root)` |
 
 For `post_full_review`, the `findings` parameter is a JSON string of an array:
 ```json

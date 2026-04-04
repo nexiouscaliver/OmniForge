@@ -1,6 +1,6 @@
-# OmniReview Consolidation Guide
+# OmniForge Consolidation Guide
 
-Reference for the OmniReview orchestrator to consolidate findings from all 3 review agents.
+Reference for the OmniForge orchestrator to consolidate findings from all 3 review agents.
 
 ---
 
@@ -10,7 +10,7 @@ Extract structured findings from each agent's report into a normalized format:
 
 ```
 {
-  source_agent: "MR Analyst (OmniReview)" | "Codebase Reviewer (OmniReview)" | "Security Reviewer (OmniReview)",
+  source_agent: "MR Analyst (OmniForge)" | "Codebase Reviewer (OmniForge)" | "Security Reviewer (OmniForge)",
   category: string,
   severity: "critical" | "important" | "minor",
   confidence: number (0-100),
@@ -109,7 +109,7 @@ Within each severity level, group related findings together.
 For each file touched by the MR, create a row showing what each agent found:
 
 ```markdown
-| File/Area | MR Analyst (OmniReview) | Codebase (OmniReview) | Security (OmniReview) | Consensus |
+| File/Area | MR Analyst (OmniForge) | Codebase (OmniForge) | Security (OmniForge) | Consensus |
 |-----------|------------------------|----------------------|----------------------|-----------|
 | service.py | - | Important: missing error handling | Important: unvalidated input | Both flagged (high confidence) |
 | config.yml | Minor: unclear description | - | Critical: exposed secret | Security concern |
@@ -125,10 +125,10 @@ This matrix makes gaps visible. If an agent found nothing for a file, show `-`. 
 Use this template:
 
 ```markdown
-## OmniReview Report: !{id} — {title}
+## OmniForge Report: !{id} — {title}
 
 **Branch:** {source} → {target} | **Author:** {author} | **Pipeline:** {status}
-**Reviewed by:** 3 parallel OmniReview agents (MR Analyst, Codebase Reviewer, Security Reviewer)
+**Reviewed by:** 3 parallel OmniForge agents (MR Analyst, Codebase Reviewer, Security Reviewer)
 
 ### Summary
 [1-3 sentences: overall assessment, key risk areas, recommendation]

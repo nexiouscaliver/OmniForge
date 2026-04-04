@@ -1,6 +1,6 @@
 ---
 name: omnifix-gitlab
-description: Use when fixing review findings on a GitLab MR, resolving inline discussion threads, applying code review suggestions, or when asked to fix issues from an OmniReview report
+description: Use when fixing review findings on a GitLab MR, resolving inline discussion threads, applying code review suggestions, or when asked to fix issues from an OmniForge report
 argument-hint: <mr-number>
 allowed-tools: [Read, Glob, Grep, Bash, Agent, Write, Edit]
 ---
@@ -63,25 +63,25 @@ Fetch ALL data before dispatching triage agents.
 **Step 1:** Fetch discussions.
 
 ```
-mcp__omnireview__fetch_mr_discussions(mr_id="{id}", repo_root="{cwd}")
+mcp__omniforge__fetch_mr_discussions(mr_id="{id}", repo_root="{cwd}")
 ```
 
 Returns structured discussion threads with: `discussion_id`, `resolvable`, `resolved`, `type` (inline/general), `file_path`, `line_number`, `body`, `author`, `replies`.
 
 **Step 2:** Filter discussions.
 - Keep only: `resolvable: true` AND `resolved: false`
-- Skip: system notes, OmniReview summary comments (`individual_note: true` with `resolvable: false`)
+- Skip: system notes, OmniForge summary comments (`individual_note: true` with `resolvable: false`)
 
 **Step 3:** Fetch MR metadata.
 
 ```
-mcp__omnireview__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
+mcp__omniforge__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
 ```
 
 Returns: title, author, source_branch, target_branch, diff, diff_line_map, commits, files_changed.
 
 **Step 4:** Categorize each finding:
-- **inline** — has `file_path` and `line_number` (from OmniReview inline threads or human comments on diff)
+- **inline** — has `file_path` and `line_number` (from OmniForge inline threads or human comments on diff)
 - **general** — no file position (from human general comments). Attempt to locate via grep in worktree; if found, treat as inline. If not, present as `NEEDS_HUMAN` in Phase 3.
 
 **Step 5:** Parse each finding into standardized format:
@@ -105,7 +105,7 @@ Returns: title, author, source_branch, target_branch, diff, diff_line_map, commi
 - Present: "Found {N} unresolved findings ({X} inline, {Y} general). Proceeding to triage."
 
 **Handles three sources:**
-- OmniReview findings (structured: severity tag in body, "Confidence: X/100")
+- OmniForge findings (structured: severity tag in body, "Confidence: X/100")
 - Human reviewer comments (unstructured: "this looks wrong", "consider using X")
 - Automated CI/bot comments (skip: system notes, pipeline status)
 
@@ -337,7 +337,7 @@ Key rules:
 **ALWAYS runs, regardless of success or failure.**
 
 ```
-mcp__omnireview__cleanup_omnifix_worktrees(mr_id="{id}", repo_root="{cwd}")
+mcp__omniforge__cleanup_omnifix_worktrees(mr_id="{id}", repo_root="{cwd}")
 ```
 
 Removes:
@@ -435,11 +435,11 @@ If any bash commands during Phases 4-6 changed the working directory into the wo
 ## Integration
 
 **MCP Tools:**
-- `mcp__omnireview__fetch_mr_discussions` — Fetch structured discussion threads
-- `mcp__omnireview__fetch_mr_data` — Fetch MR metadata, diff, and diff_line_map
-- `mcp__omnireview__reply_to_discussion` — Post reply on a discussion thread
-- `mcp__omnireview__resolve_discussion` — Resolve/unresolve a discussion thread
-- `mcp__omnireview__cleanup_omnifix_worktrees` — Remove all OmniFix worktrees and temp branches
+- `mcp__omniforge__fetch_mr_discussions` — Fetch structured discussion threads
+- `mcp__omniforge__fetch_mr_data` — Fetch MR metadata, diff, and diff_line_map
+- `mcp__omniforge__reply_to_discussion` — Post reply on a discussion thread
+- `mcp__omniforge__resolve_discussion` — Resolve/unresolve a discussion thread
+- `mcp__omniforge__cleanup_omnifix_worktrees` — Remove all OmniFix worktrees and temp branches
 
 **Subagent Templates:**
 - `./references/triage-agent-prompt.md` — Triage Agent (parallel, read-only)
