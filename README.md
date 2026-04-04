@@ -530,5 +530,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <strong>Built by <a href="https://github.com/nexiouscaliver">@nexiouscaliver</a></strong>
+  <strong>Built by Shahil Kadia <a href="https://github.com/nexiouscaliver">(@nexiouscaliver)</a></strong>
+  <br>
+  If OmniReview helps you catch bugs before production, consider giving it a star.
 </p>
