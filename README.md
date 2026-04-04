@@ -172,7 +172,7 @@ claude --plugin-dir /path/to/OmniForge/plugins/omniforge
 
 ```bash
 # 1) Clone
- git clone https://github.com/nexiouscaliver/OmniForge.git
+git clone https://github.com/nexiouscaliver/OmniForge.git
 
 # 2) OmniReview
 mkdir -p ~/.claude/skills/omnireview-gitlab/references
