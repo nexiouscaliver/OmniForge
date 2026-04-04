@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OmniReview MCP Server — worktree and MR data tools for code review."""
+"""OmniForge MCP Server — worktree and MR data tools for the merge request lifecycle."""
 
 import asyncio
 import json
@@ -290,7 +290,7 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
 
 
 async def _create_review_worktrees(mr_id: str, source_branch: str, repo_root: str) -> dict:
-    """Create 3 isolated git worktrees for OmniReview agents."""
+    """Create 3 isolated git worktrees for OmniForge agents."""
     try:
         mr_id = validate_mr_id(mr_id)
         repo_root = validate_repo_root(repo_root)
@@ -377,7 +377,7 @@ async def _create_review_worktrees(mr_id: str, source_branch: str, repo_root: st
 
 
 async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
-    """Remove all OmniReview worktrees for a given MR."""
+    """Remove all OmniForge worktrees for a given MR."""
     try:
         mr_id = validate_mr_id(mr_id)
         repo_root = validate_repo_root(repo_root)
@@ -921,7 +921,7 @@ async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
 
 from mcp.server.fastmcp import FastMCP
 
-mcp_server = FastMCP("omnireview")
+mcp_server = FastMCP("omniforge")
 
 
 @mcp_server.tool()
@@ -940,7 +940,7 @@ async def fetch_mr_data(mr_id: str, repo_root: str) -> str:
 async def create_review_worktrees(
     mr_id: str, source_branch: str, repo_root: str
 ) -> str:
-    """Create 3 isolated git worktrees for OmniReview agents.
+    """Create 3 isolated git worktrees for OmniForge agents.
 
     Args:
         mr_id: Merge request number
@@ -953,7 +953,7 @@ async def create_review_worktrees(
 
 @mcp_server.tool()
 async def cleanup_review_worktrees(mr_id: str, repo_root: str) -> str:
-    """Remove all OmniReview worktrees for a given MR.
+    """Remove all OmniForge worktrees for a given MR.
 
     Args:
         mr_id: Merge request number
@@ -1063,7 +1063,7 @@ async def create_linked_issue(
         mr_id: Merge request number the issue relates to
         title: Issue title (e.g., '[MR !136] Missing null check in auth handler')
         description: Issue body with finding details, impact, and recommendation
-        labels: Comma-separated labels (e.g., 'omnireview,bug') or empty string for none
+        labels: Comma-separated labels (e.g., 'omniforge,bug') or empty string for none
         repo_root: Absolute path to the git repository root
     """
     result = await _create_linked_issue(mr_id, title, description, labels, repo_root)
