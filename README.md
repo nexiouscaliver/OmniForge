@@ -117,7 +117,7 @@ If you prefer a manual installation as a personal skill (without the MCP tool se
 # 1. Clone the repository
 git clone https://github.com/nexiouscaliver/OmniForge.git
 
-# 2. Install OmniReview (review skill)
+# 2. Install the review skill
 mkdir -p ~/.claude/skills/omnireview-gitlab/references
 cp OmniForge/plugins/omniforge/skills/omnireview-gitlab/SKILL.md ~/.claude/skills/omnireview-gitlab/
 cp OmniForge/plugins/omniforge/skills/omnireview-gitlab/references/* ~/.claude/skills/omnireview-gitlab/references/
@@ -153,7 +153,7 @@ Once restarted, open Claude Code in any GitLab repository and run your first rev
 
 ### `/omnireview-gitlab` — Multi-Agent MR Review
 
-OmniReview runs three independent AI review agents simultaneously, each in its own isolated copy of your codebase via [git worktrees](https://git-scm.com/docs/git-worktree). Each agent examines the merge request from a different angle. When they finish, their findings are cross-referenced, scored for confidence, filtered for false positives, and delivered as a single consolidated report.
+OmniForge runs three independent AI review agents simultaneously, each in its own isolated copy of your codebase via [git worktrees](https://git-scm.com/docs/git-worktree). Each agent examines the merge request from a different angle. When they finish, their findings are cross-referenced, scored for confidence, filtered for false positives, and delivered as a single consolidated report.
 
 #### The Three Agents
 
@@ -271,7 +271,7 @@ Issues caught by multiple perspectives rise to the top, while single-agent obser
 
 #### False Positive Reduction
 
-OmniReview automatically reduces confidence for common false positive categories:
+OmniForge automatically reduces confidence for common false positive categories:
 
 - Issues that existed before this MR (checked via `git blame`)
 - Problems that linters or CI would catch anyway
@@ -281,7 +281,7 @@ OmniReview automatically reduces confidence for common false positive categories
 #### Report Format
 
 ```
-OmniReview Report: !136 — Add staging Stripe configuration
+OmniForge Report: !136 — Add staging Stripe configuration
 
 Branch: stripe-config -> staging | Author: alice | Pipeline: passed
 
@@ -314,7 +314,7 @@ Agent Agreement Matrix:
 
 #### Post-Review Action Menu
 
-OmniReview never takes action without your approval. After presenting the report, you get a structured action menu with 9 options:
+OmniForge never takes action without your approval. After presenting the report, you get a structured action menu with 9 options:
 
 | # | Action | What It Does |
 |---|--------|-------------|
@@ -334,7 +334,7 @@ All posted comments are written as standard code review text — no AI attributi
 
 ### `/omnifix-gitlab` — Automated Finding Fixer
 
-OmniReview finds issues. OmniFix fixes them. The companion skill automates the entire fix cycle after a review.
+OmniForge finds issues. OmniFix fixes them. The companion skill automates the entire fix cycle after a review.
 
 ```
 /omnifix-gitlab 136
@@ -492,13 +492,13 @@ OmniForge/                                          # Marketplace root
 The review skill (`/omnireview-gitlab`) is read-only. It creates temporary git worktrees to examine your code but never modifies any files. Worktrees are cleaned up automatically after the review. The fix skill (`/omnifix-gitlab`) does modify code — it applies fixes to resolve review findings, commits them, and pushes to the MR branch. No changes are made without your explicit approval through the mandatory user approval gate. The create skill (`/omnicreate-gitlab`) does not modify code — it only creates a merge request from existing commits.
 
 **Q: Does it post comments automatically?**
-Never. OmniReview always presents findings to you first. You decide what gets posted via the action menu. OmniFix replies on threads only after applying approved fixes.
+Never. OmniForge always presents findings to you first. You decide what gets posted via the action menu. OmniFix replies on threads only after applying approved fixes.
 
 **Q: How long does a review take?**
 Typically 2-5 minutes depending on MR size. The three agents run in parallel, so it is roughly the time of one agent, not three.
 
 **Q: What if an agent fails?**
-OmniReview is designed for graceful degradation. If one agent fails, the other two still complete, and the gap is noted in the report. If two or more fail, partial results are shown with a recommendation for manual review.
+OmniForge is designed for graceful degradation. If one agent fails, the other two still complete, and the gap is noted in the report. If two or more fail, partial results are shown with a recommendation for manual review.
 
 **Q: Can I customize the review focus?**
 Yes. The agent prompt templates are fully editable. You can add project-specific checklists, remove sections that do not apply, or adjust the confidence threshold.
