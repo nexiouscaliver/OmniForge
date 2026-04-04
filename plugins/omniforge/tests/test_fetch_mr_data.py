@@ -1,4 +1,4 @@
-"""Tests for _fetch_mr_data in OmniReview MCP server."""
+"""Tests for _fetch_mr_data in OmniForge MCP server."""
 
 import asyncio
 import json
@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 
-from omnireview_mcp_server import _fetch_mr_data  # noqa: E402
+from omniforge_mcp_server import _fetch_mr_data  # noqa: E402
 
 
 # ── Fixtures / Helpers ────────────────────────────────────
@@ -87,7 +87,7 @@ def _build_side_effects(
 class TestFetchMrDataSuccess:
     """Happy-path: all subprocess calls succeed."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_success(self, mock_run):
         mock_run.side_effect = _build_side_effects()
 
@@ -133,7 +133,7 @@ class TestFetchMrDataSuccess:
 class TestFetchMrDataAuthFailure:
     """glab auth status returns non-zero."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_auth_failure(self, mock_run):
         mock_run.return_value = _make_result(1, stderr="not logged in")
 
@@ -158,7 +158,7 @@ class TestFetchMrDataAuthFailure:
 class TestFetchMrDataMrNotFound:
     """Auth OK but MR view fails."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_mr_not_found(self, mock_run):
         mock_run.side_effect = [
             _make_result(0),                          # auth OK
@@ -202,10 +202,10 @@ class TestFetchMrDataValidationErrors:
 class TestCharacterTruncation:
     """Character-based diff truncation (MAX_DIFF_CHARS)."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_diff_truncated_by_chars(self, mock_run):
         """Diff under MAX_DIFF_LINES but over MAX_DIFF_CHARS gets truncated."""
-        from omnireview_mcp_server import MAX_DIFF_CHARS
+        from omniforge_mcp_server import MAX_DIFF_CHARS
 
         # Build a diff that is under 10K lines but exceeds MAX_DIFF_CHARS
         # Each line is ~200 chars; 1000 lines = ~200K chars > 150K limit
@@ -237,10 +237,10 @@ class TestCharacterTruncation:
         assert len(result["diff"]) < len(large_diff)
         assert "TRUNCATED" in result["diff"]
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_diff_line_map_complete_despite_char_truncation(self, mock_run):
         """diff_line_map is parsed from raw diff before char truncation."""
-        from omnireview_mcp_server import MAX_DIFF_CHARS
+        from omniforge_mcp_server import MAX_DIFF_CHARS
 
         long_line = "+" + ("x" * 198) + "\n"
         large_diff = (
@@ -268,7 +268,7 @@ class TestCharacterTruncation:
         # diff_line_map should have the file from the raw diff
         assert "bigfile.py" in result["diff_line_map"]
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_small_diff_not_truncated(self, mock_run):
         """A small diff stays intact (no character truncation applied)."""
         small_diff = "+++ b/small.py\n@@ -1 +1 @@\n-old\n+new\n"

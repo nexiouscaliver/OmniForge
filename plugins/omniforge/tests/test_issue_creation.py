@@ -28,9 +28,9 @@ def _make_result(returncode=0, stdout="", stderr=""):
 
 
 class TestCreateLinkedIssue:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _create_linked_issue
+        from omniforge_mcp_server import _create_linked_issue
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(
@@ -58,9 +58,9 @@ class TestCreateLinkedIssue:
         assert "--label" in call_args
         assert "omnireview,bug" in call_args
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_no_labels(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _create_linked_issue
+        from omniforge_mcp_server import _create_linked_issue
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(
@@ -76,9 +76,9 @@ class TestCreateLinkedIssue:
         call_args = mock_run.call_args[0][0]
         assert "--label" not in call_args
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_glab_failure(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _create_linked_issue
+        from omniforge_mcp_server import _create_linked_issue
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(1, stderr="403 Forbidden")
@@ -91,7 +91,7 @@ class TestCreateLinkedIssue:
         assert "403" in result["error"]
 
     def test_empty_title(self, tmp_path):
-        from omnireview_mcp_server import _create_linked_issue
+        from omniforge_mcp_server import _create_linked_issue
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_create_linked_issue(
@@ -101,7 +101,7 @@ class TestCreateLinkedIssue:
         assert result["error_type"] == "validation_error"
 
     def test_invalid_mr_id(self, tmp_path):
-        from omnireview_mcp_server import _create_linked_issue
+        from omniforge_mcp_server import _create_linked_issue
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_create_linked_issue(

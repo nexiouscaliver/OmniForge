@@ -72,7 +72,7 @@ index aaa..bbb 100644
 
 class TestParseDiffLineMap:
     def test_single_file_added_lines(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(SINGLE_FILE_DIFF)
         assert ".gitlab-ci.yml" in result
         ci = result[".gitlab-ci.yml"]
@@ -84,7 +84,7 @@ class TestParseDiffLineMap:
         assert 1074 in ci["added_lines"]  # STRIPE_PUBLISHABLE_KEY_STAGING
 
     def test_single_file_modified_lines(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(SINGLE_FILE_DIFF)
         ci = result[".gitlab-ci.yml"]
         # The replaced printf line should also be in added_lines
@@ -93,7 +93,7 @@ class TestParseDiffLineMap:
         assert any(line >= 1075 for line in added)  # NEW ERROR MESSAGE line
 
     def test_single_file_hunks(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(SINGLE_FILE_DIFF)
         ci = result[".gitlab-ci.yml"]
         assert "hunks" in ci
@@ -104,13 +104,13 @@ class TestParseDiffLineMap:
         assert hunk["new_count"] == 34
 
     def test_multi_file(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(MULTI_FILE_DIFF)
         assert "src/app.py" in result
         assert "src/utils.py" in result
 
     def test_multi_file_lines(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(MULTI_FILE_DIFF)
         app = result["src/app.py"]
         # validate_input() at line 11, check_auth() at line 12
@@ -118,7 +118,7 @@ class TestParseDiffLineMap:
         assert 12 in app["added_lines"]
 
     def test_multi_file_multiple_hunks(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(MULTI_FILE_DIFF)
         utils = result["src/utils.py"]
         # Two hunks in utils.py
@@ -127,7 +127,7 @@ class TestParseDiffLineMap:
         assert utils["hunks"][1]["new_start"] == 22
 
     def test_multi_file_second_hunk_lines(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(MULTI_FILE_DIFF)
         utils = result["src/utils.py"]
         # "import os" at line 1, "import sys" at line 2
@@ -137,19 +137,19 @@ class TestParseDiffLineMap:
         assert 23 in utils["added_lines"]
 
     def test_empty_diff(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(EMPTY_DIFF)
         assert result == {}
 
     def test_delete_only_no_added_lines(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(DELETE_ONLY_DIFF)
         old = result.get("old.py", {})
         # Only deletions, no added lines
         assert len(old.get("added_lines", [])) == 0
 
     def test_context_lines_not_in_added(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(SINGLE_FILE_DIFF)
         ci = result[".gitlab-ci.yml"]
         # Context lines (no + prefix) should NOT be in added_lines
@@ -157,7 +157,7 @@ class TestParseDiffLineMap:
         assert 1069 not in ci["added_lines"]
 
     def test_returns_all_lines_in_diff(self):
-        from omnireview_mcp_server import parse_diff_line_map
+        from omniforge_mcp_server import parse_diff_line_map
         result = parse_diff_line_map(SINGLE_FILE_DIFF)
         ci = result[".gitlab-ci.yml"]
         # all_new_lines includes context + added (everything visible in the new file)

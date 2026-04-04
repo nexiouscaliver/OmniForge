@@ -31,9 +31,9 @@ class TestCreateGitlabMrDefaults:
     """Test default argument construction."""
 
     def test_defaults_include_fill_and_push(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/group/repo/-/merge_requests/1"
             )
@@ -50,9 +50,9 @@ class TestCreateGitlabMrDefaults:
         assert "main" in args
 
     def test_mr_url_parsed_from_output(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="Creating MR...\nhttps://gitlab.com/g/r/-/merge_requests/42\nDone"
             )
@@ -66,9 +66,9 @@ class TestCreateGitlabMrCustomTitleDescription:
     """Test custom title/description with fill=false."""
 
     def test_fill_false_omits_fill_flags(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/5"
             )
@@ -95,9 +95,9 @@ class TestCreateGitlabMrLabelsAndAssignees:
     """Test labels, assignees, and reviewers."""
 
     def test_labels_and_assignees_in_args(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/10"
             )
@@ -120,12 +120,12 @@ class TestCreateGitlabMrLabelsAndAssignees:
 
     def test_gitlab_style_labels_accepted(self, tmp_path):
         """Labels like type::bug and group/backend should be allowed."""
-        from omnireview_mcp_server import validate_labels
+        from omniforge_mcp_server import validate_labels
         result = validate_labels("type::bug,group/backend,P1")
         assert result == "type::bug,group/backend,P1"
 
     def test_labels_with_control_chars_rejected(self, tmp_path):
-        from omnireview_mcp_server import validate_labels
+        from omniforge_mcp_server import validate_labels
         with pytest.raises(ValueError, match="control characters"):
             validate_labels("bug\x00injected")
 
@@ -134,9 +134,9 @@ class TestCreateGitlabMrDraftAndFlags:
     """Test boolean flags like draft, remove_source_branch, squash."""
 
     def test_draft_flag(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/7"
             )
@@ -148,9 +148,9 @@ class TestCreateGitlabMrDraftAndFlags:
 
     def test_web_flag_excludes_yes(self, tmp_path):
         """--web and --yes conflict in glab, so --yes must be omitted when --web is used."""
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/9"
             )
@@ -162,9 +162,9 @@ class TestCreateGitlabMrDraftAndFlags:
         assert "--yes" not in args
 
     def test_yes_flag_present_without_web(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/10"
             )
@@ -176,9 +176,9 @@ class TestCreateGitlabMrDraftAndFlags:
         assert "--web" not in args
 
     def test_source_branch_and_target_branch(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/8"
             )
@@ -200,9 +200,9 @@ class TestCreateGitlabMrErrorHandling:
     """Test non-zero return code and validation errors."""
 
     def test_nonzero_returncode(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 returncode=1,
                 stderr="authentication required",
@@ -215,7 +215,7 @@ class TestCreateGitlabMrErrorHandling:
         assert result["error_type"] == "mr_creation_failed"
 
     def test_invalid_repo_root(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         result = asyncio.get_event_loop().run_until_complete(
             _create_gitlab_mr(repo_root="/nonexistent/path")
         )
@@ -223,7 +223,7 @@ class TestCreateGitlabMrErrorHandling:
         assert result["error_type"] == "validation_error"
 
     def test_invalid_source_branch_rejected(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
         result = asyncio.get_event_loop().run_until_complete(
             _create_gitlab_mr(repo_root=repo, source_branch="branch;rm -rf /")
@@ -232,7 +232,7 @@ class TestCreateGitlabMrErrorHandling:
         assert result["error_type"] == "validation_error"
 
     def test_invalid_target_branch_rejected(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
         result = asyncio.get_event_loop().run_until_complete(
             _create_gitlab_mr(repo_root=repo, target_branch="branch|evil")
@@ -241,7 +241,7 @@ class TestCreateGitlabMrErrorHandling:
         assert result["error_type"] == "validation_error"
 
     def test_invalid_title_rejected(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
         result = asyncio.get_event_loop().run_until_complete(
             _create_gitlab_mr(
@@ -258,9 +258,9 @@ class TestCreateGitlabMrRelatedIssue:
     """Test issue linking and copy-issue-labels."""
 
     def test_related_issue_and_copy_labels(self, tmp_path):
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/20"
             )
@@ -278,9 +278,9 @@ class TestCreateGitlabMrRelatedIssue:
 
     def test_copy_issue_labels_without_issue_ignored(self, tmp_path):
         """copy_issue_labels should not appear without related_issue."""
-        from omnireview_mcp_server import _create_gitlab_mr
+        from omniforge_mcp_server import _create_gitlab_mr
         repo = _make_repo(tmp_path)
-        with patch("omnireview_mcp_server.run_exec") as mock_exec:
+        with patch("omniforge_mcp_server.run_exec") as mock_exec:
             mock_exec.return_value = _make_result(
                 stdout="https://gitlab.com/g/r/-/merge_requests/21"
             )

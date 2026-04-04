@@ -1,4 +1,4 @@
-"""Tests for OmniReview MCP server helper functions."""
+"""Tests for OmniForge MCP server helper functions."""
 
 import asyncio
 import os
@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 
-from omnireview_mcp_server import (
+from omniforge_mcp_server import (
     MAX_DIFF_LINES,
     extract_changed_files,
     parse_commits,

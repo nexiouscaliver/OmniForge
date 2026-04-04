@@ -1,4 +1,4 @@
-"""Tests for OmniFix worktree cleanup in OmniReview MCP server."""
+"""Tests for OmniFix worktree cleanup in OmniForge MCP server."""
 
 import asyncio
 import os
@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 
-from omnireview_mcp_server import (  # noqa: E402
+from omniforge_mcp_server import (  # noqa: E402
     _cleanup_omnifix_worktrees,
 )
 
@@ -43,7 +43,7 @@ def _make_repo(tmp_path):
 class TestCleanupOmnifixWorktrees:
     """Tests for _cleanup_omnifix_worktrees."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_cleanup_fix_worktree(self, mock_run, tmp_path):
         """Fix worktree .worktrees/omnifix-42 exists -- should be removed."""
         repo = _make_repo(tmp_path)
@@ -78,7 +78,7 @@ class TestCleanupOmnifixWorktrees:
         assert "omnifix-42" in result["removed"]
         assert result["mr_id"] == "42"
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_cleanup_triage_worktrees(self, mock_run, tmp_path):
         """Triage worktrees omnifix-triage-42-0 and -1 exist -- both removed."""
         repo = _make_repo(tmp_path)
@@ -112,7 +112,7 @@ class TestCleanupOmnifixWorktrees:
         assert "omnifix-triage-42-0" in result["removed"]
         assert "omnifix-triage-42-1" in result["removed"]
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_cleanup_temp_branch(self, mock_run, tmp_path):
         """Verify git branch -D omnifix-temp-42 is called."""
         repo = _make_repo(tmp_path)
@@ -137,7 +137,7 @@ class TestCleanupOmnifixWorktrees:
         assert len(branch_calls) == 1
         assert branch_calls[0] == ["git", "branch", "-D", "omnifix-temp-42"]
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_already_clean(self, mock_run, tmp_path):
         """No dirs exist -- omnifix-42 in already_clean, removed is empty."""
         repo = _make_repo(tmp_path)

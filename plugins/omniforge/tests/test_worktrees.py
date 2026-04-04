@@ -1,4 +1,4 @@
-"""Tests for worktree creation and cleanup in OmniReview MCP server."""
+"""Tests for worktree creation and cleanup in OmniForge MCP server."""
 
 import asyncio
 import os
@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 
-from omnireview_mcp_server import (  # noqa: E402
+from omniforge_mcp_server import (  # noqa: E402
     _cleanup_review_worktrees,
     _create_review_worktrees,
 )
@@ -44,7 +44,7 @@ def _make_repo(tmp_path):
 class TestCreateReviewWorktrees:
     """Tests for _create_review_worktrees."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_creates_three_worktrees(self, mock_run, tmp_path):
         """All calls succeed -- should return 3 worktree paths."""
         repo = _make_repo(tmp_path)
@@ -85,7 +85,7 @@ class TestCreateReviewWorktrees:
         for wt_type, path in result["worktrees"].items():
             assert os.path.isabs(path), f"{wt_type} path not absolute: {path}"
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_fetch_failure_aborts(self, mock_run, tmp_path):
         """Fetch fails -- should abort with fetch_failed error."""
         repo = _make_repo(tmp_path)
@@ -108,7 +108,7 @@ class TestCreateReviewWorktrees:
         assert result["success"] is False
         assert result["error_type"] == "fetch_failed"
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_partial_failure_cleans_up(self, mock_run, tmp_path):
         """First 2 worktrees succeed, 3rd fails -- cleanup performed."""
         repo = _make_repo(tmp_path)
@@ -162,7 +162,7 @@ class TestCreateReviewWorktrees:
 class TestCleanupReviewWorktrees:
     """Tests for _cleanup_review_worktrees."""
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_removes_existing_worktrees(self, mock_run, tmp_path):
         """3 worktree dirs exist -- all should be removed."""
         repo = _make_repo(tmp_path)
@@ -195,7 +195,7 @@ class TestCleanupReviewWorktrees:
         assert result["success"] is True
         assert len(result["removed"]) == 3
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_already_clean(self, mock_run, tmp_path):
         """No worktree dirs exist -- all reported as already_clean."""
         repo = _make_repo(tmp_path)
@@ -218,7 +218,7 @@ class TestCleanupReviewWorktrees:
         assert len(result["already_clean"]) == 3
         assert len(result["removed"]) == 0
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_rmtree_failure_reports_error(self, mock_run, tmp_path):
         """When git worktree remove fails AND shutil.rmtree fails, error is reported."""
         repo = _make_repo(tmp_path)
@@ -240,7 +240,7 @@ class TestCleanupReviewWorktrees:
         mock_run.side_effect = side_effect
 
         # Patch shutil.rmtree to raise an exception
-        with patch("omnireview_mcp_server.shutil.rmtree", side_effect=PermissionError("Permission denied")):
+        with patch("omniforge_mcp_server.shutil.rmtree", side_effect=PermissionError("Permission denied")):
             result = asyncio.run(
                 _cleanup_review_worktrees("42", repo)
             )
@@ -249,7 +249,7 @@ class TestCleanupReviewWorktrees:
         assert len(result["errors"]) >= 1
         assert "omni-analyst-42" in result["errors"][0]
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_gitignore_updated_when_not_present(self, mock_run, tmp_path):
         """When .worktrees/ is not gitignored, it gets added to .gitignore."""
         repo = _make_repo(tmp_path)

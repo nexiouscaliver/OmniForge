@@ -1,4 +1,4 @@
-"""Tests for OmniReview MCP server input validation functions."""
+"""Tests for OmniForge MCP server input validation functions."""
 
 import os
 import sys
@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 
-from omnireview_mcp_server import (
+from omniforge_mcp_server import (
     validate_branch_name,
     validate_mr_id,
     validate_repo_root,

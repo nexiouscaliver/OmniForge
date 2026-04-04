@@ -42,9 +42,9 @@ SAMPLE_DIFF_REFS_JSON = json.dumps({
 
 
 class TestPostReviewSummary:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_review_summary
+        from omniforge_mcp_server import _post_review_summary
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(0)
@@ -59,9 +59,9 @@ class TestPostReviewSummary:
         assert "136" in call_args
         assert "## Review Summary\nLooks good." in call_args
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_glab_failure(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_review_summary
+        from omniforge_mcp_server import _post_review_summary
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(1, stderr="403 Forbidden")
@@ -71,7 +71,7 @@ class TestPostReviewSummary:
         assert result["error_type"] == "post_failed"
 
     def test_empty_summary(self, tmp_path):
-        from omnireview_mcp_server import _post_review_summary
+        from omniforge_mcp_server import _post_review_summary
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_post_review_summary("136", "", repo))
@@ -79,7 +79,7 @@ class TestPostReviewSummary:
         assert result["error_type"] == "validation_error"
 
     def test_invalid_mr_id(self, tmp_path):
-        from omnireview_mcp_server import _post_review_summary
+        from omniforge_mcp_server import _post_review_summary
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_post_review_summary("abc", "Summary", repo))
@@ -91,9 +91,9 @@ class TestPostReviewSummary:
 
 
 class TestPostInlineThread:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_inline_thread
+        from omniforge_mcp_server import _post_inline_thread
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -124,9 +124,9 @@ class TestPostInlineThread:
         assert any("new_path]=src/app.py" in f for f in raw_fields)
         assert any("new_line]=42" in f for f in raw_fields)
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_mr_not_found(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_inline_thread
+        from omniforge_mcp_server import _post_inline_thread
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(1, stderr="not found")
@@ -138,7 +138,7 @@ class TestPostInlineThread:
         assert result["error_type"] == "mr_not_found"
 
     def test_empty_body(self, tmp_path):
-        from omnireview_mcp_server import _post_inline_thread
+        from omniforge_mcp_server import _post_inline_thread
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_post_inline_thread("136", "file.py", 10, "", repo))
@@ -146,16 +146,16 @@ class TestPostInlineThread:
         assert result["error_type"] == "validation_error"
 
     def test_invalid_line_number(self, tmp_path):
-        from omnireview_mcp_server import _post_inline_thread
+        from omniforge_mcp_server import _post_inline_thread
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_post_inline_thread("136", "file.py", 0, "Body", repo))
         assert result["success"] is False
         assert result["error_type"] == "validation_error"
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_api_post_failure(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_inline_thread
+        from omniforge_mcp_server import _post_inline_thread
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -179,9 +179,9 @@ class TestPostInlineThread:
 
 
 class TestPostFullReview:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_full_review
+        from omniforge_mcp_server import _post_full_review
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -205,9 +205,9 @@ class TestPostFullReview:
         assert result["threads_posted"] == 2
         assert result["threads_total"] == 2
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_partial_failure(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_full_review
+        from omniforge_mcp_server import _post_full_review
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -235,9 +235,9 @@ class TestPostFullReview:
         assert result["threads_posted"] >= 1
         assert len(result["errors"]) >= 1
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_invalid_finding_skipped(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _post_full_review
+        from omniforge_mcp_server import _post_full_review
         repo = _make_repo(tmp_path)
 
         mock_run.return_value = _make_result(0)  # summary post succeeds
@@ -251,10 +251,10 @@ class TestPostFullReview:
         assert any("missing file_path" in e for e in result["errors"])
 
     def test_empty_findings_list(self, tmp_path):
-        from omnireview_mcp_server import _post_full_review
+        from omniforge_mcp_server import _post_full_review
         repo = _make_repo(tmp_path)
 
-        with patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock) as mock_run:
+        with patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = _make_result(0)
             result = asyncio.run(_post_full_review("136", "Summary", [], repo))
 

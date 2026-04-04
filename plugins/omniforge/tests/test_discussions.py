@@ -93,7 +93,7 @@ SAMPLE_DISCUSSIONS_JSON = json.dumps([
         "notes": [
             {
                 "id": 1004,
-                "body": "## OmniReview\n\n**Verdict:** APPROVE_WITH_FIXES",
+                "body": "## OmniForge\n\n**Verdict:** APPROVE_WITH_FIXES",
                 "author": {"username": "shahilkadia"},
                 "system": False,
                 "created_at": "2026-03-26T01:00:00Z"
@@ -122,9 +122,9 @@ SAMPLE_DISCUSSIONS_JSON = json.dumps([
 
 
 class TestFetchMrDiscussions:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -144,10 +144,10 @@ class TestFetchMrDiscussions:
         assert result["resolved"] == 1
         assert result["mr_id"] == "136"
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_filters_system_notes(self, mock_run, tmp_path):
         """Discussion with only system notes should be completely excluded."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         system_only = json.dumps([
@@ -183,10 +183,10 @@ class TestFetchMrDiscussions:
         assert result["total"] == 0
         assert result["discussions"] == []
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_inline_vs_general(self, mock_run, tmp_path):
         """Inline discussions have position data, general ones do not."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -216,10 +216,10 @@ class TestFetchMrDiscussions:
         assert general_discs[0]["file_path"] is None
         assert general_discs[0]["line_number"] is None
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_skips_omnireview_summary(self, mock_run, tmp_path):
-        """General discussion starting with '## OmniReview' appears as type='general' with resolvable=False."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        """General discussion starting with '## OmniForge' appears as type='general' with resolvable=False."""
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -233,14 +233,14 @@ class TestFetchMrDiscussions:
         mock_run.side_effect = side_effect
 
         result = asyncio.run(_fetch_mr_discussions("136", repo))
-        omni_disc = [d for d in result["discussions"] if "OmniReview" in d["body"]]
+        omni_disc = [d for d in result["discussions"] if "OmniForge" in d["body"]]
         assert len(omni_disc) == 1
         assert omni_disc[0]["type"] == "general"
         assert omni_disc[0]["resolvable"] is False
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_empty_discussions(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -260,10 +260,10 @@ class TestFetchMrDiscussions:
         assert result["unresolved"] == 0
         assert result["resolved"] == 0
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_api_failure(self, mock_run, tmp_path):
         """IID fetch OK but discussions API call fails."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -281,7 +281,7 @@ class TestFetchMrDiscussions:
         assert result["error_type"] == "api_error"
 
     def test_invalid_mr_id(self, tmp_path):
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_fetch_mr_discussions("abc", repo))
@@ -293,9 +293,9 @@ class TestFetchMrDiscussions:
 
 
 class TestReplyToDiscussion:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_reply_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _reply_to_discussion
+        from omniforge_mcp_server import _reply_to_discussion
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -322,10 +322,10 @@ class TestReplyToDiscussion:
         assert "--method" in api_call
         assert "POST" in api_call
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_reply_failure(self, mock_run, tmp_path):
         """POST returns 403."""
-        from omnireview_mcp_server import _reply_to_discussion
+        from omniforge_mcp_server import _reply_to_discussion
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -345,7 +345,7 @@ class TestReplyToDiscussion:
         assert result["error_type"] == "post_failed"
 
     def test_reply_empty_body(self, tmp_path):
-        from omnireview_mcp_server import _reply_to_discussion
+        from omniforge_mcp_server import _reply_to_discussion
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_reply_to_discussion(
@@ -355,7 +355,7 @@ class TestReplyToDiscussion:
         assert result["error_type"] == "validation_error"
 
     def test_reply_invalid_mr_id(self, tmp_path):
-        from omnireview_mcp_server import _reply_to_discussion
+        from omniforge_mcp_server import _reply_to_discussion
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_reply_to_discussion(
@@ -369,9 +369,9 @@ class TestReplyToDiscussion:
 
 
 class TestResolveDiscussion:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_resolve_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _resolve_discussion
+        from omniforge_mcp_server import _resolve_discussion
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -400,9 +400,9 @@ class TestResolveDiscussion:
         assert "PUT" in api_call
         assert any("resolved=true" in a for a in api_call)
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_unresolve_success(self, mock_run, tmp_path):
-        from omnireview_mcp_server import _resolve_discussion
+        from omniforge_mcp_server import _resolve_discussion
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -426,10 +426,10 @@ class TestResolveDiscussion:
         api_call = mock_run.call_args_list[1][0][0]
         assert any("resolved=false" in a for a in api_call)
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_resolve_failure(self, mock_run, tmp_path):
         """PUT returns 404."""
-        from omnireview_mcp_server import _resolve_discussion
+        from omniforge_mcp_server import _resolve_discussion
         repo = _make_repo(tmp_path)
 
         call_count = 0
@@ -449,7 +449,7 @@ class TestResolveDiscussion:
         assert result["error_type"] == "resolve_failed"
 
     def test_resolve_invalid_mr_id(self, tmp_path):
-        from omnireview_mcp_server import _resolve_discussion
+        from omniforge_mcp_server import _resolve_discussion
         repo = _make_repo(tmp_path)
 
         result = asyncio.run(_resolve_discussion(
@@ -463,10 +463,10 @@ class TestResolveDiscussion:
 
 
 class TestDiffNoteTypeFallback:
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_diffnote_without_position_classified_as_inline(self, mock_run, tmp_path):
         """DiffNote with position=None should be classified as inline via type fallback."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         discussions_json = json.dumps([
@@ -508,10 +508,10 @@ class TestDiffNoteTypeFallback:
         assert disc["file_path"] is None
         assert disc["line_number"] is None
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_diffnote_with_position_uses_position_data(self, mock_run, tmp_path):
         """DiffNote with full position data should be inline with correct file/line."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         discussions_json = json.dumps([
@@ -557,10 +557,10 @@ class TestDiffNoteTypeFallback:
         assert disc["file_path"] == "src/models.py"
         assert disc["line_number"] == 77
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_regular_note_without_position_is_general(self, mock_run, tmp_path):
         """Note with type=null and no position should be classified as general."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         discussions_json = json.dumps([
@@ -601,10 +601,10 @@ class TestDiffNoteTypeFallback:
         assert disc["file_path"] is None
         assert disc["line_number"] is None
 
-    @patch("omnireview_mcp_server.run_exec", new_callable=AsyncMock)
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_diffnote_missing_position_key_entirely(self, mock_run, tmp_path):
         """DiffNote with no position key at all should be classified as inline."""
-        from omnireview_mcp_server import _fetch_mr_discussions
+        from omniforge_mcp_server import _fetch_mr_discussions
         repo = _make_repo(tmp_path)
 
         discussions_json = json.dumps([
