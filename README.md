@@ -76,7 +76,9 @@ Plugins are loaded at session start.
 
 ### 4) Run your first review
 
-```bash
+Open a local GitLab repository in Claude Code, then run:
+
+```text
 /omnireview-gitlab 136
 ```
 
