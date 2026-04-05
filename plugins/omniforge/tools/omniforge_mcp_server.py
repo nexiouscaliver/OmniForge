@@ -479,14 +479,19 @@ async def _post_review_summary(mr_id: str, summary: str, repo_root: str) -> dict
     return {"success": True, "mr_id": mr_id, "action": "summary_posted"}
 
 
-async def _post_inline_thread(
+async def _post_inline_thread_with_refs(
     mr_id: str,
     file_path: str,
     line_number: int,
     body: str,
     repo_root: str,
+    diff_refs: dict,
 ) -> dict:
-    """Post an inline discussion thread on a specific diff line."""
+    """Post an inline discussion thread with pre-fetched diff refs.
+
+    Args:
+        diff_refs: Pre-fetched diff refs dict with 'iid', 'base_sha', 'head_sha', 'start_sha'.
+    """
     try:
         mr_id = validate_mr_id(mr_id)
         repo_root = validate_repo_root(repo_root)
@@ -497,15 +502,6 @@ async def _post_inline_thread(
         return {"success": False, "error": "Thread body is empty.", "error_type": "validation_error"}
     if line_number < 1:
         return {"success": False, "error": "line_number must be >= 1.", "error_type": "validation_error"}
-
-    # Fetch diff refs (SHAs needed for position data)
-    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
-    if not diff_refs or not diff_refs.get("success"):
-        return {
-            "success": False,
-            "error": diff_refs.get("error", f"Could not fetch diff refs for MR !{mr_id}.") if diff_refs else f"Could not fetch diff refs for MR !{mr_id}.",
-            "error_type": diff_refs.get("error_type", "mr_not_found") if diff_refs else "mr_not_found",
-        }
 
     # glab api uses :fullpath placeholder which auto-resolves to the project path
     r = await run_exec(
@@ -539,6 +535,40 @@ async def _post_inline_thread(
     }
 
 
+async def _post_inline_thread(
+    mr_id: str,
+    file_path: str,
+    line_number: int,
+    body: str,
+    repo_root: str,
+) -> dict:
+    """Post an inline discussion thread on a specific diff line."""
+    # Validate inputs first (before any I/O)
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not body or not body.strip():
+        return {"success": False, "error": "Thread body is empty.", "error_type": "validation_error"}
+    if line_number < 1:
+        return {"success": False, "error": "line_number must be >= 1.", "error_type": "validation_error"}
+
+    # Fetch diff refs (SHAs needed for position data)
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs or not diff_refs.get("success"):
+        return {
+            "success": False,
+            "error": diff_refs.get("error", f"Could not fetch diff refs for MR !{mr_id}.") if diff_refs else f"Could not fetch diff refs for MR !{mr_id}.",
+            "error_type": diff_refs.get("error_type", "mr_not_found") if diff_refs else "mr_not_found",
+        }
+
+    return await _post_inline_thread_with_refs(
+        mr_id, file_path, line_number, body, repo_root, diff_refs
+    )
+
+
 async def _post_full_review(
     mr_id: str,
     summary: str,
@@ -557,13 +587,25 @@ async def _post_full_review(
 
     results = {"summary": None, "threads": [], "errors": []}
 
+    # Fetch diff refs once for all inline threads (avoids N+1 API calls)
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs or not diff_refs.get("success"):
+        return {
+            "success": False,
+            "mr_id": mr_id,
+            "summary_posted": False,
+            "threads_posted": 0,
+            "threads_total": len(findings),
+            "errors": [diff_refs.get("error", f"Could not fetch diff refs for MR !{mr_id}.") if diff_refs else f"Could not fetch diff refs for MR !{mr_id}."],
+        }
+
     # Post summary
     summary_result = await _post_review_summary(mr_id, summary, repo_root)
     results["summary"] = summary_result
     if not summary_result["success"]:
         results["errors"].append(f"Summary: {summary_result['error']}")
 
-    # Post each finding as an inline thread
+    # Post each finding as an inline thread (reusing pre-fetched refs)
     for i, finding in enumerate(findings):
         fp = finding.get("file_path", "")
         ln = finding.get("line_number", 0)
@@ -578,7 +620,9 @@ async def _post_full_review(
             })
             continue
 
-        thread_result = await _post_inline_thread(mr_id, fp, ln, body, repo_root)
+        thread_result = await _post_inline_thread_with_refs(
+            mr_id, fp, ln, body, repo_root, diff_refs
+        )
         results["threads"].append({
             "success": thread_result["success"],
             "index": i + 1,
