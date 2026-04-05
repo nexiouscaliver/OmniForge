@@ -55,7 +55,8 @@ Code reviews often fail for the same reasons: reviewer fatigue, inconsistent dep
 ### 1) Prerequisites
 
 - [Claude Code](https://claude.ai/code)
-- [`uv`](https://astral.sh/uv/) (for MCP server runtime dependencies)
+- Python 3.10+ available as `python3` on your `PATH` (required to launch the MCP server)
+- [`uv`](https://astral.sh/uv/) (for MCP server runtime dependencies; `python3` must still be available locally)
 - [`glab`](https://gitlab.com/gitlab-org/cli#installation) (authenticated via `glab auth login`)
 - Git 2.15+ (worktree support)
 - Any local GitLab repository
