@@ -550,7 +550,7 @@ Post one summary comment after all thread replies, via `post_review_summary`:
 - `{discussion_id_short}` — first 7 characters of the discussion ID
 - For general (non-inline) threads, use `general` in the File column
 - Include only NOT_APPLIED threads in the "Unaddressed Findings" table — not NEEDS_HUMAN
-- If zero NOT_APPLIED threads (all were approved by user exclusions), omit the table and write: "All flagged findings have been addressed."
+- If zero NOT_APPLIED threads (after user exclusions), omit the table and write: "All flagged findings have been addressed."
 - Do not mention AI, automation, bots, OmniCheck, or OmniForge in this comment
 ```
 

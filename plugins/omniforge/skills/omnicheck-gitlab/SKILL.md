@@ -58,12 +58,13 @@ Phase 5: DONE     — no cleanup needed (no worktrees)
 mcp__omniforge__fetch_mr_discussions(mr_id="{id}", repo_root="{cwd}")
 ```
 
-Returns structured threads with: `discussion_id`, `resolvable`, `resolved`, `type`, `file_path`, `line_number`, `body`, `author`, `replies`.
+Returns structured threads with: `id`, `resolvable`, `resolved`, `type`, `file_path`, `line_number`, `body`, `author`, `replies`. The tool already excludes discussions whose notes are all system-generated — every thread returned contains at least one human note.
+
+**Note:** When building `{UNRESOLVED_THREADS_JSON}` for the analysis subagent, include each thread's `id` field as `discussion_id` so verdicts can be mapped back to GitLab thread IDs for posting replies.
 
 **Step 2:** Partition threads.
 - `resolved: true` → pre-labeled `APPLIED`, skip analysis
-- `resolvable: true` AND `resolved: false` → pass to Phase 2
-- `resolvable: false` (system notes, pipeline status) → skip entirely
+- `resolved: false` (any `resolvable` value) → pass to Phase 2. This includes both resolvable inline threads and general (`resolvable: false`) human comments — both can receive nudge replies.
 
 **Step 3:** Fetch MR metadata and diff.
 
@@ -74,8 +75,8 @@ mcp__omniforge__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
 Returns: title, author, source_branch, target_branch, diff, diff_line_count, commits, files_changed.
 
 **Step 4:** Early exit checks.
-- Zero resolvable threads: "MR !{id} has no discussion threads. Nothing to check." Stop.
-- Zero unresolved threads: "All {N} threads are resolved. Nothing to nudge." Stop.
+- Zero threads returned: "MR !{id} has no discussion threads. Nothing to check." Stop.
+- Zero unresolved threads (`resolved: false`): "All {N} threads are resolved. Nothing to nudge." Stop.
 
 **Step 5:** Present: "Found {N} total threads ({R} resolved, {U} unresolved). Analyzing {U} unresolved threads."
 

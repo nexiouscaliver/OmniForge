@@ -88,12 +88,31 @@ Post one summary comment after all thread replies, via `post_review_summary`:
 
 | Thread | File | Summary |
 |--------|------|---------|
-| #{discussion_id_short} | {file_path}:{line} | {body_summary} |
+| #{discussion_id_short} | {file_location} | {body_summary} |
 ```
 
 **Field rules:**
 - `{discussion_id_short}` — first 7 characters of the discussion ID
-- For general (non-inline) threads, use `general` in the File column
+- `{file_location}` — format based on available data:
+  - Inline thread with line number: `{file_path}:{line_number}`
+  - Inline thread without line number: `{file_path}`
+  - General (non-inline) thread: `general`
 - Include only NOT_APPLIED threads in the "Unaddressed Findings" table — not NEEDS_HUMAN
 - If zero NOT_APPLIED threads remain after user exclusions, omit the table and write instead: "All flagged findings have been addressed."
 - Do not mention AI, automation, bots, OmniCheck, or OmniForge in this comment
+
+### Failures Section (optional)
+
+If any thread replies failed to post, append this section after "Unaddressed Findings":
+
+```
+### Failed to Post
+
+The following nudge replies could not be posted and require manual follow-up:
+
+| Thread | File | Reason |
+|--------|------|--------|
+| #{discussion_id_short} | {file_location} | {error_summary} |
+```
+
+Omit this section entirely if all replies posted successfully.

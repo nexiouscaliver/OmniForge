@@ -76,7 +76,7 @@ Return a JSON array — one object per thread. Every thread from the input MUST 
 ```
 
 **Field rules:**
-- `discussion_id` — copy exactly from the input thread
+- `discussion_id` — copy exactly from the input thread's `discussion_id` field (the orchestrator maps the MCP server's `id` field to `discussion_id` before passing threads to you)
 - `file_path` — the file the thread concerns (use `general` if no file applies)
 - `line_number` — the line number from the thread, or `null` if no line applies
 - `body_summary` — one sentence describing what the reviewer asked for
