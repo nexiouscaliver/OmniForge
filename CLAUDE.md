@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-OmniForge is a Claude Code plugin distributed as its own marketplace. It contains three skills:
+OmniForge is a Claude Code plugin distributed as its own marketplace. It contains four skills:
 - **omnireview-gitlab** — dispatches 3 parallel AI review agents in isolated git worktrees to adversarially review GitLab MRs
 - **omnifix-gitlab** — automates fixing review findings with parallel triage subagents, sequential fixing, verification, and thread resolution
 - **omnicreate-gitlab** — automates GitLab MR creation via `glab` CLI with auto-populated title/description from commits
+- **omnicheck-gitlab** — checks whether requested MR changes have been applied by analyzing the diff against all discussion threads; posts nudge replies on unaddressed findings
 
 ## Repository Layout
 
@@ -28,6 +29,9 @@ This repo has two layers: the **marketplace root** and the **plugin** inside it.
         references/                     ← 5 files: 3 agent prompts + approval guide + commit/post guide
       omnicreate-gitlab/                 ← MR creation skill
         SKILL.md
+      omnicheck-gitlab/                  ← Check skill (5-phase diff verification workflow)
+        SKILL.md
+        references/                     ← 2 files: analysis agent prompt + nudge guide
     tools/omniforge_mcp_server.py       ← Python MCP server (FastMCP, 13 tools)
     tests/                              ← 116 unit tests
 ```

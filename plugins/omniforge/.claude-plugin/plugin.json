@@ -1,6 +1,6 @@
 {
   "name": "omniforge",
-  "description": "AI-powered merge request toolkit — review MRs with 3 parallel adversarial agents, auto-fix review findings, and create MRs from commits. 13 MCP tools, git worktree isolation, confidence-scored findings.",
+  "description": "AI-powered merge request toolkit — review MRs with 3 parallel adversarial agents, auto-fix review findings, verify applied changes, and create MRs from commits. 13 MCP tools, git worktree isolation, confidence-scored findings.",
   "version": "2.0.0",
   "author": {
     "name": "Shahil Kadia",
@@ -16,6 +16,7 @@
     "security",
     "multi-agent",
     "auto-fix",
+    "omnicheck",
     "mr-creation",
     "worktree",
     "owasp",
