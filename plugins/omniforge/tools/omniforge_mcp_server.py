@@ -28,7 +28,8 @@ def validate_repo_root(repo_root: str) -> str:
     """Validate repo_root is an absolute path to a git repository."""
     if not os.path.isabs(repo_root):
         raise ValueError(f"repo_root must be absolute: {repo_root}")
-    if not os.path.isdir(os.path.join(repo_root, ".git")):
+    git_path = os.path.join(repo_root, ".git")
+    if not (os.path.isdir(git_path) or os.path.isfile(git_path)):
         raise ValueError(f"Not a git repository: {repo_root}")
     return repo_root
 
