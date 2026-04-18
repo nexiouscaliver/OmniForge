@@ -227,6 +227,14 @@ class TestFetchMrDataValidationErrors:
         assert result["error_type"] == "validation_error"
         assert "Invalid MR ID" in result["error"]
 
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_injection_like_mr_id_rejected_before_exec(self, mock_run):
+        result = asyncio.run(_fetch_mr_data("136;echo pwned", "/tmp"))
+        assert result["success"] is False
+        assert result["error_type"] == "validation_error"
+        assert "Invalid MR ID" in result["error"]
+        assert mock_run.await_count == 0
+
     def test_invalid_repo_root(self):
         result = asyncio.run(_fetch_mr_data("136", "relative/path"))
         assert result["success"] is False
