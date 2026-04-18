@@ -202,6 +202,34 @@ def truncate_diff_if_needed(diff_text: str, line_count: int) -> tuple:
     return diff_text, truncated
 
 
+def parse_json_with_recovery(raw_json: str) -> tuple:
+    """Parse JSON with recovery for prefixed/suffixed non-JSON text."""
+    try:
+        return True, json.loads(raw_json)
+    except json.JSONDecodeError:
+        pass
+
+    text = raw_json.strip()
+    if text != raw_json:
+        try:
+            return True, json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+    decoder = json.JSONDecoder()
+    for start_char in ('{', '['):
+        start_idx = text.find(start_char)
+        if start_idx == -1:
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(text[start_idx:])
+            return True, parsed
+        except json.JSONDecodeError:
+            continue
+
+    return False, None
+
+
 # ── Tool Implementations ──────────────────────────────────
 
 
@@ -232,9 +260,15 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
             "error": f"MR !{mr_id} not found.",
             "error_type": "mr_not_found",
         }
-    try:
-        metadata = json.loads(mr_json.stdout)
-    except json.JSONDecodeError:
+    metadata_ok, metadata = parse_json_with_recovery(mr_json.stdout)
+    if not metadata_ok:
+        mr_json_retry = await run_exec(
+            ["glab", "mr", "view", mr_id, "-F", "json"], cwd=repo_root
+        )
+        if mr_json_retry.returncode == 0:
+            metadata_ok, metadata = parse_json_with_recovery(mr_json_retry.stdout)
+
+    if not metadata_ok or not isinstance(metadata, dict):
         return {
             "success": False,
             "error": "Failed to parse MR metadata JSON.",
