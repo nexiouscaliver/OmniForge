@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -193,18 +194,9 @@ class TestFetchMrDataParseError:
             _make_result(0, stdout="{not-json"),        # malformed JSON
         ]
 
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
+        with tempfile.TemporaryDirectory() as repo:
+            os.makedirs(os.path.join(repo, ".git"), exist_ok=True)
             result = asyncio.run(_fetch_mr_data("136", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
 
         assert result["success"] is False
         assert result["error_type"] == "parse_error"
