@@ -261,7 +261,11 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
         }
 
     # Fetch MR metadata (JSON)
-    mr_json = await run_exec(build_mr_view_json_cmd(mr_id), cwd=repo_root)
+    try:
+        initial_cmd = build_mr_view_json_cmd(mr_id)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+    mr_json = await run_exec(initial_cmd, cwd=repo_root)
     if mr_json.returncode != 0:
         return {
             "success": False,
