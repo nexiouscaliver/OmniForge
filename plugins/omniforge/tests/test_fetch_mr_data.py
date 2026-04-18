@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -183,6 +184,40 @@ class TestFetchMrDataMrNotFound:
         assert "999" in result["error"]
 
 
+class TestFetchMrDataParseError:
+    """Auth OK and MR view succeeds but JSON is malformed."""
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_parse_error(self, mock_run):
+        mock_run.side_effect = [
+            _make_result(0),                            # auth OK
+            _make_result(0, stdout="{not-json"),        # malformed JSON
+            _make_result(0, stdout="{still-not-json"),  # retry malformed JSON
+        ]
+
+        with tempfile.TemporaryDirectory() as repo:
+            os.makedirs(os.path.join(repo, ".git"), exist_ok=True)
+            result = asyncio.run(_fetch_mr_data("136", repo))
+
+        assert result["success"] is False
+        assert result["error_type"] == "parse_error"
+        assert "parse MR metadata JSON" in result["error"]
+        assert mock_run.await_count == 3
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_parse_recovery_without_retry(self, mock_run):
+        recovered_json = f"warning: noisy output\n{json.dumps(SAMPLE_MR_JSON)}"
+        mock_run.side_effect = _build_side_effects(mr_view_stdout=recovered_json)
+
+        with tempfile.TemporaryDirectory() as repo:
+            os.makedirs(os.path.join(repo, ".git"), exist_ok=True)
+            result = asyncio.run(_fetch_mr_data("136", repo))
+
+        assert result["success"] is True
+        # Ensure no extra retry call was needed when recovery succeeds
+        assert mock_run.await_count == 6
+
+
 class TestFetchMrDataValidationErrors:
     """Validation failures before any subprocess calls."""
 
@@ -191,6 +226,14 @@ class TestFetchMrDataValidationErrors:
         assert result["success"] is False
         assert result["error_type"] == "validation_error"
         assert "Invalid MR ID" in result["error"]
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_injection_like_mr_id_rejected_before_exec(self, mock_run):
+        result = asyncio.run(_fetch_mr_data("136;echo pwned", "/tmp"))
+        assert result["success"] is False
+        assert result["error_type"] == "validation_error"
+        assert "Invalid MR ID" in result["error"]
+        assert mock_run.await_count == 0
 
     def test_invalid_repo_root(self):
         result = asyncio.run(_fetch_mr_data("136", "relative/path"))

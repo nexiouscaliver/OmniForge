@@ -202,6 +202,48 @@ def truncate_diff_if_needed(diff_text: str, line_count: int) -> tuple:
     return diff_text, truncated
 
 
+def parse_json_with_recovery(raw_json: str) -> tuple:
+    """Parse JSON with recovery for prefixed/suffixed non-JSON text.
+
+    Returns:
+        tuple[bool, object | None]:
+            (True, parsed_json) when parsing succeeds, otherwise (False, None).
+    """
+    try:
+        return True, json.loads(raw_json)
+    except json.JSONDecodeError:
+        pass
+
+    text = raw_json.strip()
+    if text != raw_json:
+        try:
+            return True, json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+    decoder = json.JSONDecoder()
+    for start_char in ('{', '['):
+        start_idx = text.find(start_char)
+        if start_idx == -1:
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(text[start_idx:])
+            return True, parsed
+        except json.JSONDecodeError:
+            continue
+
+    return False, None
+
+
+def build_mr_view_json_cmd(mr_id: str) -> list[str]:
+    """Build a validated glab command for MR metadata JSON.
+
+    Raises:
+        ValueError: If mr_id is not a numeric merge request ID.
+    """
+    return ["glab", "mr", "view", validate_mr_id(mr_id), "-F", "json"]
+
+
 # ── Tool Implementations ──────────────────────────────────
 
 
@@ -223,16 +265,29 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
         }
 
     # Fetch MR metadata (JSON)
-    mr_json = await run_exec(
-        ["glab", "mr", "view", mr_id, "-F", "json"], cwd=repo_root
-    )
+    try:
+        initial_cmd = build_mr_view_json_cmd(mr_id)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+    mr_json = await run_exec(initial_cmd, cwd=repo_root)
     if mr_json.returncode != 0:
         return {
             "success": False,
             "error": f"MR !{mr_id} not found.",
             "error_type": "mr_not_found",
         }
-    metadata = json.loads(mr_json.stdout)
+    metadata_ok, metadata = parse_json_with_recovery(mr_json.stdout)
+    if not metadata_ok:
+        mr_json_retry = await run_exec(initial_cmd, cwd=repo_root)
+        if mr_json_retry.returncode == 0:
+            metadata_ok, metadata = parse_json_with_recovery(mr_json_retry.stdout)
+
+    if not metadata_ok or not isinstance(metadata, dict):
+        return {
+            "success": False,
+            "error": "Failed to parse MR metadata JSON.",
+            "error_type": "parse_error",
+        }
 
     # Fetch comments (default to empty on failure)
     comments_r = await run_exec(
