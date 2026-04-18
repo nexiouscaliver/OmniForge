@@ -46,6 +46,11 @@ class TestValidateRepoRoot:
         git_dir.mkdir()
         assert validate_repo_root(str(tmp_path)) == str(tmp_path)
 
+    def test_valid_git_worktree(self, tmp_path):
+        git_file = tmp_path / ".git"
+        git_file.write_text("gitdir: /tmp/main/.git/worktrees/review-1\n")
+        assert validate_repo_root(str(tmp_path)) == str(tmp_path)
+
     def test_rejects_relative_path(self):
         with pytest.raises(ValueError, match="repo_root must be absolute"):
             validate_repo_root("relative/path")
