@@ -232,7 +232,14 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
             "error": f"MR !{mr_id} not found.",
             "error_type": "mr_not_found",
         }
-    metadata = json.loads(mr_json.stdout)
+    try:
+        metadata = json.loads(mr_json.stdout)
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Failed to parse MR metadata JSON.",
+            "error_type": "parse_error",
+        }
 
     # Fetch comments (default to empty on failure)
     comments_r = await run_exec(

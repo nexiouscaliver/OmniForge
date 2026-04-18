@@ -183,6 +183,35 @@ class TestFetchMrDataMrNotFound:
         assert "999" in result["error"]
 
 
+class TestFetchMrDataParseError:
+    """Auth OK and MR view succeeds but JSON is malformed."""
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_parse_error(self, mock_run):
+        mock_run.side_effect = [
+            _make_result(0),                            # auth OK
+            _make_result(0, stdout="{not-json"),        # malformed JSON
+        ]
+
+        repo = "/tmp"
+        git_dir = os.path.join(repo, ".git")
+        created_git = False
+        if not os.path.isdir(git_dir):
+            os.makedirs(git_dir, exist_ok=True)
+            created_git = True
+
+        try:
+            result = asyncio.run(_fetch_mr_data("136", repo))
+        finally:
+            if created_git:
+                os.rmdir(git_dir)
+
+        assert result["success"] is False
+        assert result["error_type"] == "parse_error"
+        assert "parse MR metadata JSON" in result["error"]
+        assert mock_run.await_count == 2
+
+
 class TestFetchMrDataValidationErrors:
     """Validation failures before any subprocess calls."""
 
