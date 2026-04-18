@@ -203,7 +203,12 @@ def truncate_diff_if_needed(diff_text: str, line_count: int) -> tuple:
 
 
 def parse_json_with_recovery(raw_json: str) -> tuple:
-    """Parse JSON with recovery for prefixed/suffixed non-JSON text."""
+    """Parse JSON with recovery for prefixed/suffixed non-JSON text.
+
+    Returns:
+        tuple[bool, object | None]:
+            (True, parsed_json) when parsing succeeds, otherwise (False, None).
+    """
     try:
         return True, json.loads(raw_json)
     except json.JSONDecodeError:
