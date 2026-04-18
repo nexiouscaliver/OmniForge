@@ -235,8 +235,12 @@ def parse_json_with_recovery(raw_json: str) -> tuple:
     return False, None
 
 
-def build_mr_view_json_cmd(mr_id: str) -> list:
-    """Build a validated glab command for MR metadata JSON."""
+def build_mr_view_json_cmd(mr_id: str) -> list[str]:
+    """Build a validated glab command for MR metadata JSON.
+
+    Raises:
+        ValueError: If mr_id is not a numeric merge request ID.
+    """
     return ["glab", "mr", "view", validate_mr_id(mr_id), "-F", "json"]
 
 
