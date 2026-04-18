@@ -274,11 +274,7 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
         }
     metadata_ok, metadata = parse_json_with_recovery(mr_json.stdout)
     if not metadata_ok:
-        try:
-            retry_cmd = build_mr_view_json_cmd(mr_id)
-        except ValueError as e:
-            return {"success": False, "error": str(e), "error_type": "validation_error"}
-        mr_json_retry = await run_exec(retry_cmd, cwd=repo_root)
+        mr_json_retry = await run_exec(initial_cmd, cwd=repo_root)
         if mr_json_retry.returncode == 0:
             metadata_ok, metadata = parse_json_with_recovery(mr_json_retry.stdout)
 
