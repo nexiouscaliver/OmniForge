@@ -4,11 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-OmniForge is a Claude Code plugin distributed as its own marketplace. It contains four skills:
+OmniForge is a Claude Code plugin distributed as its own marketplace. It supports both **GitLab** and **GitHub** with the following skills:
 - **omnireview-gitlab** — dispatches 3 parallel AI review agents in isolated git worktrees to adversarially review GitLab MRs
 - **omnifix-gitlab** — automates fixing review findings with parallel triage subagents, sequential fixing, verification, and thread resolution
 - **omnicreate-gitlab** — automates GitLab MR creation via `glab` CLI with auto-populated title/description from commits
 - **omnicheck-gitlab** — checks whether requested MR changes have been applied by analyzing the diff against all discussion threads; posts nudge replies on unaddressed findings
+- **omnireview-github** — same as omnireview-gitlab but for GitHub PRs via `gh` CLI
+- **omnifix-github** — same as omnifix-gitlab but for GitHub PRs
+- **omnicreate-github** — automates GitHub PR creation via `gh` CLI
+- **omnicheck-github** — same as omnicheck-gitlab but for GitHub PRs
 
 ## Repository Layout
 
@@ -21,19 +25,27 @@ This repo has two layers: the **marketplace root** and the **plugin** inside it.
     .claude-plugin/plugin.json
     .mcp.json                           ← Spawns the MCP server via uv
     skills/
-      omnireview-gitlab/                ← Review skill (7-phase review workflow)
+      omnireview-gitlab/                ← GitLab review skill (7-phase)
         SKILL.md
         references/                     ← 5 files: 3 agent prompts + consolidation guide + posting guide
-      omnifix-gitlab/                   ← Fix skill (7-phase fix workflow)
+      omnifix-gitlab/                   ← GitLab fix skill (7-phase)
         SKILL.md
-        references/                     ← 5 files: 3 agent prompts + approval guide + commit/post guide
-      omnicreate-gitlab/                 ← MR creation skill
+        references/                     ← 5 files: 2 agent prompts + approval guide + commit/post guide
+      omnicreate-gitlab/                ← GitLab MR creation skill
         SKILL.md
-      omnicheck-gitlab/                  ← Check skill (5-phase diff verification workflow)
+      omnicheck-gitlab/                 ← GitLab check skill (5-phase)
         SKILL.md
         references/                     ← 2 files: analysis agent prompt + nudge guide
-    tools/omniforge_mcp_server.py       ← Python MCP server (FastMCP, 13 tools)
-    tests/                              ← 116 unit tests
+      omnireview-github/                ← GitHub review skill (7-phase)
+        SKILL.md
+      omnifix-github/                   ← GitHub fix skill (7-phase)
+        SKILL.md
+      omnicreate-github/                ← GitHub PR creation skill
+        SKILL.md
+      omnicheck-github/                 ← GitHub check skill (5-phase)
+        SKILL.md
+    tools/omniforge_mcp_server.py       ← Python MCP server (FastMCP, GitLab + GitHub tools)
+    tests/                              ← Unit tests
 ```
 
 The marketplace wrapper exists because `claude plugin marketplace add` requires plugins in subdirectories — it doesn't support a plugin at repo root.
@@ -86,23 +98,41 @@ Single-file FastMCP server with 13 tools. The structure follows a pattern:
 - **FastMCP wrappers** — thin `@mcp_server.tool()` decorated functions that call internal implementations and `json.dumps` the result
 - **Entry point** — `mcp_server.run()` at the bottom
 
-### 13 MCP Tools
+### MCP Tools
+
+The MCP server provides platform-specific tools for both GitLab and GitHub. Worktree tools are shared.
+
+**GitLab Tools (glab CLI):**
 
 | Tool | Used By |
 |------|---------|
 | `fetch_mr_data` | Review + Fix |
-| `create_review_worktrees` | Review |
-| `cleanup_review_worktrees` | Review |
+| `create_review_worktrees` | Review (shared) |
+| `cleanup_review_worktrees` | Review (shared) |
 | `post_full_review` | Review |
 | `post_review_summary` | Review + Fix |
 | `post_inline_thread` | Review |
 | `create_linked_issue` | Review + Fix |
-| `map_diff_lines` | Review + Fix |
+| `map_diff_lines` | Review + Fix (shared, pure function) |
 | `fetch_mr_discussions` | Fix |
 | `reply_to_discussion` | Fix |
 | `resolve_discussion` | Fix |
-| `cleanup_omnifix_worktrees` | Fix |
+| `cleanup_omnifix_worktrees` | Fix (shared) |
 | `create_gitlab_mr` | Create |
+
+**GitHub Tools (gh CLI):**
+
+| Tool | Used By |
+|------|---------|
+| `fetch_pr_data` | Review + Fix |
+| `post_pr_full_review` | Review |
+| `post_pr_review_summary` | Review + Fix |
+| `post_pr_inline_thread` | Review |
+| `fetch_pr_discussions` | Fix |
+| `reply_to_pr_comment` | Fix |
+| `create_github_pr` | Create |
+
+**Shared helpers:** `_detect_platform`, `_resolve_main_repo_root`, `_get_github_repo_id`
 
 ### Key Invariant: `./references/` Paths
 

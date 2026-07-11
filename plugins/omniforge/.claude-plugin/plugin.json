@@ -1,7 +1,7 @@
 {
   "name": "omniforge",
-  "description": "AI-powered merge request toolkit — review MRs with 3 parallel adversarial agents, auto-fix review findings, verify applied changes, and create MRs from commits. 13 MCP tools, git worktree isolation, confidence-scored findings.",
-  "version": "2.0.0",
+  "description": "AI-powered code review toolkit — review MRs/PRs with 3 parallel adversarial agents, auto-fix review findings, verify applied changes, and create MRs/PRs from commits. Supports both GitLab and GitHub. 19 MCP tools, git worktree isolation, confidence-scored findings.",
+  "version": "3.0.0",
   "author": {
     "name": "Shahil Kadia",
     "email": "shahilkadia@gmail.com"
@@ -11,7 +11,9 @@
   "license": "MIT",
   "keywords": [
     "merge-request",
+    "pull-request",
     "gitlab",
+    "github",
     "code-review",
     "security",
     "multi-agent",
