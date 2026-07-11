@@ -130,6 +130,11 @@ Returns: title, author, source_branch, target_branch, diff, diff_line_map, commi
 Create N detached read-only worktrees for triage:
 
 ```bash
+# Resolve main repo root (handles linked worktrees)
+MAIN_ROOT=$(git rev-parse --git-common-dir 2>/dev/null)
+if [ -n "$MAIN_ROOT" ]; then MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd); else MAIN_ROOT=$(pwd); fi
+cd "$MAIN_ROOT"
+
 git fetch origin {source_branch}
 git worktree add .worktrees/omnifix-triage-{mr_id}-1 origin/{source_branch} --detach
 git worktree add .worktrees/omnifix-triage-{mr_id}-2 origin/{source_branch} --detach
@@ -184,6 +189,9 @@ Each agent returns structured verdicts:
 
 After all triage agents complete, immediately remove triage worktrees:
 ```bash
+MAIN_ROOT=$(git rev-parse --git-common-dir 2>/dev/null)
+if [ -n "$MAIN_ROOT" ]; then MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd); else MAIN_ROOT=$(pwd); fi
+cd "$MAIN_ROOT"
 git worktree remove .worktrees/omnifix-triage-{mr_id}-1 --force
 # ... all N
 git worktree prune
@@ -212,6 +220,11 @@ git worktree prune
 Create a writable worktree on the MR source branch:
 
 ```bash
+# Resolve main repo root (handles linked worktrees)
+MAIN_ROOT=$(git rev-parse --git-common-dir 2>/dev/null)
+if [ -n "$MAIN_ROOT" ]; then MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd); else MAIN_ROOT=$(pwd); fi
+cd "$MAIN_ROOT"
+
 git fetch origin {source_branch}
 git worktree add .worktrees/omnifix-{mr_id} -b omnifix-temp-{mr_id} origin/{source_branch}
 ```
@@ -349,6 +362,11 @@ Removes:
 **Fallback (if MCP tool unavailable):**
 
 ```bash
+# Resolve main repo root (handles linked worktrees)
+MAIN_ROOT=$(git rev-parse --git-common-dir 2>/dev/null)
+if [ -n "$MAIN_ROOT" ]; then MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd); else MAIN_ROOT=$(pwd); fi
+cd "$MAIN_ROOT"
+
 git worktree remove .worktrees/omnifix-{mr_id} --force 2>/dev/null
 for wt in .worktrees/omnifix-triage-{mr_id}-*; do
     git worktree remove "$wt" --force 2>/dev/null

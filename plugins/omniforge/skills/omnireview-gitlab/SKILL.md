@@ -140,6 +140,11 @@ The tool automatically: ensures `.worktrees/` exists and is gitignored, cleans s
 **Fallback (personal skill install without MCP server):**
 
 ```bash
+# Resolve main repo root (handles linked worktrees)
+MAIN_ROOT=$(git rev-parse --git-common-dir 2>/dev/null)
+if [ -n "$MAIN_ROOT" ]; then MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd); else MAIN_ROOT=$(pwd); fi
+cd "$MAIN_ROOT"
+
 mkdir -p .worktrees
 git check-ignore -q .worktrees 2>/dev/null || echo ".worktrees/" >> .gitignore
 git worktree remove .worktrees/omni-analyst-{id} --force 2>/dev/null
@@ -297,6 +302,11 @@ The tool force-removes all 3 worktrees, cleans leftover directories, and prunes 
 **Fallback (personal skill install without MCP server):**
 
 ```bash
+# Resolve main repo root (handles linked worktrees)
+MAIN_ROOT=$(git rev-parse --git-common-dir 2>/dev/null)
+if [ -n "$MAIN_ROOT" ]; then MAIN_ROOT=$(cd "$(dirname "$MAIN_ROOT")" && pwd); else MAIN_ROOT=$(pwd); fi
+cd "$MAIN_ROOT"
+
 git worktree remove .worktrees/omni-analyst-{id} --force 2>/dev/null
 git worktree remove .worktrees/omni-codebase-{id} --force 2>/dev/null
 git worktree remove .worktrees/omni-security-{id} --force 2>/dev/null
