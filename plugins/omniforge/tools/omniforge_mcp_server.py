@@ -34,6 +34,32 @@ def validate_repo_root(repo_root: str) -> str:
     return repo_root
 
 
+async def _resolve_main_repo_root(repo_root: str) -> str:
+    """If repo_root is a worktree, return the main repository root.
+
+    Otherwise return repo_root unchanged.
+
+    Uses ``git rev-parse --git-common-dir`` which always resolves to the
+    shared/common git directory regardless of whether *repo_root* is the
+    main checkout or a linked worktree.  The main repo root is the parent
+    directory of that common git dir.
+    """
+    r = await run_exec(
+        ["git", "rev-parse", "--git-common-dir"], cwd=repo_root, timeout=10,
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        return repo_root
+    # git may return a relative path (e.g. ".git"); resolve against repo_root
+    common_dir = os.path.abspath(os.path.join(repo_root, r.stdout.strip()))
+    main_root = os.path.dirname(common_dir)
+    # Guard against the unlikely case where basename is still ".git"
+    if os.path.basename(main_root) == ".git":
+        main_root = os.path.dirname(main_root)
+    if os.path.abspath(main_root) == os.path.abspath(repo_root):
+        return repo_root
+    return main_root
+
+
 def validate_branch_name(branch: str) -> str:
     """Validate branch name contains no shell metacharacters."""
     if re.search(r'[;&|$`\\\'\"(){}\[\]!#~]', branch):
@@ -299,12 +325,15 @@ async def _create_review_worktrees(mr_id: str, source_branch: str, repo_root: st
     except ValueError as e:
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
-    worktrees_dir = os.path.join(repo_root, ".worktrees")
+    # Resolve main repo root (handles worktrees)
+    main_root = await _resolve_main_repo_root(repo_root)
+
+    worktrees_dir = os.path.join(main_root, ".worktrees")
     os.makedirs(worktrees_dir, exist_ok=True)
 
     # Ensure .worktrees/ is in .gitignore
-    gitignore_path = os.path.join(repo_root, ".gitignore")
-    result = await run_exec(["git", "check-ignore", "-q", ".worktrees"], cwd=repo_root)
+    gitignore_path = os.path.join(main_root, ".gitignore")
+    result = await run_exec(["git", "check-ignore", "-q", ".worktrees"], cwd=main_root)
     if result.returncode != 0:
         existing = ""
         if os.path.exists(gitignore_path):
@@ -322,18 +351,18 @@ async def _create_review_worktrees(mr_id: str, source_branch: str, repo_root: st
         if os.path.exists(path):
             await run_exec(
                 ["git", "worktree", "remove", path, "--force"],
-                cwd=repo_root, timeout=30,
+                cwd=main_root, timeout=30,
             )
             stale_count += 1
             if os.path.exists(path):
                 shutil.rmtree(path, ignore_errors=True)
 
-    await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+    await run_exec(["git", "worktree", "prune"], cwd=main_root)
 
     # Fetch source branch
     fetch = await run_exec(
         ["git", "fetch", "origin", source_branch],
-        cwd=repo_root, timeout=120,
+        cwd=main_root, timeout=120,
     )
     if fetch.returncode != 0:
         return {
@@ -350,15 +379,15 @@ async def _create_review_worktrees(mr_id: str, source_branch: str, repo_root: st
         r = await run_exec(
             ["git", "worktree", "add", path,
              f"origin/{source_branch}", "--detach"],
-            cwd=repo_root, timeout=30,
+            cwd=main_root, timeout=30,
         )
         if r.returncode != 0:
             for _, cp in created.items():
                 await run_exec(
                     ["git", "worktree", "remove", cp, "--force"],
-                    cwd=repo_root, timeout=30,
+                    cwd=main_root, timeout=30,
                 )
-            await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+            await run_exec(["git", "worktree", "prune"], cwd=main_root)
             return {
                 "success": False,
                 "error": f"Failed to create worktree '{name}': {r.stderr}",
@@ -385,7 +414,10 @@ async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
     except ValueError as e:
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
-    worktrees_dir = os.path.join(repo_root, ".worktrees")
+    # Resolve main repo root (handles worktrees)
+    main_root = await _resolve_main_repo_root(repo_root)
+
+    worktrees_dir = os.path.join(main_root, ".worktrees")
     removed = []
     already_clean = []
     errors = []
@@ -400,7 +432,7 @@ async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
 
         await run_exec(
             ["git", "worktree", "remove", path, "--force"],
-            cwd=repo_root, timeout=30,
+            cwd=main_root, timeout=30,
         )
 
         if os.path.exists(path):
@@ -412,7 +444,7 @@ async def _cleanup_review_worktrees(mr_id: str, repo_root: str) -> dict:
 
         removed.append(name)
 
-    await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+    await run_exec(["git", "worktree", "prune"], cwd=main_root)
 
     return {
         "success": len(errors) == 0,
@@ -859,7 +891,10 @@ async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
     except ValueError as e:
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
-    worktrees_dir = os.path.join(repo_root, ".worktrees")
+    # Resolve main repo root (handles worktrees)
+    main_root = await _resolve_main_repo_root(repo_root)
+
+    worktrees_dir = os.path.join(main_root, ".worktrees")
     removed = []
     already_clean = []
     errors = []
@@ -870,7 +905,7 @@ async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
     if os.path.exists(fix_path):
         await run_exec(
             ["git", "worktree", "remove", fix_path, "--force"],
-            cwd=repo_root, timeout=30,
+            cwd=main_root, timeout=30,
         )
         if os.path.exists(fix_path):
             try:
@@ -890,7 +925,7 @@ async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
             triage_name = os.path.basename(triage_path)
             await run_exec(
                 ["git", "worktree", "remove", triage_path, "--force"],
-                cwd=repo_root, timeout=30,
+                cwd=main_root, timeout=30,
             )
             if os.path.exists(triage_path):
                 try:
@@ -903,11 +938,11 @@ async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
     # 3. Delete temp branch (ignore error if doesn't exist)
     await run_exec(
         ["git", "branch", "-D", f"omnifix-temp-{mr_id}"],
-        cwd=repo_root, timeout=10,
+        cwd=main_root, timeout=10,
     )
 
     # 4. Prune
-    await run_exec(["git", "worktree", "prune"], cwd=repo_root)
+    await run_exec(["git", "worktree", "prune"], cwd=main_root)
 
     return {
         "success": len(errors) == 0,
