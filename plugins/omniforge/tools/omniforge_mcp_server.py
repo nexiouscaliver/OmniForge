@@ -13,6 +13,11 @@ WORKTREE_TYPES = ["analyst", "codebase", "security"]
 MAX_DIFF_LINES = 10000
 MAX_DIFF_CHARS = 150000
 
+# Environment variable holding the OmniCheck bot's api-scoped GitLab token.
+# When set, approve_mr authenticates as the bot for that single call so it can
+# approve MRs whose author/commit settings block the current glab user.
+OMNICHECK_BOT_TOKEN_ENV = "OMNICHECK_BOT_TOKEN"
+
 # ── Input Validation ──────────────────────────────────────
 
 
@@ -70,11 +75,17 @@ def validate_branch_name(branch: str) -> str:
 # ── Safe Command Runner ───────────────────────────────────
 
 
-async def run_subprocess(args: list, cwd: str, timeout: int = 60):
+async def run_subprocess(args: list, cwd: str, timeout: int = 60, env: dict = None):
     """Run a command safely via subprocess_exec (no shell interpretation).
 
     Uses asyncio.create_subprocess_exec which passes args directly
     to the OS without shell interpretation, preventing injection.
+
+    env: optional full environment dict for the subprocess. When provided,
+    it REPLACES the inherited environment (create_subprocess_exec semantics),
+    so callers must merge os.environ themselves (see _approve_mr). Used so a
+    single glab call can authenticate as the OmniCheck bot via GITLAB_TOKEN
+    without leaking the token into other calls or the parent process.
     """
     proc = await asyncio.create_subprocess_exec(
         *args,
@@ -82,6 +93,7 @@ async def run_subprocess(args: list, cwd: str, timeout: int = 60):
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=env,
     )
     try:
         stdout, stderr = await asyncio.wait_for(
@@ -953,6 +965,96 @@ async def _cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> dict:
     }
 
 
+# ── MR Approval ─────────────────────────────────────────
+
+
+def _validate_sha(sha: str) -> str:
+    """Validate a git SHA is hexadecimal (blocks injection even though args are exec-safe)."""
+    if not sha:
+        return ""
+    if not re.match(r'^[0-9a-fA-F]+$', sha):
+        raise ValueError(f"Invalid SHA: {sha}. Must be hexadecimal.")
+    return sha
+
+
+async def _approve_mr(mr_id: str, repo_root: str, sha: str = "") -> dict:
+    """Approve a GitLab merge request.
+
+    When the OMNICHECK_BOT_TOKEN environment variable is set, the single approval
+    call authenticates as the bot (via GITLAB_TOKEN) so it can approve MRs whose
+    creator/committer approval settings block the current glab user. Otherwise it
+    approves as the current glab user. The approval is ALWAYS pinned to a commit
+    sha: the caller-provided sha if given, else the MR's resolved HEAD sha. If
+    neither is available the call is refused — an unpinned approval would not go
+    stale on new commits, contradicting the tool's contract.
+    """
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+        sha = _validate_sha(sha)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    # Resolve IID + HEAD sha
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs or not diff_refs.get("success"):
+        return {
+            "success": False,
+            "error": diff_refs.get("error", f"Could not fetch MR !{mr_id}.") if diff_refs else f"Could not fetch MR !{mr_id}.",
+            "error_type": diff_refs.get("error_type", "mr_not_found") if diff_refs else "mr_not_found",
+        }
+    iid = diff_refs["iid"]
+    head_sha = sha if sha else diff_refs.get("head_sha", "")
+
+    # Guard: never approve unpinned. Without a sha the approval would not be
+    # invalidated by new commits, silently weakening the gate.
+    if not head_sha:
+        return {
+            "success": False,
+            "error": (
+                f"Cannot pin approval for MR !{mr_id}: no HEAD sha resolved and none "
+                f"provided. Re-fetch the MR or pass an explicit sha."
+            ),
+            "error_type": "no_head_sha",
+        }
+
+    # Determine approver: bot when its token is configured, else current glab user
+    bot_token = os.environ.get(OMNICHECK_BOT_TOKEN_ENV, "")
+    used_bot = bool(bot_token)
+
+    args = [
+        "glab", "api",
+        f"projects/:fullpath/merge_requests/{iid}/approve",
+        "--method", "POST",
+        "--raw-field", f"sha={head_sha}",
+    ]
+
+    # Run the one approval call as the bot when configured. env fully replaces the
+    # inherited environment, so we merge os.environ and override GITLAB_TOKEN.
+    if used_bot:
+        env = {**os.environ, "GITLAB_TOKEN": bot_token}
+        r = await run_exec(args, cwd=repo_root, env=env)
+    else:
+        r = await run_exec(args, cwd=repo_root)
+
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to approve MR !{mr_id}: {r.stderr}",
+            "error_type": "approve_failed",
+            "approver": "bot" if used_bot else "current_user",
+        }
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "iid": iid,
+        "sha": head_sha,
+        "approver": "bot" if used_bot else "current_user",
+        "action": "mr_approved",
+    }
+
+
 # ── GitHub Platform Detection & Helpers ───────────────────
 
 
@@ -1701,6 +1803,26 @@ async def cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> str:
         repo_root: Absolute path to the git repository root
     """
     result = await _cleanup_omnifix_worktrees(mr_id, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def approve_mr(mr_id: str, repo_root: str, sha: str = "") -> str:
+    """Approve a GitLab merge request.
+
+    Approves as the OmniCheck bot when the OMNICHECK_BOT_TOKEN environment
+    variable is set, otherwise as the current glab user. This lets a separate
+    bot account approve MRs even when "Prevent approval by creator/committer"
+    would block the human user. The approval is always pinned to a commit sha
+    (the provided sha, or the MR HEAD sha resolved automatically) so it goes
+    stale if new commits land; if no sha can be resolved the call is refused.
+
+    Args:
+        mr_id: Merge request number (e.g., '136' or '!136')
+        repo_root: Absolute path to the git repository root
+        sha: Optional git commit SHA to pin the approval to (defaults to MR HEAD)
+    """
+    result = await _approve_mr(mr_id, repo_root, sha)
     return json.dumps(result, indent=2)
 
 

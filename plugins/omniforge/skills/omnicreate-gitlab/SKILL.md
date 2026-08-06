@@ -74,6 +74,67 @@ Use this tool for all MR creation. It wraps `glab mr create` safely.
 | `milestone` | string | `""` | Milestone ID or title |
 | `web` | bool | `false` | Open in browser for final editing |
 
+### Title and Description Guidelines
+
+**Never rely on `fill=true` alone.** Always inspect the commits and craft a meaningful title and description. Use `fill=false` and pass explicit `title` and `description` parameters.
+
+#### MR Title
+
+- **Format**: `<type>: <imperative summary>` — mirror conventional commits
+  - Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`, `ci`
+  - Example: `feat: add inline thread posting to omnifix workflow`
+- **Length**: ≤ 72 characters
+- **Tense**: imperative ("add", "fix", "remove") — not past tense ("added", "fixed")
+- **Scope** (optional): `feat(auth): ...` — use when the change is scoped to a subsystem
+- **Avoid**: vague words like "update", "changes", "misc", "WIP" in the title; do not repeat the branch name verbatim
+
+#### MR Description
+
+Structure the description in this order (omit sections that don't apply):
+
+```markdown
+## Summary
+
+<1–3 sentences explaining WHAT changed and WHY. Not a list of commits — the motivation and outcome.>
+
+## Changes
+
+- <bullet: specific, concrete change>
+- <bullet: …>
+
+## Testing
+
+- [ ] <what was tested and how>
+- [ ] <edge cases covered>
+
+## Related
+
+- Closes #<issue> (if applicable)
+- Ref: <link or ticket>
+```
+
+**Rules for the description:**
+- **Summary** must answer *why* this MR exists, not just *what* it does. E.g. "Adds inline thread posting so the fix skill can resolve discussions without leaving the MCP layer" is better than "This MR adds a new function."
+- **Changes** bullets must name specific files, functions, or behaviours — not generic phrases like "updated code" or "fixed issue".
+- **Testing** should be checkboxes (`- [ ]`) so reviewers can see what is confirmed.
+- Do NOT include any AI-generated attribution, signatures, or "Generated with Claude" lines.
+- Do NOT paste raw git log output into the description.
+- If the MR is a draft, prepend `**Draft — do not merge.**` as the first line of the Summary.
+
+#### Deriving Title and Description from Commits
+
+Before calling the MCP tool, run:
+```bash
+git log @{u}..HEAD --oneline        # list commits going into MR
+git log @{u}..HEAD --format="%B"    # full commit messages for context
+git diff @{u}..HEAD --stat          # files changed
+```
+
+Use this output to:
+1. Identify the dominant change type (feat/fix/refactor/…)
+2. Synthesise the commit subjects into one clear title
+3. Expand the commit bodies into the Summary and Changes sections
+
 ### Step-by-Step Execution
 
 1. **Check environment**: Verify glab is installed and authenticated, git repo has GitLab remote
@@ -81,13 +142,15 @@ Use this tool for all MR creation. It wraps `glab mr create` safely.
 3. **Check for changes**: If no commits, inform user they need to commit changes first
 4. **Warn about uncommitted changes**: If working directory is dirty, warn user before proceeding
 5. **Get repo root**: Run `git rev-parse --show-toplevel` to obtain the absolute path
-6. **Call MCP tool**: Invoke `mcp__omniforge__create_gitlab_mr` with `repo_root` and any user-specified options
-7. **Report output**: Show the MR URL, number, and any relevant details from the tool response
+6. **Inspect commits**: Run `git log @{u}..HEAD --oneline` and `git log @{u}..HEAD --format="%B"` to read the commit history
+7. **Craft title and description**: Following the guidelines above, write an explicit `title` and `description`; set `fill=false`
+8. **Call MCP tool**: Invoke `mcp__omniforge__create_gitlab_mr` with `repo_root`, the crafted `title`, `description`, `fill=false`, and any user-specified options
+9. **Report output**: Show the MR URL, number, and any relevant details from the tool response
 
 ### Common Patterns
 
-**Default MR (auto-filled from commits):**
-→ Call `mcp__omniforge__create_gitlab_mr` with just `repo_root`
+**Default MR (crafted from commits):**
+→ Inspect commits, write `title` and `description`, call with `repo_root`, `title`, `description`, `fill=false`
 
 **MR for a specific target branch with assignee:**
 → `repo_root`, `target_branch="staging"`, `assignees="john"`

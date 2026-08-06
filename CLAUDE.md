@@ -89,7 +89,7 @@ Both skills support MCP tools (plugin install) with bash fallback (personal skil
 
 ### MCP Server (`tools/omniforge_mcp_server.py`)
 
-Single-file FastMCP server with 13 tools. The structure follows a pattern:
+Single-file FastMCP server with 14 tools. The structure follows a pattern:
 
 - **Validators** (`validate_mr_id`, `validate_repo_root`, `validate_branch_name`) — called at the top of every tool function
 - **`run_subprocess`** (aliased as `run_exec`) — all external commands go through this. Uses `create_subprocess_exec` (argument list, never shell), `stdin=DEVNULL` (prevents MCP pipe inheritance), and `asyncio.wait_for` timeout
@@ -119,6 +119,7 @@ The MCP server provides platform-specific tools for both GitLab and GitHub. Work
 | `resolve_discussion` | Fix |
 | `cleanup_omnifix_worktrees` | Fix (shared) |
 | `create_gitlab_mr` | Create |
+| `approve_mr` | Check |
 
 **GitHub Tools (gh CLI):**
 
