@@ -218,8 +218,8 @@ class TestPostFullReview:
             if "mr" in cmd and "note" in cmd:
                 return _make_result(0)  # summary OK
             if "mr" in cmd and "view" in cmd and "-F" in cmd:
-                return _make_result(0, SAMPLE_DIFF_REFS_JSON)
-            if "api" in cmd and call_count > 4:
+                return _make_result(0, SAMPLE_DIFF_REFS_JSON)  # diff refs
+            if "api" in cmd and call_count > 3:
                 return _make_result(1, stderr="error")  # 2nd thread fails
             return _make_result(0)
 
@@ -240,7 +240,16 @@ class TestPostFullReview:
         from omniforge_mcp_server import _post_full_review
         repo = _make_repo(tmp_path)
 
-        mock_run.return_value = _make_result(0)  # summary post succeeds
+        call_count = 0
+        def side_effect(args, cwd=None, timeout=60):
+            nonlocal call_count
+            call_count += 1
+            cmd = " ".join(args)
+            if "mr" in cmd and "view" in cmd and "-F" in cmd:
+                return _make_result(0, SAMPLE_DIFF_REFS_JSON)  # diff refs
+            return _make_result(0)  # summary post succeeds
+
+        mock_run.side_effect = side_effect
 
         # Finding with missing fields
         findings = [
@@ -255,10 +264,43 @@ class TestPostFullReview:
         repo = _make_repo(tmp_path)
 
         with patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = _make_result(0)
+            mock_run.return_value = _make_result(0, SAMPLE_DIFF_REFS_JSON)
             result = asyncio.run(_post_full_review("136", "Summary", [], repo))
 
         assert result["success"] is True
         assert result["summary_posted"] is True
         assert result["threads_posted"] == 0
         assert result["threads_total"] == 0
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_diff_refs_fetched_once(self, mock_run, tmp_path):
+        """Verify N+1 fix: diff refs fetched once regardless of findings count."""
+        from omniforge_mcp_server import _post_full_review
+        repo = _make_repo(tmp_path)
+
+        call_count = 0
+        view_call_count = 0
+        def side_effect(args, cwd=None, timeout=60):
+            nonlocal call_count, view_call_count
+            call_count += 1
+            cmd = " ".join(args)
+            if "mr" in cmd and "view" in cmd and "-F" in cmd:
+                view_call_count += 1
+                return _make_result(0, SAMPLE_DIFF_REFS_JSON)
+            return _make_result(0)
+
+        mock_run.side_effect = side_effect
+
+        # 5 findings should result in:
+        # - 1 call to get diff refs
+        # - 1 call to post summary
+        # - 5 calls to post inline threads
+        findings = [
+            {"file_path": f"file{i}.py", "line_number": i, "body": f"Issue {i}"}
+            for i in range(1, 6)
+        ]
+        result = asyncio.run(_post_full_review("136", "Summary", findings, repo))
+        assert result["success"] is True
+        assert result["threads_posted"] == 5
+        # Key assertion: only 1 call to get diff refs (N+1 fix)
+        assert view_call_count == 1, f"Expected 1 diff refs call, got {view_call_count}"
