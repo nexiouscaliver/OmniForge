@@ -50,7 +50,9 @@ def parse_args(argv):
     ap.add_argument("--expect", type=int, required=True,
                     help="number of subagent transcripts expected")
     ap.add_argument("--chunk-timeout", type=float, default=480,
-                    help="max seconds per invocation before exiting 3 (default 480)")
+                    help="chunk budget in seconds: the waiter exits 3 strictly "
+                         "within it (a small safety margin is subtracted; "
+                         "default 480, under the 600 s Bash-tool ceiling)")
     ap.add_argument("--total-budget", type=float, default=1800,
                     help="overall wait budget since --since (default 1800)")
     ap.add_argument("--since", type=float, default=None,
@@ -289,6 +291,22 @@ def evaluate(path, now, stable_window, stall_after, since_fallback):
     return entry
 
 
+def _report_filenames(paths):
+    """Deterministic per-agent report filenames: basename-derived, with -2/-3...
+    suffixes on collision (copilot r3: two transcripts sharing a basename —
+    e.g. task files from different sessions — must not overwrite each other's
+    reports; silent loss of reviewer output)."""
+    seen = {}
+    out = {}
+    for p in paths:
+        base = os.path.basename(p)
+        n = seen.get(base, 0) + 1
+        seen[base] = n
+        stem = base if n == 1 else "%s-%d" % (base, n)
+        out[p] = REPORT_PREFIX + stem + ".md"
+    return out
+
+
 def _write_reports(reports_dir, status):
     """Write the status JSON (pretty-printed — a single line with inline
     final_text would face the Read tool's long-line truncation) plus one
@@ -309,19 +327,22 @@ def _write_reports(reports_dir, status):
     with open(os.path.join(reports_dir, "status.json"), "w") as f:
         json.dump(status, f, indent=2)
     for entry in status["transcripts"]:
-        base = REPORT_PREFIX + os.path.basename(entry["path"]) + ".md"
         text = entry["final_text"]
         if text is None:
             text = "no report harvested (state: %s)\n" % entry["state"]
         elif not text.endswith("\n"):
             text += "\n"
-        with open(os.path.join(reports_dir, base), "w") as f:
+        with open(entry["report_file"], "w") as f:
             f.write(text)
 
 
 def emit(args, entries, code, reason, since, start):
     """Build the one-line JSON status, optionally write the reports channel
     FIRST, then print the sole stdout line. Returns the exit code."""
+    names = _report_filenames([e["path"] for e in entries]) if args.reports_dir else {}
+    for e in entries:
+        e["report_file"] = (os.path.join(args.reports_dir, names[e["path"]])
+                            if args.reports_dir else None)
     status = {
         "expect": args.expect,
         "exit_code": code,
