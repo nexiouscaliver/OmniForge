@@ -5,6 +5,18 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-09-01
+
+### Added
+- **`omni_wait.py` chunked completion waiter** (`skills/omnireview-gitlab/scripts/`) — waits on the 3 reviewer subagents' transcripts with exit-code semantics (0 = all terminal, 3 = still running, 2 = degraded), a one-line JSON per-agent status, mtime-stability fallback when the `Status: DONE` marker is absent, dead-agent stall detection with partial harvest, a scan-dir fallback for unavailable output_file paths, and per-agent report files written via `--reports-dir`
+
+### Changed
+- **omnireview-gitlab Phase 3 completion detection rewritten** — the waiter's exit code is now the sole completion authority; improvised `sleep`-polling and hand-written collect/wait helper scripts are explicitly forbidden; background-agent task notifications are informational only
+- Degraded runs (stalled/missing agents) proceed to consolidation with an explicit "coverage degraded (N/3 reviewers)" report note naming the missing perspectives
+- Version bumped to 3.2.0
+
+---
+
 ## [2.0.0] - 2026-04-05
 
 ### BREAKING CHANGES
