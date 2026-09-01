@@ -56,8 +56,9 @@ def age_file(path, seconds_ago):
 def status_of(proc):
     """stdout must be exactly one JSON line; parse and return it."""
     lines = [l for l in proc.stdout.splitlines() if l.strip()]
-    assert len(lines) == 1, "expected exactly one stdout JSON line, got %d: %r" % (
-        len(lines), proc.stdout[:400])
+    if len(lines) != 1:
+        raise ValueError("expected exactly one stdout JSON line, got %d: %r" % (
+            len(lines), proc.stdout[:400]))
     return json.loads(lines[0])
 
 
@@ -491,8 +492,10 @@ class TestReportsDir(unittest.TestCase):
         gone = os.path.join(d, "agent-gone.jsonl")     # never created
         append_records(a, [assistant_record("Report A. Status: DONE")])
         append_records(b, [assistant_record("Report B. Status: DONE")])
-        with open(os.path.join(r, "stale-old.md"), "w") as f:   # planted stale file
+        with open(os.path.join(r, "omni_wait-stale-old.md"), "w") as f:  # waiter-owned stale
             f.write("stale\n")
+        with open(os.path.join(r, "foreign-old.md"), "w") as f:   # NOT waiter-owned
+            f.write("foreign\n")
         since = time.time() - 10
         cmd = TINY + ["--stall-after", 2, "--since", since, "--reports-dir", r,
                       "--transcript", a, "--transcript", b, "--transcript", gone,
@@ -506,18 +509,21 @@ class TestReportsDir(unittest.TestCase):
             on_disk = json.load(f)
         self.assertEqual(on_disk, st)                  # reports channel == stdout object
 
-        self.assertFalse(os.path.exists(os.path.join(r, "stale-old.md")))  # wiped
-        md_a = os.path.join(r, "agent-a.jsonl.md")
-        md_b = os.path.join(r, "agent-b.jsonl.md")
-        md_gone = os.path.join(r, "agent-gone.jsonl.md")
+        # wipe scope: waiter-owned names only, foreign *.md survives
+        self.assertFalse(os.path.exists(os.path.join(r, "omni_wait-stale-old.md")))
+        self.assertTrue(os.path.exists(os.path.join(r, "foreign-old.md")))
+        md_a = os.path.join(r, "omni_wait-agent-a.jsonl.md")
+        md_b = os.path.join(r, "omni_wait-agent-b.jsonl.md")
+        md_gone = os.path.join(r, "omni_wait-agent-gone.jsonl.md")
         with open(md_a) as f:
             self.assertEqual(f.read().strip(), "Report A. Status: DONE")
         with open(md_b) as f:
             self.assertEqual(f.read().strip(), "Report B. Status: DONE")
         with open(md_gone) as f:
             self.assertIn("no report harvested", f.read())
-        expected_files = sorted(["status.json", "agent-a.jsonl.md", "agent-b.jsonl.md",
-                                 "agent-gone.jsonl.md"])
+        expected_files = sorted(["status.json", "omni_wait-agent-a.jsonl.md",
+                                 "omni_wait-agent-b.jsonl.md",
+                                 "omni_wait-agent-gone.jsonl.md", "foreign-old.md"])
         self.assertEqual(sorted(os.listdir(r)), expected_files)
 
         # idempotent re-run: same content, no duplicates

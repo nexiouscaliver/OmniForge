@@ -17,12 +17,13 @@ MARKER = "Status: DONE"
 EXIT_OK, EXIT_DEGRADED, EXIT_RUNNING = 0, 2, 3
 TEXT_CAP = 256 * 1024      # per-agent final_text cap (256 KiB)
 TAIL_WINDOW = 256 * 1024   # initial tail-read window; doubles up to whole-file size
+REPORT_PREFIX = "omni_wait-"   # waiter-owned report filename prefix (wipe-scope fence)
 
 
 def _alarm_delay(chunk_timeout):
-    # SIGALRM strictly inside the chunk budget, scaled so tiny test chunks keep
-    # proportionality: 480→465 s; chunk 10→9.5 s (budget fires first when it should);
-    # chunk 2→1.9 s; chunk ≤0.11 clamps to half the chunk.
+    # SIGALRM strictly inside the chunk budget: the margin is 5 % of the budget
+    # clamped to [0.05, 15] s, subtracted, floored at 0.05 s — 480→465 s,
+    # 10→9.5 s, 2→1.9 s; a budget ≤ 0.10 s floors the delay to 0.05 s.
     margin = max(0.05, min(15.0, chunk_timeout * 0.05))
     return max(0.05, chunk_timeout - margin)
 
@@ -103,10 +104,30 @@ def _is_assistant(record):
     return isinstance(message, dict) and message.get("role") == "assistant"
 
 
+def _extract_text(record):
+    """Harvest text from an assistant record REGARDLESS of tool_use blocks:
+    the joined text blocks of a list content, or string content verbatim.
+    Empty string when there is no text. This is the scan-back harvest —
+    independent of classify_record's terminality kind, so a mixed
+    text+tool_use record still CONTRIBUTES final_text while classify
+    (correctly) refuses to call it terminal."""
+    message = record.get("message") if isinstance(record, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(block.get("text") or "" for block in content
+                       if isinstance(block, dict) and block.get("type") == "text")
+    return ""
+
+
 def classify_record(record):
     """Return ("final_text", text) / ("tool_use", None) / ("other", None).
-    message.content may be a list of blocks or a plain string. Any unrecognized
-    shape returns ("other", None) — callers treat that as running, never terminal."""
+    message.content may be a list of blocks or a plain string. A record with
+    ANY tool_use block is ("tool_use", None) even when it also carries text —
+    that mixed shape is a RUNNING agent mid-tool-call, never terminal. Any
+    unrecognized shape returns ("other", None) — callers treat that as
+    running, never terminal."""
     if not isinstance(record, dict):
         return ("other", None)
     message = record.get("message")
@@ -114,20 +135,13 @@ def classify_record(record):
     if isinstance(content, str):
         return ("final_text", content)
     if isinstance(content, list):
-        has_tool_use = False
-        text = ""
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            btype = block.get("type")
-            if btype == "tool_use":
-                has_tool_use = True
-            elif btype == "text":
-                text += block.get("text") or ""
-        if text:
-            return ("final_text", text)
+        has_tool_use = any(isinstance(b, dict) and b.get("type") == "tool_use"
+                           for b in content)
         if has_tool_use:
             return ("tool_use", None)
+        text = _extract_text(record)
+        if text:
+            return ("final_text", text)
     return ("other", None)
 
 
@@ -136,9 +150,10 @@ def final_text_of(lines):
     final_text): the last complete assistant record (the completion predicate —
     trailing non-assistant records such as user / tool_result / system / summary
     are skipped) and the text of the last assistant record CONTAINING text
-    (scanning back past tool_use-only assistant records — an agent that died
-    mid-tool-call still yields its findings-so-far). Torn/partial trailing lines
-    fail json.loads and are skipped by construction."""
+    (harvested via _extract_text, so scanning back past tool_use-bearing
+    assistant records — mixed or not — an agent that died mid-tool-call still
+    yields its findings-so-far). Torn/partial trailing lines fail json.loads
+    and are skipped by construction."""
     record = None
     text = None
     for line in reversed(lines):
@@ -154,12 +169,19 @@ def final_text_of(lines):
         if record is None:
             record = rec
         if text is None:
-            kind, t = classify_record(rec)
-            if kind == "final_text":
-                text = t
+            harvested = _extract_text(rec)
+            if harvested:
+                text = harvested
         if record is not None and text is not None:
             break
     return record, text
+
+
+# path -> {"size", "window", "record", "text"} from the last successful scan:
+# an unchanged file (same size) skips the rescan entirely, and a grown file
+# resumes at the already-paid-for window instead of re-running the doubling
+# ladder from TAIL_WINDOW on every poll.
+_SCAN_MEMO = {}
 
 
 def read_last_assistant_record(path):
@@ -169,17 +191,28 @@ def read_last_assistant_record(path):
     try:
         size = os.path.getsize(path)
     except OSError:
+        _SCAN_MEMO.pop(path, None)
         return None, None
+    memo = _SCAN_MEMO.get(path)
+    if memo is not None and size == memo["size"]:
+        return memo["record"], memo["text"]   # unchanged file: same answer, no rescan
     window = TAIL_WINDOW
+    if memo is not None and size > memo["size"]:
+        # Append-only growth: the old window plus the new bytes still covers
+        # everything the last scan reached — don't re-climb the doubling ladder.
+        window = memo["window"] + (size - memo["size"])
     while True:
         try:
             with open(path, "rb") as f:
                 f.seek(max(0, size - window))
                 data = f.read()
         except OSError:
+            _SCAN_MEMO.pop(path, None)
             return None, None
         record, text = final_text_of(data.decode("utf-8", errors="replace").splitlines())
         if (record is not None and text is not None) or window >= size:
+            _SCAN_MEMO[path] = {"size": size, "window": window,
+                                "record": record, "text": text}
             return record, text
         window *= 2
 
@@ -232,12 +265,16 @@ def evaluate(path, now, stable_window, stall_after, since_fallback):
 def _write_reports(reports_dir, status):
     """Write the status JSON (pretty-printed — a single line with inline
     final_text would face the Read tool's long-line truncation) plus one
-    markdown report per agent. Wipes stale *.md files from prior invocations
-    (a leftover report is a contamination hazard for a consumer that globs).
-    Idempotent: deterministic filenames, plain overwrite."""
+    markdown report per agent, named omni_wait-<transcript-basename>.md.
+    Wipes ONLY waiter-owned names from prior invocations — omni_wait-*.md and
+    status.json — never arbitrary *.md files the caller may keep in the dir
+    (a leftover waiter report is a contamination hazard for a consumer that
+    globs; an unrelated file is not ours to delete). Idempotent: deterministic
+    filenames, plain overwrite."""
     os.makedirs(reports_dir, exist_ok=True)
     for name in os.listdir(reports_dir):
-        if name.endswith(".md"):
+        if (name.startswith(REPORT_PREFIX) and name.endswith(".md")) \
+                or name == "status.json":
             try:
                 os.remove(os.path.join(reports_dir, name))
             except OSError:
@@ -245,7 +282,7 @@ def _write_reports(reports_dir, status):
     with open(os.path.join(reports_dir, "status.json"), "w") as f:
         json.dump(status, f, indent=2)
     for entry in status["transcripts"]:
-        base = os.path.basename(entry["path"]) + ".md"
+        base = REPORT_PREFIX + os.path.basename(entry["path"]) + ".md"
         text = entry["final_text"]
         if text is None:
             text = "no report harvested (state: %s)\n" % entry["state"]
@@ -290,7 +327,11 @@ def main(argv):
     # Count check FIRST, before any waiting.
     if len(paths) != args.expect:
         under = len(paths) < args.expect
-        if from_scan and under and time.time() < since + args.count_grace:
+        # Grace only with an explicit --since: without one, since defaults to
+        # this invocation's start, the grace branch would always hold, and each
+        # re-invoke would reset it — an unbounded count_pending loop.
+        if (from_scan and under and args.since is not None
+                and time.time() < since + args.count_grace):
             # Slow-spawning agents haven't written transcripts yet — keep waiting.
             entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
                        for p in paths]
@@ -298,16 +339,15 @@ def main(argv):
         # Explicit paths get no grace; over-counts are loud too. The resolved
         # paths are STILL evaluated — refusing to wait must not throw away the
         # harvest the completed reviewers already produced.
-        print("omni_wait: transcript count mismatch: found %d, expected %d — refusing to wait on fewer"
+        print("omni_wait: transcript count mismatch: found %d, expected %d — refusing to wait on a wrong count"
               % (len(paths), args.expect), file=sys.stderr)
         entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
                    for p in paths]
         return emit(args, entries, EXIT_DEGRADED, "count_mismatch", since, start)
 
-    # Arm the chunk alarm strictly inside the chunk budget.
     signal.signal(signal.SIGALRM, _on_alarm)
-    signal.setitimer(signal.ITIMER_REAL, _alarm_delay(args.chunk_timeout))
     entries = []
+    armed = False
     try:
         while True:
             now = time.time()
@@ -323,6 +363,12 @@ def main(argv):
             if time.time() >= deadline:
                 signal.setitimer(signal.ITIMER_REAL, 0)
                 return emit(args, entries, EXIT_DEGRADED, "budget_exhausted", since, start)
+            if not armed:
+                # Arm only AFTER a full evaluate (strictly inside the chunk
+                # budget): the alarm path then always emits real entries, never
+                # an empty transcript list.
+                signal.setitimer(signal.ITIMER_REAL, _alarm_delay(args.chunk_timeout))
+                armed = True
             time.sleep(min(args.poll_interval, max(0.05, deadline - time.time())))
     except _ChunkElapsed:
         # Disarm BEFORE building/emitting the JSON so a late alarm can never
