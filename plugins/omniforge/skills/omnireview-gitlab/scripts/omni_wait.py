@@ -74,6 +74,27 @@ def parse_args(argv):
         print("omni_wait: one of --transcript or --scan-dir is required", file=sys.stderr)
         ap.print_usage(sys.stderr)
         raise SystemExit(EXIT_DEGRADED)
+    # Numeric-flag validation (copilot review r2): a non-positive duration breaks
+    # the one-JSON-line contract outright (time.sleep raises on <= 0) or silently
+    # corrupts semantics (stable-window <= 0 → everything instantly terminal;
+    # expect < 1 → vacuous all-terminal). Same usage-error path as above.
+    bad = []
+    if args.expect < 1:
+        bad.append("--expect must be >= 1")
+    for name, value in (("--chunk-timeout", args.chunk_timeout),
+                        ("--total-budget", args.total_budget),
+                        ("--stable-window", args.stable_window),
+                        ("--stall-after", args.stall_after),
+                        ("--poll-interval", args.poll_interval)):
+        if value <= 0:
+            bad.append("%s must be > 0" % name)
+    if args.count_grace < 0:
+        bad.append("--count-grace must be >= 0")
+    if bad:
+        for msg in bad:
+            print("omni_wait: invalid value: %s" % msg, file=sys.stderr)
+        ap.print_usage(sys.stderr)
+        raise SystemExit(EXIT_DEGRADED)
     return args
 
 
