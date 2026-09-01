@@ -359,9 +359,13 @@ def emit(args, entries, code, reason, since, start):
             _write_reports(args.reports_dir, status)
         except OSError as exc:
             # The reports dir is an enhancement channel; it must never crash the
-            # sole completion authority — degrade to stdout-only.
+            # sole completion authority — degrade to stdout-only. Advertised
+            # report_file paths that may not have been written are retracted so
+            # consumers fall back to final_text instead of Reading missing files.
             print("omni_wait: reports-dir write failed (%s); continuing stdout-only" % exc,
                   file=sys.stderr)
+            for entry in status["transcripts"]:
+                entry["report_file"] = None
     print(json.dumps(status), flush=True)
     return code
 
@@ -373,7 +377,17 @@ def main(argv):
     deadline = since + args.total_budget
     paths, from_scan = resolve_transcripts(args)
 
-    # Count check FIRST, before any waiting.
+    if not _platform_supports_alarm():
+        # Fail fast (copilot review): a platform without POSIX timers cannot run
+        # a bounded chunk — one clear stderr line + the one-line JSON contract,
+        # degraded. Best-effort entries are still emitted so callers see state.
+        print("omni_wait: SIGALRM/setitimer unavailable on this platform — a bounded "
+              "wait chunk cannot run; degrading (sigalrm_unsupported)", file=sys.stderr)
+        entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
+                   for p in paths]
+        return emit(args, entries, EXIT_DEGRADED, "sigalrm_unsupported", since, start)
+
+    # Count check next, before any waiting.
     if len(paths) != args.expect:
         under = len(paths) < args.expect
         # Grace only with an explicit --since: without one, since defaults to
@@ -393,16 +407,6 @@ def main(argv):
         entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
                    for p in paths]
         return emit(args, entries, EXIT_DEGRADED, "count_mismatch", since, start)
-
-    if not _platform_supports_alarm():
-        # Fail fast (copilot review): a platform without POSIX timers cannot run
-        # a bounded chunk — one clear stderr line + the one-line JSON contract,
-        # degraded. Best-effort entries are still emitted so callers see state.
-        print("omni_wait: SIGALRM/setitimer unavailable on this platform — a bounded "
-              "wait chunk cannot run; degrading (sigalrm_unsupported)", file=sys.stderr)
-        entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
-                   for p in paths]
-        return emit(args, entries, EXIT_DEGRADED, "sigalrm_unsupported", since, start)
 
     signal.signal(signal.SIGALRM, _on_alarm)
     entries = []
