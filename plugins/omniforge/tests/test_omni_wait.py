@@ -155,6 +155,41 @@ class TestTornLine(unittest.TestCase):
         self.assertEqual(e["state"], "terminal")
 
 
+class TestPredicate(unittest.TestCase):
+    def test_mixed_text_and_tool_use_record_is_running(self):
+        # A mixed text+tool_use record is the normal shape of a RUNNING agent
+        # mid-tool-call: the tool_use block vetoes terminality even when the
+        # record also carries text AND its mtime is stable past the window.
+        d = tmp_dir(self)
+        paths = [os.path.join(d, "agent-%d.jsonl" % i) for i in range(3)]
+        for p in paths:
+            append_records(p, [assistant_record("Let me run the test suite.", tool_use=True)])
+            age_file(p, 30)              # stable past --stable-window 20, under --stall-after 300
+        proc = run_waiter(TINY + ["--stable-window", 20, "--stall-after", 300,
+                                  "--transcript", paths[0], "--transcript", paths[1],
+                                  "--transcript", paths[2], "--expect", 3])
+        self.assertEqual(proc.returncode, 3, proc.stderr)
+        st = status_of(proc)
+        self.assertEqual(st["exit_reason"], "chunk_elapsed")
+        for e in st["transcripts"]:
+            self.assertEqual(e["state"], "running")
+            self.assertIsNone(e["terminal_via"])
+
+        # Scan-back harvest is independent of the veto: the mixed record still
+        # CONTRIBUTES final_text (its own text wins over the earlier text-only
+        # record — classify says tool_use, the harvest does not skip it).
+        q = os.path.join(d, "agent-mixed.jsonl")
+        append_records(q, [assistant_record("Earlier prose."),
+                           assistant_record("Let me run the test suite.", tool_use=True)])
+        age_file(q, 30)
+        proc2 = run_waiter(TINY + ["--stable-window", 20, "--stall-after", 300,
+                                   "--transcript", q, "--expect", 1])
+        self.assertEqual(proc2.returncode, 3, proc2.stderr)
+        e2 = status_of(proc2)["transcripts"][0]
+        self.assertEqual(e2["state"], "running")
+        self.assertEqual(e2["final_text"], "Let me run the test suite.")
+
+
 class TestStaggered(unittest.TestCase):
     def test_exit_0_promptly_after_last_completion(self):
         d = tmp_dir(self)
