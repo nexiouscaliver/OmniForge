@@ -166,12 +166,17 @@ SECURITY_PATH=$(cd .worktrees/omni-security-{id} && pwd)
 
 **REQUIRED SUB-SKILL:** Use `superpowers:dispatching-parallel-agents` pattern.
 
-Dispatch all 3 agents simultaneously using the **Agent tool** (NOT TaskCreate — the Agent tool spawns subagents). Send a single message with 3 parallel Agent tool calls. Each agent gets:
+**Before dispatching:** record the current unix epoch (`date +%s`) as `DISPATCH_EPOCH` — the waiter needs it as `--since`.
+
+Dispatch all 3 agents simultaneously using the **Agent tool** (NOT TaskCreate — the Agent tool spawns subagents). Send a single message with 3 parallel Agent tool calls, dispatched in **background** mode so dispatch returns immediately. Each agent gets:
 - Full MR context package (injected, NOT fetched by agent)
 - Its own worktree **absolute** path for exploration
 - Agent-specific review prompt (from template file)
 - MR comments/discussions (all 3 agents, not just the MR Analyst)
 - Confidence scoring instructions
+- Instruction to end its final message with the line `Status: DONE` (completion fast-path for the waiter; completion still works without it via mtime stability)
+
+**For each of the 3 dispatches, capture the `output_file` path from the Agent tool result** — that file is the agent's transcript and the waiter's primary input. Keep all 3 paths.
 
 ### Agent 1: MR Analyst (OmniForge)
 - **Template:** `./references/mr-analyst-prompt.md`
@@ -204,6 +209,54 @@ For each agent, fill the template placeholders:
 - `{FILES_CHANGED_LIST}` — List of changed file paths
 - `{SOURCE_BRANCH}` — MR source branch name
 - `{TARGET_BRANCH}` — MR target branch name
+
+### Wait for Completion: The Chunked Waiter (REQUIRED — replaces all sleeping)
+
+After dispatch returns, wait for all 3 agents **only** with the shipped waiter. **Always pass `--reports-dir`** — the waiter writes its status JSON and one markdown report file per reviewer there (the Bash tool truncates large stdout and the Read tool truncates very long lines, so terminal stdout and single-giant-line JSON are both lossy channels at realistic report sizes; per-agent markdown files are the proven lossless path):
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_wait.py" \
+  --transcript "<output_file 1>" --transcript "<output_file 2>" --transcript "<output_file 3>" \
+  --expect 3 --since <DISPATCH_EPOCH> \
+  --reports-dir /tmp/omni_wait_out_{id}
+```
+
+If `${CLAUDE_PLUGIN_ROOT}` is not set in the current context, construct the path from this skill's own base directory (the directory containing this SKILL.md) plus `scripts/omni_wait.py`.
+
+**The waiter's exit code is the SOLE completion authority:**
+- **0** — all 3 transcripts terminal → proceed to Phase 4
+- **3** — still running (or `count_pending`: fewer than 3 transcripts found but the dispatch epoch is still inside the 15 s spawn-grace window — keep re-invoking, it flips to `count_mismatch` once the grace expires) → immediately re-invoke the exact same command (each call is bounded by its own chunk timeout; loop 0→3→0→3 until you get 0 or 2)
+- **2** — degraded (budget exhausted, every remaining agent stalled, or transcript count mismatch) → proceed to Phase 4 with partial results
+
+**Before proceeding on exit 2, Read `/tmp/omni_wait_out_{id}/status.json` and confirm it parses as JSON and carries an `exit_reason` field.** If it does not (empty, error text, or absent), the INVOCATION itself is wrong — fix the command and re-run it; never proceed to consolidation without a valid status file.
+
+Then **Read `/tmp/omni_wait_out_{id}/status.json`** — entries with `"state":"stalled"` or `"harvested_partial":true` are partial-output agents; `"state":"missing"` agents never produced a transcript. **For every agent whose entry has state terminal or stalled, Read its report file `/tmp/omni_wait_out_{id}/<transcript-basename>.md` — those files ARE the reviewers' reports (a stalled agent's file is its last partial report), and they are the inputs to Phase 4. Do NOT re-read the raw agent transcripts** (they are hundreds of KB of JSONL; the waiter already extracted the reports). After consolidation you may `rm -rf /tmp/omni_wait_out_{id}` (the waiter also wipes the dir's stale files on every invocation, so leftovers self-heal).
+
+**Fallback when `output_file` paths are unavailable** (dispatch results lost): use scan-dir.
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_wait.py" \
+  --scan-dir "$CLAUDE_CONFIG_DIR/projects/<this-project-dir>/<session-id>/subagents" \
+  --expect 3 --since <DISPATCH_EPOCH> \
+  --reports-dir /tmp/omni_wait_out_{id}
+```
+
+Find the newest session directory for this project under `$CLAUDE_CONFIG_DIR/projects/`, point `--scan-dir` at its `subagents/` directory, and the waiter counts only `agent-*.jsonl` transcripts newer than `--since` (stale files from prior runs and the main session file are excluded automatically). Invoked immediately after dispatch, the fallback may find fewer than 3 transcripts because background agents have not spawned their transcript files yet — the waiter exits 3 (`count_pending`) during its 15 s grace window, so keep re-invoking; once the grace expires it flips to `count_mismatch` (exit 2). A persisting mismatch means ≠ 3 current reviewers — treat as degraded, never silently wait on fewer.
+
+### NEVER improvise waiting (retired pattern — documented precedent of 8+ minutes dead wait)
+
+This skill has documented history of agents improvising `sleep N` loops and hand-written `/tmp` collect scripts that burned 503 s AFTER all agents finished. Retired permanently:
+
+- **NEVER** sleep between completion checks — no `sleep 115/240/300/420`, no `sleep N; <anything>` compound commands
+- **NEVER** write, rewrite, or improvise collect/wait/poll helper scripts (`omni_collect.py` and friends) — the waiter is shipped, versioned, and tested
+- **NEVER** treat background-agent task notifications as completion signals — they are informational only and documented-unreliable (runs where none of the 3 fired)
+- The waiter's **exit code is the sole completion authority** — not notifications, not elapsed-time guesses, not transcript-size heuristics
+
+### Degraded coverage
+
+If the waiter exits 2 (or its JSON reports stalled/missing agents): do NOT re-dispatch, do NOT block, do NOT extend the wait. Consolidate whatever perspectives completed and proceed through Phase 4–7 normally. The final report MUST carry this note at the top of its Summary section:
+
+**Coverage degraded (N/3 reviewers)** — missing: <which of MR Analyst / Codebase Reviewer / Security Reviewer>
 
 ---
 
@@ -339,7 +392,7 @@ git worktree prune
 |-------|------|-----|
 | 1. Gather | Fetch MR data | `glab mr view/diff` (JSON + raw) |
 | 2. Setup | Create 3 worktrees | `git worktree add --detach` (×3) |
-| 3. Review | Dispatch OmniForge agents | Agent tool parallel (×3, opus model) |
+| 3. Review | Dispatch OmniForge agents | Agent tool parallel (×3, opus model), then omni_wait.py exit-code loop |
 | 4. Merge | Consolidate findings | Confidence score + cross-correlate + dedup |
 | 5. Report | Present OmniForge report | Structured markdown with verdict |
 | 6. Act | User chooses | `glab mr note/approve`, `glab issue create` |
@@ -399,6 +452,7 @@ A CI/CD file change can expose secrets, break production deployments, or modify 
 - Let agents share worktrees (isolation is critical)
 - Add AI attribution to posted comments (no "Generated by Claude" etc.)
 - Skip any of the 7 phases for any reason
+- Sleep-poll or improvise collect/wait helper scripts while waiting for reviewer agents (use the shipped waiter — its exit code is the sole completion authority)
 
 ## Always
 
