@@ -121,7 +121,7 @@ class TestImmediateAllTerminal(unittest.TestCase):
         self.assertEqual(set(st), {"expect", "exit_code", "exit_reason", "ts", "since",
                                    "deadline", "elapsed_s", "transcripts"})
         per_entry = {"path", "state", "terminal_via", "mtime_age_s", "harvested_partial",
-                     "final_text", "final_text_truncated"}
+                     "final_text", "final_text_truncated", "report_file"}
         for e in st["transcripts"]:
             self.assertEqual(set(e), per_entry)
         self.assertEqual(st["exit_code"], proc.returncode)
@@ -574,6 +574,36 @@ class TestReportsDir(unittest.TestCase):
             self.assertEqual(f.read().strip(), "Report A. Status: DONE")
         with open(md_gone) as f:
             self.assertIn("no report harvested", f.read())
+
+
+    def test_duplicate_basenames_get_suffixed_reports(self):
+        """copilot r3: two transcripts sharing a basename must not overwrite
+        each other's report files under --reports-dir."""
+        d1 = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d1)
+        d2 = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d2)
+        a = os.path.join(d1, "agent-dupe.jsonl")
+        b = os.path.join(d2, "agent-dupe.jsonl")
+        append_records(a, [assistant_record("Report A. Status: DONE")])
+        append_records(b, [assistant_record("Report B. Status: DONE")])
+        rd = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, rd)
+        proc = run_waiter(TINY + ["--transcript", a, "--transcript", b,
+                                  "--expect", 2, "--reports-dir", rd])
+        st = status_of(proc)
+        first = os.path.join(rd, "omni_wait-agent-dupe.jsonl.md")
+        second = os.path.join(rd, "omni_wait-agent-dupe.jsonl-2.md")
+        with open(first) as f:
+            self.assertEqual(f.read().strip(), "Report A. Status: DONE")
+        with open(second) as f:
+            self.assertEqual(f.read().strip(), "Report B. Status: DONE")
+        files = sorted(os.listdir(rd))
+        self.assertIn("status.json", files)
+        self.assertEqual(files.count("omni_wait-agent-dupe.jsonl.md"), 1)
+        self.assertEqual(files.count("omni_wait-agent-dupe.jsonl-2.md"), 1)
+        # every entry points at its own distinct report file
+        reports = [e["report_file"] for e in st["transcripts"]]
+        self.assertEqual(len(set(reports)), 2)
+        for r in reports:
+            self.assertTrue(os.path.isfile(r), r)
 
 
 class TestEffectiveSince(unittest.TestCase):
