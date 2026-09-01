@@ -10,6 +10,9 @@ slow interpreter startup can never flip a running agent to stalled and race the
 alarm/deadline.
 """
 
+import contextlib
+import importlib.util
+import io
 import json
 import os
 import shutil
@@ -21,6 +24,15 @@ import unittest
 
 OMNI_WAIT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
     "skills", "omnireview-gitlab", "scripts", "omni_wait.py"))
+
+
+def load_waiter_module():
+    """In-process loader for tests that must patch module internals (e.g. the
+    platform-alarm guard) — the subprocess path cannot fake a missing SIGALRM."""
+    spec = importlib.util.spec_from_file_location("omni_wait_under_test", OMNI_WAIT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 # Default tiny flags per test. argparse last-occurrence-wins lets individual
 # tests override a single value by appending it after TINY.
@@ -105,8 +117,12 @@ class TestImmediateAllTerminal(unittest.TestCase):
         for e in st["transcripts"]:
             self.assertEqual(set(e), per_entry)
         self.assertEqual(st["exit_code"], proc.returncode)
-        self.assertIsNone(st["since"])
-        self.assertIsInstance(st["deadline"], (int, float))
+        # `since` is the EFFECTIVE anchor deadline was computed from — always
+        # numeric, never null (copilot review: the old `null`-when-omitted field
+        # was self-inconsistent with the always-numeric deadline).
+        self.assertIsInstance(st["since"], (int, float))
+        self.assertLessEqual(abs(st["since"] - st["ts"]), 60)
+        self.assertEqual(st["deadline"], int(st["since"] + 6))  # TINY --total-budget 6
 
 
 class TestMtimeFallback(unittest.TestCase):
@@ -537,6 +553,62 @@ class TestReportsDir(unittest.TestCase):
             self.assertEqual(f.read().strip(), "Report A. Status: DONE")
         with open(md_gone) as f:
             self.assertIn("no report harvested", f.read())
+
+
+class TestEffectiveSince(unittest.TestCase):
+    """copilot review: the JSON `since` field must carry the effective anchor
+    (invocation start when --since is omitted) so callers can reconstruct the
+    deadline arithmetic; it must never be null."""
+
+    def test_since_defaults_to_invocation_start(self):
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "agent-a.jsonl")
+        append_records(p, [assistant_record("Done. Status: DONE")])
+        t0 = time.time()
+        proc = run_waiter(TINY + ["--transcript", p, "--expect", 1])
+        st = status_of(proc)
+        self.assertIsInstance(st["since"], (int, float))
+        self.assertGreaterEqual(st["since"], t0 - 1)   # effective start, not epoch 0 / null
+        self.assertLessEqual(st["since"], time.time() + 1)
+
+    def test_since_echoes_explicit_value(self):
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "agent-a.jsonl")
+        append_records(p, [assistant_record("Done. Status: DONE")])
+        explicit = time.time() - 30
+        proc = run_waiter(TINY + ["--transcript", p, "--expect", 1,
+                                  "--since", explicit])
+        st = status_of(proc)
+        self.assertAlmostEqual(st["since"], explicit, delta=0.001)
+        self.assertEqual(st["deadline"], int(explicit + 6))  # TINY --total-budget 6
+
+
+class TestPlatformGuard(unittest.TestCase):
+    """copilot review: platforms without SIGALRM/setitimer must fail fast with a
+    clear stderr message and a degraded one-line JSON status instead of crashing."""
+
+    def test_sigalrm_unsupported_fails_fast_degraded(self):
+        mod = load_waiter_module()
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "agent-a.jsonl")
+        append_records(p, [assistant_record("Done. Status: DONE")])
+        mod._platform_supports_alarm = lambda: False
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = mod.main(["--transcript", p, "--expect", "1"])
+        self.assertEqual(rc, 2)
+        st = json.loads(out.getvalue().strip().splitlines()[-1])
+        self.assertEqual(st["exit_code"], 2)
+        self.assertEqual(st["exit_reason"], "sigalrm_unsupported")
+        self.assertEqual(len(st["transcripts"]), 1)   # best-effort entries still emitted
+        self.assertIn("SIGALRM", err.getvalue())
+
+    def test_platform_guard_reflects_real_platform(self):
+        import signal as _signal
+        mod = load_waiter_module()
+        self.assertEqual(
+            mod._platform_supports_alarm(),
+            hasattr(_signal, "SIGALRM") and hasattr(_signal, "setitimer"))
 
 
 if __name__ == "__main__":
