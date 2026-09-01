@@ -16,6 +16,7 @@ import io
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,12 @@ import unittest
 
 OMNI_WAIT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
     "skills", "omnireview-gitlab", "scripts", "omni_wait.py"))
+
+# copilot review round 2: the subprocess-driven waiter tests exercise the SIGALRM
+# chunk machinery — on platforms without POSIX timers the waiter (correctly) fails
+# fast degraded, so those tests skip rather than fail there.
+ALARM_OK = hasattr(signal, "SIGALRM") and hasattr(signal, "setitimer")
+requires_alarm = unittest.skipUnless(ALARM_OK, "platform lacks SIGALRM/setitimer")
 
 
 def load_waiter_module():
@@ -80,6 +87,7 @@ def tmp_dir(testcase):
     return d
 
 
+@requires_alarm
 class TestImmediateAllTerminal(unittest.TestCase):
     def _three_terminal(self, d):
         paths = [os.path.join(d, "agent-%d.jsonl" % i) for i in range(3)]
@@ -125,6 +133,7 @@ class TestImmediateAllTerminal(unittest.TestCase):
         self.assertEqual(st["deadline"], int(st["since"] + 6))  # TINY --total-budget 6
 
 
+@requires_alarm
 class TestMtimeFallback(unittest.TestCase):
     def _unmarked(self, d):
         p = os.path.join(d, "agent-a.jsonl")
@@ -156,6 +165,7 @@ class TestMtimeFallback(unittest.TestCase):
         self.assertEqual(st["transcripts"][0]["state"], "running")
 
 
+@requires_alarm
 class TestTornLine(unittest.TestCase):
     def test_torn_trailing_line_skipped(self):
         d = tmp_dir(self)
@@ -172,6 +182,7 @@ class TestTornLine(unittest.TestCase):
         self.assertEqual(e["state"], "terminal")
 
 
+@requires_alarm
 class TestPredicate(unittest.TestCase):
     def test_mixed_text_and_tool_use_record_is_running(self):
         # A mixed text+tool_use record is the normal shape of a RUNNING agent
@@ -207,6 +218,7 @@ class TestPredicate(unittest.TestCase):
         self.assertEqual(e2["final_text"], "Let me run the test suite.")
 
 
+@requires_alarm
 class TestStaggered(unittest.TestCase):
     def test_exit_0_promptly_after_last_completion(self):
         d = tmp_dir(self)
@@ -239,6 +251,7 @@ class TestStaggered(unittest.TestCase):
         self.assertEqual(by_path[t3]["state"], "terminal")
 
 
+@requires_alarm
 class TestStall(unittest.TestCase):
     def test_all_stalled_exits_2_stall(self):
         d = tmp_dir(self)
@@ -315,6 +328,7 @@ class TestStall(unittest.TestCase):
         self.assertEqual(by_path[live]["state"], "terminal")
 
 
+@requires_alarm
 class TestBudget(unittest.TestCase):
     def test_budget_exhausted_exits_2(self):
         d = tmp_dir(self)
@@ -330,6 +344,7 @@ class TestBudget(unittest.TestCase):
         self.assertEqual(st["transcripts"][0]["state"], "running")
 
 
+@requires_alarm
 class TestCountMismatch(unittest.TestCase):
     def test_fewer_than_expect_exits_2_loud(self):
         d = tmp_dir(self)
@@ -365,6 +380,7 @@ class TestCountMismatch(unittest.TestCase):
         self.assertEqual(len(st["transcripts"]), 4)             # entries still emitted
 
 
+@requires_alarm
 class TestScanDir(unittest.TestCase):
     def test_scan_dir_resolves_and_excludes_main_session(self):
         d = tmp_dir(self)
@@ -421,6 +437,7 @@ class TestScanDir(unittest.TestCase):
         self.assertEqual(st["exit_reason"], "count_pending")   # waited for, not missing
 
 
+@requires_alarm
 class TestChunkAlarm(unittest.TestCase):
     def test_chunk_elapsed_exits_3(self):
         d = tmp_dir(self)
@@ -440,6 +457,7 @@ class TestChunkAlarm(unittest.TestCase):
             self.assertEqual(e["state"], "running")
 
 
+@requires_alarm
 class TestUnknownShapes(unittest.TestCase):
     def test_unknown_record_shape_treated_as_running(self):
         # (a) trailing unknown-shape record AFTER the marker: still terminal —
@@ -467,6 +485,7 @@ class TestUnknownShapes(unittest.TestCase):
         self.assertEqual(st2["transcripts"][0]["state"], "running")
 
 
+@requires_alarm
 class TestFinalText(unittest.TestCase):
     def test_final_text_truncation_flag(self):
         d = tmp_dir(self)
@@ -481,6 +500,7 @@ class TestFinalText(unittest.TestCase):
         self.assertLessEqual(len(e["final_text"]), 256 * 1024 + 100)
 
 
+@requires_alarm
 class TestOverhead(unittest.TestCase):
     def test_evaluation_overhead_under_2s(self):
         d = tmp_dir(self)
@@ -498,6 +518,7 @@ class TestOverhead(unittest.TestCase):
         self.assertLess(wall, 2.0)
 
 
+@requires_alarm
 class TestReportsDir(unittest.TestCase):
     def test_reports_dir_writes_status_and_per_agent_markdown(self):
         d = tmp_dir(self)
@@ -609,6 +630,28 @@ class TestPlatformGuard(unittest.TestCase):
         self.assertEqual(
             mod._platform_supports_alarm(),
             hasattr(_signal, "SIGALRM") and hasattr(_signal, "setitimer"))
+
+
+class TestNumericValidation(unittest.TestCase):
+    """copilot review round 2: non-positive numeric flags must fail fast on the
+    usage path (stderr + exit 2, NO stdout JSON) — a --poll-interval <= 0 would
+    make time.sleep raise mid-wait, --stable-window <= 0 would make every
+    transcript instantly terminal, --expect < 1 is vacuous."""
+
+    def test_nonpositive_numeric_flags_fail_fast_usage(self):
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "agent-a.jsonl")
+        append_records(p, [assistant_record("Done. Status: DONE")])
+        base = ["--transcript", p, "--expect", "1"]
+        bad = [["--poll-interval", "0"], ["--poll-interval", "-1"],
+               ["--stable-window", "0"], ["--stall-after", "-2"],
+               ["--chunk-timeout", "0"], ["--total-budget", "-5"],
+               ["--expect", "0"], ["--count-grace", "-1"]]
+        for extra in bad:
+            proc = run_waiter(base + extra)
+            self.assertEqual(proc.returncode, 2, (extra, proc.stdout, proc.stderr))
+            self.assertEqual(proc.stdout.strip(), "", extra)   # usage error: no JSON
+            self.assertTrue(proc.stderr.strip(), extra)
 
 
 if __name__ == "__main__":
