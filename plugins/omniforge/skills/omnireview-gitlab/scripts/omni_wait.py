@@ -28,6 +28,12 @@ def _alarm_delay(chunk_timeout):
     return max(0.05, chunk_timeout - margin)
 
 
+def _platform_supports_alarm():
+    """POSIX interval timers are required for a bounded wait chunk; platforms
+    without them (Windows) get a fail-fast degraded exit instead of a crash."""
+    return hasattr(signal, "SIGALRM") and hasattr(signal, "setitimer")
+
+
 class _ChunkElapsed(Exception):
     """Raised by the SIGALRM handler when the chunk budget elapses."""
 
@@ -300,8 +306,9 @@ def emit(args, entries, code, reason, since, start):
         "exit_code": code,
         "exit_reason": reason,
         "ts": int(time.time()),
-        "since": args.since,
-        "deadline": int(since + args.total_budget),  # ALWAYS numeric (since defaults to start)
+        "since": since,   # EFFECTIVE anchor (invocation start when --since omitted) —
+                          # always numeric so deadline == int(since + total_budget) reconstructs
+        "deadline": int(since + args.total_budget),
         "elapsed_s": round(time.time() - start, 3),
         "transcripts": entries,
     }
@@ -344,6 +351,16 @@ def main(argv):
         entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
                    for p in paths]
         return emit(args, entries, EXIT_DEGRADED, "count_mismatch", since, start)
+
+    if not _platform_supports_alarm():
+        # Fail fast (copilot review): a platform without POSIX timers cannot run
+        # a bounded chunk — one clear stderr line + the one-line JSON contract,
+        # degraded. Best-effort entries are still emitted so callers see state.
+        print("omni_wait: SIGALRM/setitimer unavailable on this platform — a bounded "
+              "wait chunk cannot run; degrading (sigalrm_unsupported)", file=sys.stderr)
+        entries = [evaluate(p, time.time(), args.stable_window, args.stall_after, since)
+                   for p in paths]
+        return emit(args, entries, EXIT_DEGRADED, "sigalrm_unsupported", since, start)
 
     signal.signal(signal.SIGALRM, _on_alarm)
     entries = []
