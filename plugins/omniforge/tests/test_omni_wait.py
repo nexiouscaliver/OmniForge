@@ -576,6 +576,29 @@ class TestReportsDir(unittest.TestCase):
             self.assertIn("no report harvested", f.read())
 
 
+    def test_reports_dir_failure_nulls_report_file(self):
+        """copilot r4: when the reports-dir write fails and the waiter degrades
+        to stdout-only, entries must not advertise report_file paths that were
+        never written — consumers would Read nonexistent files."""
+        mod = load_waiter_module()
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "agent-a.jsonl")
+        append_records(p, [assistant_record("Done. Status: DONE")])
+        blocker = os.path.join(d, "blocker")
+        with open(blocker, "w") as f:
+            f.write("i am a file, not a directory")
+        broken_dir = os.path.join(blocker, "sub")   # makedirs must fail on this
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = mod.main(["--transcript", p, "--expect", "1",
+                           "--reports-dir", broken_dir])
+        self.assertEqual(rc, 0)                     # all-terminal stands; reports are an enhancement
+        st = json.loads(out.getvalue().strip().splitlines()[-1])
+        for e in st["transcripts"]:
+            self.assertIsNone(e["report_file"])
+            self.assertEqual(e["final_text"], "Done. Status: DONE")   # harvest still present
+        self.assertIn("reports-dir write failed", err.getvalue())
+
     def test_duplicate_basenames_get_suffixed_reports(self):
         """copilot r3: two transcripts sharing a basename must not overwrite
         each other's report files under --reports-dir."""
@@ -652,6 +675,25 @@ class TestPlatformGuard(unittest.TestCase):
         self.assertEqual(st["exit_code"], 2)
         self.assertEqual(st["exit_reason"], "sigalrm_unsupported")
         self.assertEqual(len(st["transcripts"]), 1)   # best-effort entries still emitted
+        self.assertIn("SIGALRM", err.getvalue())
+
+    def test_count_pending_cannot_precede_platform_guard(self):
+        """copilot r4: on a platform without POSIX timers, the scan-dir
+        spawn-grace branch (exit 3 count_pending) must NOT fire before the
+        fail-fast platform guard — 'still running' would be a lie there."""
+        mod = load_waiter_module()
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
+        scan = os.path.join(d, "subagents"); os.makedirs(scan)
+        append_records(os.path.join(scan, "agent-1.jsonl"),
+                       [assistant_record("Partial. Status: DONE")])
+        mod._platform_supports_alarm = lambda: False
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = mod.main(["--scan-dir", scan, "--expect", "3",
+                           "--since", str(time.time()), "--count-grace", "15"])
+        self.assertEqual(rc, 2)
+        st = json.loads(out.getvalue().strip().splitlines()[-1])
+        self.assertEqual(st["exit_reason"], "sigalrm_unsupported")
         self.assertIn("SIGALRM", err.getvalue())
 
     def test_platform_guard_reflects_real_platform(self):
