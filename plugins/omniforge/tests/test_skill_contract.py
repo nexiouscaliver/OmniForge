@@ -69,6 +69,22 @@ class SkillContractTests(unittest.TestCase):
             self.assertIn(ONE_DISPATCH_MARKER, t,
                           "%s lacks the one-dispatch rule" % name)
 
+    def test_sub60_sleep_one_liner_present(self):
+        t = read("SKILL.md")
+        self.assertIn("Never sleep-poll — not even sub-60 s sleeps", t)
+
+    def test_phase1_partition_wiring_and_phase3_placeholder(self):
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        self.assertIn("omni_partition.py", t[phase1:phase2],
+                      "Phase 1 must name the shipped partition script")
+        construction = t.index("### Agent Prompt Construction")
+        waiter = t.index("### Wait for Completion")
+        self.assertIn("{OWNED_FILES}", t[construction:waiter],
+                      "Agent prompt construction must wire the owned-files "
+                      "placeholder from the Phase 1 partition")
+
     def test_findings_heading_byte_identical_across_briefs(self):
         want = FINDINGS_HEADING.encode("utf-8")
         seen = set()
