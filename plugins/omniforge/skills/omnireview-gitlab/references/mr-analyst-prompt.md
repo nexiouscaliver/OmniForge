@@ -70,7 +70,7 @@ For EACH of your owned files, walk the commits touching it with full `git show {
 
 ### 1. Commit-by-Commit Analysis
 
-For EACH commit (go through them one by one using `git show {sha}` in your worktree):
+For EACH commit (go through them one by one; full `git show {sha}` walkthrough for commits touching your owned files, summary depth — message + diffstat — for the rest, per the Deep Dive Protocol):
 
 - **Message quality:** Does the commit message clearly describe what changed AND why? Does it follow conventional commit format (feat/fix/refactor/etc)?
 - **Atomicity:** Is the commit one logical change, or does it mix unrelated things?

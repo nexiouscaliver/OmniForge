@@ -13,6 +13,7 @@ diagnostics to stderr."""
 import argparse
 import json
 import os
+import re
 import sys
 
 AGENTS = ("analyst", "codebase", "security")
@@ -28,7 +29,11 @@ DOCS_NAMES = ("license", "notice")
 
 def is_security(path):
     p = path.lower()
-    return (any(t in p for t in SECURITY_TOKENS)
+    # tokens match path SEGMENTS, never substrings: "auth" must not fire on
+    # author/AUTHORS, "token" not on tokenizer (underscore-compound names
+    # like auth_middleware.py still match via the segment split)
+    segments = set(re.split(r"[/_.-]", p))
+    return (bool(segments & set(SECURITY_TOKENS))
             or any(s in p for s in SECURITY_PATHS)
             or p.endswith(SECURITY_SUFFIXES))
 
@@ -53,8 +58,9 @@ def partition(mr):
 
     Ownership passes, in order: (1) security affinity, (2) docs/config prefer
     analyst, (3) greedy largest-first over the remainder. Each pass iterates
-    largest-first by added lines with path-ascending ties so the output never
-    depends on listdir or input list order.
+    largest-first by added lines with path-ascending ties, and the emitted
+    file lists use that same canonical order — so byte-identical output never
+    depends on the input list order.
     """
     files_changed = [f for f in (mr.get("files_changed") or [])
                      if isinstance(f, str)]
@@ -91,12 +97,13 @@ def partition(mr):
             owned[path] = ("analyst", "greedy-balance")
             loads["analyst"] += added_lines(mr, path)
 
+    ordered = sorted(files_changed, key=sort_key)   # canonical emission order
     files_out = [{"path": p, "added_lines": added_lines(mr, p),
                   "owner": owned[p][0], "reason": owned[p][1]}
-                 for p in files_changed]
-    agents_out = {a: {"files": [p for p in files_changed if owned[p][0] == a],
+                 for p in ordered]
+    agents_out = {a: {"files": [p for p in ordered if owned[p][0] == a],
                       "added_lines_total": loads[a],
-                      "cross_cutting_files": list(files_changed)}
+                      "cross_cutting_files": list(ordered)}
                   for a in AGENTS}
     return {"files": files_out, "agents": agents_out}
 

@@ -381,6 +381,8 @@ rm -rf .worktrees/omni-analyst-{id} .worktrees/omni-codebase-{id} .worktrees/omn
 git worktree prune
 ```
 
+**Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_data.json`, `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs).
+
 ---
 
 ## Error Handling

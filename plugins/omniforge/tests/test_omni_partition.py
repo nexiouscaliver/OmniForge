@@ -18,6 +18,7 @@ same conventions as test_omni_validate_findings.py.
 import importlib.util
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -192,15 +193,88 @@ class TestOmniPartition(unittest.TestCase):
         data = mr({"src/auth.py": 20, "src/big.py": 300, "README.md": 40})
         result = mod.partition(data)
         changed = data["files_changed"]
+        expected_order = [f["path"] for f in result["files"]]
         for a in AGENTS:
+            # every agent sees every changed file, in the canonical
+            # (largest-first, path-asc) emission order
             self.assertEqual(result["agents"][a]["cross_cutting_files"],
-                             changed, a)
+                             expected_order, a)
+            self.assertEqual(sorted(result["agents"][a]["cross_cutting_files"]),
+                             sorted(changed), a)
         # totals are consistent: each agent's total = sum of its files' sizes
         sizes = {f["path"]: f["added_lines"] for f in result["files"]}
         for a in AGENTS:
             expected = sum(sizes[p] for p in result["agents"][a]["files"])
             self.assertEqual(result["agents"][a]["added_lines_total"],
                              expected, a)
+
+    def test_no_substring_affinity_false_positives(self):
+        mod = load_partition_module()
+        # substring hits that are NOT security: tokens must match path
+        # SEGMENTS — "auth" must not fire on author/AUTHORS, "token" not on
+        # tokenizer
+        data = mr({"docs/AUTHORS.md": 120, "src/tokenizer.py": 80,
+                   "src/author.py": 60})
+        result = mod.partition(data)
+        by_path = {f["path"]: f for f in result["files"]}
+        for path in ("docs/AUTHORS.md", "src/tokenizer.py", "src/author.py"):
+            self.assertNotEqual(by_path[path]["owner"], "security", path)
+            self.assertNotEqual(by_path[path]["reason"],
+                                "security-affinity", path)
+        # underscore-compound names still hit the token list by segment
+        data2 = mr({"src/session_store.py": 40, "src/auth_middleware.py": 30})
+        result2 = mod.partition(data2)
+        for f in result2["files"]:
+            self.assertEqual(f["owner"], "security", f["path"])
+            self.assertEqual(f["reason"], "security-affinity", f["path"])
+
+    def test_input_order_permutation_stability(self):
+        mod = load_partition_module()
+        sizes = {"src/auth.py": 30, "src/big.py": 400, "README.md": 60,
+                 "docs/guide.md": 45, "src/small.py": 5, "cfg/config.json": 12}
+        paths = list(sizes)
+        orders = [paths, list(reversed(paths)),
+                  ["src/big.py", "README.md", "src/auth.py",
+                   "cfg/config.json", "src/small.py", "docs/guide.md"]]
+        rng = random.Random(42)
+        for _ in range(5):
+            shuffled = list(paths)
+            rng.shuffle(shuffled)
+            orders.append(shuffled)
+        reference = None
+        ref_owners = None
+        for order in orders:
+            data = {"files_changed": order,
+                    "diff_line_map": {p: {"added_lines": list(
+                        range(1, sizes[p] + 1))} for p in order}}
+            result = mod.partition(data)
+            dumped = json.dumps(result, sort_keys=False, indent=2,
+                                ensure_ascii=False)
+            owners = {f["path"]: (f["owner"], f["reason"])
+                      for f in result["files"]}
+            if reference is None:
+                reference, ref_owners = dumped, owners
+            else:
+                self.assertEqual(dumped, reference,
+                                 "output bytes depend on input list order")
+                self.assertEqual(owners, ref_owners)
+
+    def test_equal_size_tie_is_deterministic(self):
+        mod = load_partition_module()
+        result = mod.partition(mr({"a.py": 10, "b.py": 10}))
+        by_path = {f["path"]: f for f in result["files"]}
+        # both start unloaded: a.py sorts first (path asc) and codebase wins
+        # the exact tie; b.py then flows to the less-loaded analyst
+        self.assertEqual(by_path["a.py"]["owner"], "codebase")
+        self.assertEqual(by_path["b.py"]["owner"], "analyst")
+        # reversed input order must not flip the pinned assignment
+        result2 = mod.partition({
+            "files_changed": ["b.py", "a.py"],
+            "diff_line_map": {"a.py": {"added_lines": list(range(1, 11))},
+                              "b.py": {"added_lines": list(range(1, 11))}}})
+        by_path2 = {f["path"]: f for f in result2["files"]}
+        self.assertEqual(by_path2["a.py"]["owner"], "codebase")
+        self.assertEqual(by_path2["b.py"]["owner"], "analyst")
 
 
 class PartitionCliAndBriefContractTests(unittest.TestCase):
