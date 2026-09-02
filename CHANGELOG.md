@@ -5,6 +5,23 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-09-02
+
+### Added
+- **Structured findings JSON contract + `omni_validate_findings.py`** (`skills/omnireview-gitlab/scripts/`) — each reviewer agent emits a machine-readable findings block; the validator checks all three blocks and passes malformed output through verbatim (never fails the run)
+- **`omni_consolidate.py` deterministic consolidation** (`skills/omnireview-gitlab/scripts/`) — merges only near-identical findings (same file+lines+category, Jaccard ≥ 0.30); same-locus non-identical pairs classify as clusters, not merges, with per-agent verbatim entries in the worklist; corroboration is recorded as metadata; confidence values are never adjusted or recomputed; emits one 6-section single-pass adjudication worklist; `--prior` retrospective guard marks prior-matched loci `already_adjudicated` — prior posted findings are authoritative and new input is routed as replies on their existing threads
+- **`omni_post_review.py` shipped posting fallback** (`skills/omnireview-gitlab/scripts/`) — standalone `glab`-based posting with retry/backoff (2 s / 4 s on 5xx/429), duplicate-summary guard that refuses to post a second default `## OmniForge` summary, and `--reply-to` / `reply_to_thread_id` thread routing; no MCP dependency
+- **`omni_partition.py` diff load balancing** (`skills/omnireview-gitlab/scripts/`) — security-affinity assignment first, then greedy balancing across the codebase and analyst reviewers; plus reviewer-brief tightening and the "Never sleep-poll — not even sub-60 s sleeps" rule
+- **`omni_digest.py` context digest** (`skills/omnireview-gitlab/scripts/`) — script-built digest where bot artifacts are carried byte-verbatim, human prose is capped, and diffs are reduced to hunk headers; retrospective wiring in Phases 1/3/4 replaces raw comment dumps
+
+### Changed
+- **One-dispatch-per-reviewer rule** in the three reviewer briefs — fixes the !1360 9-vs-3 dispatch-file churn (A/B retrospective arm: `sub_count` == 3, and 3 prior loci marked `already_adjudicated` with replies routed on recorded threads)
+- **A/B e2e (same MR, same head, same provider hour):** tail −28.2% (339.5 → 243.7 s, real — beyond the ±75 s single-pair noise band), output tokens −24.4%; adjudication turns 20 vs the ≤12 target — MISS, stated honestly (per-call api time down 32.5 → 10.9 s: the single-pass worklist produces more, much shorter turns)
+- Test suite 325 + 9 (was 231)
+- Version bumped to 3.3.0
+
+---
+
 ## [3.2.0] - 2026-09-01
 
 ### Added

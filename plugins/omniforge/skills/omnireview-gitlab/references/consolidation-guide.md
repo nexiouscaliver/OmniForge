@@ -2,90 +2,147 @@
 
 Reference for the OmniForge orchestrator to consolidate findings from all 3 review agents.
 
+Consolidation is deterministic and script-driven. Python never does confidence
+arithmetic: every confidence value in the output is byte-identical to an
+agent-assigned input — never adjusted, never recomputed. Corroboration is
+`count`/`of` metadata only. The orchestrator's job is to run two scripts and
+adjudicate ONE generated worklist in a single pass — never to hand-merge or
+severity-pick by itself.
+
 ---
 
-## Step 1: Parse Agent Reports
+## Step 1: Validate Each Waiter Report
 
-Extract structured findings from each agent's report into a normalized format:
+Run the validator once per reviewer report (the waiter's files under
+`/tmp/omni_wait_out_{id}/`). It extracts the machine-readable findings block
+from each report and writes a validated findings file next to it:
 
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_validate_findings.py" \
+  --report /tmp/omni_wait_out_{id}/omni_wait-<transcript-basename>.md \
+  --agent codebase \
+  --out /tmp/omni_wait_out_{id}/codebase.findings.json
 ```
-{
-  source_agent: "MR Analyst (OmniForge)" | "Codebase Reviewer (OmniForge)" | "Security Reviewer (OmniForge)",
-  category: string,
-  severity: "critical" | "important" | "minor",
-  confidence: number (0-100),
-  location: string (file:line or commit SHA or "MR description"),
-  description: string,
-  evidence: string,
-  recommendation: string,
-  impact: string (optional, from security agent),
-  attack_scenario: string (optional, from security agent)
-}
+
+Repeat with `--agent security` and `--agent analyst` for the other two reports.
+If a validator output says `passthrough: true`, that agent produced no
+machine-readable findings — see Degraded mode below.
+
+---
+
+## Step 2: Run the Consolidator
+
+Feed the validated findings files (1–3; degraded runs have fewer) to the
+consolidator:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_consolidate.py" \
+  --findings /tmp/omni_wait_out_{id}/codebase.findings.json \
+             /tmp/omni_wait_out_{id}/security.findings.json \
+             /tmp/omni_wait_out_{id}/analyst.findings.json \
+  --out-dir /tmp/omni_consolidate_{id}
 ```
 
----
+`--prior <prior-findings.json>` (optional) supplies previously posted findings
+for the retrospective guard — see Already adjudicated below.
 
-## Step 2: Apply Confidence Threshold
+Outputs in `--out-dir`:
 
-**Threshold: 70**
+- `clusters.json` — every finding, grouped into clusters. Per-agent entries are
+  preserved VERBATIM inside their cluster (all original fields, byte-identical).
+- `worklist.md` — ONE adjudication worklist, consumed in a single pass (Step 4).
 
-- Findings with confidence >= 70: Include in final report
-- Findings with confidence 50-69: Mention in a "Lower Confidence Observations" appendix (optional, only if user asks)
-- Findings with confidence < 50: Discard completely
+### What merges (and only what merges)
 
----
+Two findings merge into one cluster entry-set ONLY when ALL hold:
 
-## Step 3: Cross-Correlation
+1. same normalized file path (lowercased, leading `./` stripped; `null`-file
+   findings never merge);
+2. overlapping `line_range` intervals (inclusive; `null` ranges never merge);
+3. identical normalized category;
+4. token-set Jaccard similarity of `one_liner + evidence` ≥ the threshold
+   (`--similarity`, default 0.30, calibrated on the W6 fleet).
 
-### 3a. Normalize Locations
+Everything else is CLUSTERED, never merged: same file + overlapping lines →
+one cluster with multiple verbatim entries, regardless of category or
+similarity. Non-overlapping or `null`-locus findings are singletons.
 
-Convert all file:line references to canonical form: `relative/path/to/file.ext:line_number`
+### Locus
 
-### 3b. Proximity Grouping
+A cluster's locus is exactly the script's predicate above: the same file with
+overlapping line ranges. The canonical anchor format is unchanged:
+`relative/path/to/file.ext:line` (the cluster's `locus.anchor`). Findings with
+no file locus (commit hygiene, description, process) anchor as `MR-process`.
 
-Findings are in the "same area" if:
-- Same file AND within 5 lines of each other
-- Same commit SHA (for MR analyst findings)
-- Same discussion thread
+### Corroboration is metadata only
 
-### 3c. Boost Correlated Findings
-
-When multiple agents flag the same area:
-
-| Agents Agreeing | Confidence Boost | Cap |
-|----------------|-----------------|-----|
-| 2 agents | +15 | 100 |
-| 3 agents | +25 | 100 |
-
-### 3d. Handle Contradictions
-
-When agents reach different conclusions about the same area:
-- Present BOTH perspectives in the report
-- Mark as **"Needs Human Judgment"**
-- Do NOT silently resolve — the user decides
-- List which agent said what with their evidence
+Each cluster carries `corroboration: {count, of, agents}` — how many of the N
+input agents flagged the locus. It is never a score change: confidence values
+are never adjusted, never recomputed; cross-perspective discrimination is the
+product's core value, so every agent's own score survives verbatim.
 
 ---
 
-## Step 3e: False Positive Auto-Reduction
+## Step 3: Confidence Threshold
 
-Apply a -30 confidence penalty to findings that match any of these patterns:
+**Threshold: 70.** The threshold applies to agent-assigned scores ONLY — never
+adjusted, never recomputed.
 
-- Pre-existing issues (code predates this MR per `git blame`)
-- Linter/CI-catchable issues (should be caught by tooling, not review)
-- Pure style nitpicks without functional impact
-- Issues already resolved in MR discussions
+- Findings with confidence >= 70 (the cluster representative's score): eligible
+  for the final report and auto-posting
+- Findings with confidence 50–69: routed to the worklist's Sub-threshold
+  section (include-as-observation vs drop) — never deleted
+- Findings with confidence < 50: never surface anywhere (dropped by the script)
+
+False-positive discipline lives where it already belongs: in the reviewer
+briefs' own false-positive checks. Agents adjust their OWN confidence before
+reporting; python never does it for them.
 
 ---
 
-## Step 4: Deduplication
+## Step 4: Consume the Worklist in ONE Pass
 
-When findings overlap:
+Read `/tmp/omni_consolidate_{id}/worklist.md` top to bottom, in a single
+response, deciding each item from its quoted verbatim entries. The sections
+appear in fixed order:
 
-1. **Same issue, same severity:** Merge into one finding. List all source agents. Use the most detailed description and evidence.
-2. **Same area, different severity:** Keep the HIGHEST severity. Note the range of opinions.
-3. **Same area, different categories:** Keep both if they add unique value (e.g., one is a logic bug, the other is a security implication of that bug). Merge if redundant.
-4. **Unique findings:** Keep as-is with the original agent's confidence.
+1. **Already adjudicated** — the cluster's locus matches a previously posted
+   finding (via `--prior`). Decision is "carry forward as-is", never
+   re-adjudication. An OPEN prior thread says `reply on thread <thread_id>` —
+   carry the finding forward as a reply on that recorded thread, never a new
+   one. A RESOLVED prior says `skip re-posting` — the position is already
+   established. (The MR Analyst's Discussion Resolution duty is outside this
+   suppression and still reports thread hygiene normally.)
+2. **Needs Human Judgment (conflict)** — entries ≥ 2 severity levels apart at
+   the same locus. BOTH perspectives are quoted verbatim; the main agent never
+   silently resolves. At most ONE verification command per conflict item, and
+   only when the quoted evidence is internally contradictory.
+3. **Cross-category, same locus** — e.g. a logic bug and its security
+   implication: keep both.
+4. **Same locus, distinct findings** — same file/lines but different substance
+   (below the similarity threshold): keep each perspective; decide each entry's
+   inclusion from its quoted evidence.
+5. **Sub-threshold observations** — entries scored 50–69 by their agents:
+   include as an observation or drop.
+
+This single pass is what caps adjudication turns: no per-item re-verification
+loops, no re-deriving subagent evidence, no hand-merging, no severity-picking.
+Deduplication IS the consolidator's merge predicate — the main thread never
+hand-deduplicates.
+
+### Auto clusters
+
+Clusters with no worklist reason flow straight into the Phase 5 report (no
+adjudication needed). They are listed at the bottom of the worklist with their
+anchor, representative confidence, and one-liner.
+
+### Degraded mode
+
+Any agent whose validator output says `passthrough: true` produced no
+machine-readable findings: consolidate that agent's prose report directly
+(pre-3.3.0 behavior — read the report and treat its prose "Finding {N}" blocks
+as that agent's findings). Note the fallback in the final report's Summary, and
+see the "One Agent Failed" edge case below.
 
 ---
 
@@ -210,6 +267,6 @@ Use this template:
 - This prevents overwhelming the user
 
 ### Security Finding Contradicts Code Review
-- Security always wins for severity classification
-- Present both perspectives
-- The security agent's attack scenario adds context the code reviewer may not have considered
+- This is a `conflict` worklist item — the main agent never silently resolves it
+- BOTH perspectives verbatim, marked **Needs Human Judgment** — the user decides
+- The security agent's attack scenario is quoted as context the code reviewer may not have considered, never as the automatic severity winner

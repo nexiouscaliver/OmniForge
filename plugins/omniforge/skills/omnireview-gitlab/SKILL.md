@@ -39,7 +39,7 @@ digraph omnireview_flow {
     analyst [label="MR Analyst (OmniForge)\n(worktree 1)"];
     codebase [label="Codebase Reviewer (OmniForge)\n(worktree 2)"];
     security [label="Security Reviewer (OmniForge)\n(worktree 3)"];
-    consolidate [label="Phase 4: Consolidation\nconfidence scoring + cross-correlation"];
+    consolidate [label="Phase 4: Consolidation\nconsolidator + worklist"];
     report [label="Phase 5: Present Report\n(NEVER auto-post)"];
     action [label="Phase 6: Action Menu\n(user chooses)"];
     cleanup [label="Phase 7: Cleanup\n(ALWAYS runs)"];
@@ -88,6 +88,29 @@ glab mr diff {id} --raw
 git fetch origin {source_branch} {target_branch}
 git log --oneline origin/{target_branch}..origin/{source_branch}
 ```
+
+### Load balancing (before Phase 3 dispatch)
+
+Save the Phase-1 `fetch_mr_data` JSON (the MCP response, or the assembled fallback output) to `/tmp/omni_mr{id}_data.json`, then run the shipped partitioner and keep `partition.json`:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_partition.py" \
+  --mr-json /tmp/omni_mr{id}_data.json --out /tmp/omni_partition_{id}.json
+```
+
+The partitioner assigns every changed file exactly one deep-dive owner: security-affinity files (auth/token/pipeline/SQL patterns) → Security Reviewer; docs/config files → MR Analyst; the remainder balanced by added lines across Codebase Reviewer / MR Analyst. Inject each agent's ownership table into its Phase 3 prompt via the `{OWNED_FILES}` placeholder: "Deep-dive owner: these files: <list>." + "Cross-cutting: you still sweep ALL changed files at grep depth; full-file reads are your owned files only." Every agent still covers every changed file — only full-file read depth is partitioned.
+
+### Save BOTH tool outputs and build the context digest
+
+Persist BOTH Phase-1 tool responses to /tmp — the `fetch_mr_data` JSON to `/tmp/omni_mr{id}_data.json` (the partitioner input above) AND the `fetch_mr_discussions` JSON (from `mcp__omniforge__fetch_mr_discussions`; the fallback path assembles the same `{"success": true, "discussions": [...]}` envelope) to `/tmp/omni_mr{id}_discussions.json` — then run the shipped digest on both:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_digest.py" \
+  /tmp/omni_mr{id}_data.json /tmp/omni_mr{id}_discussions.json \
+  --out-dir /tmp/omni_digest_{id} --prior-out /tmp/omni_mr{id}_prior_findings.json
+```
+
+When the digest's stdout line reports `retrospective: true`, the run declares RETROSPECTIVE mode: prior findings are authoritative context, never re-adjudicated. In retrospective runs inject `/tmp/omni_digest_{id}/digest.md` in place of raw `{MR_COMMENTS}` in all three agent prompts, and pass `/tmp/omni_mr{id}_prior_findings.json` to the Phase 3 prompts and the Phase 4 consolidation (`omni_consolidate.py --prior`). Bot-authored artifacts inside the digest are verbatim — the digest only ever truncates human prose and re-carried diff bodies (hunk headers + counts only). The digest degrades quietly (exit 0, `retrospective: false`) when the discussions file is missing or malformed — never block a run on it.
 
 ### Large Diff Strategy
 
@@ -203,10 +226,11 @@ For each agent, fill the template placeholders:
 - `{WORKTREE_PATH}` — **Absolute** path to agent's worktree (convert from relative)
 - `{MR_JSON_DATA}` — Full JSON metadata (all 3 agents get this)
 - `{MR_DESCRIPTION}` — MR description text
-- `{MR_COMMENTS}` — All discussion threads (all 3 agents get this — discussions may contain security/code context)
+- `{MR_COMMENTS}` — All discussion threads (all 3 agents get this — discussions may contain security/code context). In retrospective runs (Phase 1 digest reported `retrospective: true`), substitute `/tmp/omni_digest_{id}/digest.md` here instead of the raw threads, and append the prior-findings one-liners from `/tmp/omni_mr{id}_prior_findings.json` to each prompt with: "these are already posted — do NOT re-report them"
 - `{MR_DIFF}` — Raw diff output
 - `{COMMIT_LIST}` — Commit SHAs and messages
 - `{FILES_CHANGED_LIST}` — List of changed file paths
+- `{OWNED_FILES}` — This agent's deep-dive ownership list from `/tmp/omni_partition_{id}.json` (Phase 1 load balancing): "Deep-dive owner: these files: <list>." Every agent still sweeps ALL changed files at grep depth — full-file reads are its owned files only
 - `{SOURCE_BRANCH}` — MR source branch name
 - `{TARGET_BRANCH}` — MR target branch name
 
@@ -247,7 +271,7 @@ Find the newest session directory for this project under `$CLAUDE_CONFIG_DIR/pro
 
 This skill has documented history of agents improvising `sleep N` loops and hand-written `/tmp` collect scripts that burned 503 s AFTER all agents finished. Retired permanently:
 
-- **NEVER** sleep between completion checks — no `sleep 115/240/300/420`, no `sleep N; <anything>` compound commands
+- **NEVER** sleep between completion checks — no `sleep 115/240/300/420`, no `sleep N; <anything>` compound commands, not even sub-60 s sleeps (no `sleep 45`, no `sleep 5`)
 - **NEVER** write, rewrite, or improvise collect/wait/poll helper scripts (`omni_collect.py` and friends) — the waiter is shipped, versioned, and tested
 - **NEVER** treat background-agent task notifications as completion signals — they are informational only and documented-unreliable (runs where none of the 3 fired)
 - The waiter's **exit code is the sole completion authority** — not notifications, not elapsed-time guesses, not transcript-size heuristics
@@ -262,9 +286,11 @@ If the waiter exits 2 (or its JSON reports stalled/missing agents): do NOT re-di
 
 ## Phase 4: Consolidation
 
-**Threshold: 70.** Only findings with confidence >= 70 appear in the final report.
+**Threshold: 70.** Only findings with confidence >= 70 appear in the final report. The threshold applies to agent-assigned scores ONLY — never adjusted, never recomputed. Python never does confidence arithmetic; agents own their own scores.
 
-**REQUIRED REFERENCE:** `./references/consolidation-guide.md` — you MUST read this before consolidating. Contains the full algorithm: confidence scoring, cross-correlation (+15 for 2 agents, +25 for 3), false positive auto-reduction (-30), deduplication, verdict logic, report template, and agent agreement matrix. Do NOT attempt consolidation from memory — the algorithm has specific rules that must be followed exactly.
+**REQUIRED REFERENCE:** `./references/consolidation-guide.md` — you MUST read this before consolidating. The flow: (1) run `scripts/omni_validate_findings.py` on each waiter report from Phase 3, (2) run `scripts/omni_consolidate.py` on the validated findings files, (3) consume the generated `worklist.md` in ONE pass — top to bottom, in a single response, deciding each item from its quoted verbatim entries: no per-item re-verification loops, no re-deriving subagent evidence, no hand-merging, no severity-picking. Conflicts stay dual-perspective **Needs Human Judgment**. Auto clusters flow straight into the Phase 5 report. Any agent whose validator output says `passthrough: true` falls back to consolidating that agent's prose report directly (pre-3.3.0 behavior) — note the fallback in the final report's Summary. Do NOT attempt consolidation from memory — the algorithm has specific rules that must be followed exactly.
+
+In retrospective runs (Phase 1 digest reported `retrospective: true`), pass `--prior /tmp/omni_mr{id}_prior_findings.json` to `omni_consolidate.py`: prior findings are AUTHORITATIVE context — the worklist's already_adjudicated section is carried forward as-is, never re-adjudicated. Open priors are replied on their recorded thread (`mcp__omniforge__reply_to_discussion` in MCP runs; `omni_post_review.py --reply-to` / per-entry `reply_to_thread_id` as the no-MCP fallback) — never a new thread; resolved priors are never re-posted.
 
 ---
 
@@ -338,6 +364,8 @@ Post summary comment + individual inline threads for each finding >= 70 confiden
 
 **REQUIRED REFERENCE:** `./references/posting-guide.md` — you MUST read this before posting anything. Contains the summary comment template, inline thread template, MCP tool call syntax (`post_full_review` findings JSON format), and bash fallback commands. Do NOT improvise posting format — use the exact templates from the reference.
 
+**Fallback (no MCP server):** When MCP is unavailable, use the shipped `scripts/omni_post_review.py` (see posting-guide.md — retry/backoff, reply routing, duplicate-summary guard, `--dry-run`) — never improvised `/tmp` posting scripts.
+
 ---
 
 ## Phase 7: Cleanup
@@ -367,6 +395,8 @@ rm -rf .worktrees/omni-analyst-{id} .worktrees/omni-codebase-{id} .worktrees/omn
 git worktree prune
 ```
 
+**Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_data.json`, `/tmp/omni_mr{id}_discussions.json`, `/tmp/omni_mr{id}_prior_findings.json`, `/tmp/omni_digest_{id}/` (digest outputs), `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs) — plus the Phase-4 consolidator outputs `/tmp/omni_consolidate_{id}/` (`clusters.json` + `worklist.md`) and Phase 6's `/tmp/omni_review_{id}_summary.md` and `/tmp/omni_review_{id}_findings.json` (posting inputs, if posting ran).
+
 ---
 
 ## Error Handling
@@ -393,7 +423,7 @@ git worktree prune
 | 1. Gather | Fetch MR data | `glab mr view/diff` (JSON + raw) |
 | 2. Setup | Create 3 worktrees | `git worktree add --detach` (×3) |
 | 3. Review | Dispatch OmniForge agents | Agent tool parallel (×3, opus model), then omni_wait.py exit-code loop |
-| 4. Merge | Consolidate findings | Confidence score + cross-correlate + dedup |
+| 4. Merge | Consolidate findings | `omni_validate_findings.py` + `omni_consolidate.py`, then consume `worklist.md` in ONE pass |
 | 5. Report | Present OmniForge report | Structured markdown with verdict |
 | 6. Act | User chooses | `glab mr note/approve`, `glab issue create` |
 | 7. Clean | Remove worktrees | `git worktree remove --force` (×3) + prune |
@@ -453,6 +483,7 @@ A CI/CD file change can expose secrets, break production deployments, or modify 
 - Add AI attribution to posted comments (no "Generated by Claude" etc.)
 - Skip any of the 7 phases for any reason
 - Sleep-poll or improvise collect/wait helper scripts while waiting for reviewer agents (use the shipped waiter — its exit code is the sole completion authority)
+- Never sleep-poll — not even sub-60 s sleeps (the shipped waiter is the only wait mechanism)
 
 ## Always
 
@@ -460,7 +491,7 @@ A CI/CD file change can expose secrets, break production deployments, or modify 
 - Create isolated worktrees per agent on the MR source branch
 - Inject context into agent prompts (don't make agents re-fetch)
 - Use confidence scoring with threshold 70
-- Cross-correlate findings across agents
+- Consolidate via `omni_consolidate.py` and consume its worklist in ONE pass (corroboration is metadata only — no hand-merging, no confidence arithmetic)
 - Present full OmniForge report before any action
 - Ask user which actions to take via the action menu
 - Clean up all worktrees regardless of outcome

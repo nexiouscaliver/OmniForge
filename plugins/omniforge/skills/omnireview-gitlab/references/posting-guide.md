@@ -116,4 +116,49 @@ The MCP tools automatically fetch diff position SHAs, URL-encode the project pat
 | Approve | `glab mr approve {id}` |
 | Open browser | `glab mr view {id} -w` |
 
+#### Shipped fallback script: `omni_post_review.py` (recommended over improvised commands)
+
+`plugins/omniforge/skills/omnireview-gitlab/scripts/omni_post_review.py` wraps the fallback commands above with
+per-call retry (3 attempts, 2 s then 4 s exponential backoff; 5xx/429/network errors retried, 4xx fail-fast), the
+nested-position workaround applied automatically (diff refs fetched once per invocation — never once per finding),
+`--reply-to <thread_id>` / per-entry `reply_to_thread_id` for carrying forward OPEN prior findings (replies on the
+recorded thread — never a new one; resolved priors are skipped by the caller before the array is prepared), a
+duplicate-summary guard (`--since <run-start-epoch>`; refuses if an OmniForge summary note newer than `--since`
+exists; `--force` overrides), and `--dry-run`. It accepts the SAME findings array as `post_full_review` — one
+authoring path feeds MCP (primary) and this script (fallback). The array shape matches for new-thread entries,
+but `reply_to_thread_id` is script-only routing: MCP `_post_full_review` posts every entry as a NEW inline thread
+(a reply entry sent via MCP would wrongly create a new thread), so MCP runs must send replies via
+`mcp__omniforge__reply_to_discussion` instead:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_post_review.py" \
+  --mr {iid} --project {project-id-or-encoded-fullpath} \
+  --summary /tmp/omni_review_{id}_summary.md \
+  --findings-json /tmp/omni_review_{id}_findings.json \
+  --since {run-start-epoch}
+```
+
+Exit codes:
+
+| Exit | Meaning |
+|------|---------|
+| `0` | success — everything planned was posted |
+| `1` | posting failure after retries, or a 4xx fail-fast (stderr names the failing glab command) |
+| `2` | usage error — bad flags or malformed findings JSON; prints no stdout JSON |
+| `3` | duplicate-summary guard refusal — nothing was posted |
+
+**Partial-failure resume (exit 1 mid-batch):** the summary posts first, then threads in array order, failing
+fast — after a mid-batch exit 1 the summary and the leading threads are already on the MR. NEVER rerun the same
+command with `--force`: it skips the guard, reposts the summary, and duplicates every already-posted thread. A
+plain rerun is refused by the guard (exit 3 — this run's own summary is newer than `--since`); that is the guard
+working. Re-post ONLY the remaining findings, using the raw fallback commands above (one inline-thread
+`glab api projects/:fullpath/merge_requests/{iid}/discussions …` call per unposted entry). A script rerun is
+safe only when nothing was posted yet (failure during the diff-refs fetch or the summary post — plain rerun, no
+`--force` needed); past the summary there is no threads-only script mode, so rerunning with the findings array
+edited down to the unposted entries would still repost the summary — use the raw commands instead.
+
+MCP `post_full_review` remains the recommended primary (single-call, N+1-safe); open-prior replies in MCP runs use
+`mcp__omniforge__reply_to_discussion`. The script is standalone (stdlib only, glab subprocess only) so posting
+still works when the MCP server cannot start.
+
 **No AI attribution in any posted content.** Write as a standard code review comment.
