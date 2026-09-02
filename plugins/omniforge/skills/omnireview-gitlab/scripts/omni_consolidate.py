@@ -77,7 +77,9 @@ def norm_path(p):
     """
     if not isinstance(p, str):
         return None
-    p = p.strip().lstrip("./").replace("\\", "/")
+    p = p.strip().replace("\\", "/")
+    while p.startswith("./"):        # strip ONLY ./ prefixes — a leading dot as in
+        p = p[2:]                    # .hidden.py is part of the filename
     return p.lower() or None
 
 
@@ -140,7 +142,12 @@ def load_findings(paths, anomalies):
             print("omni_consolidate: cannot read findings file %s: %s" % (path, e),
                   file=sys.stderr)
             raise SystemExit(2)
-        items = data.get("findings", []) if isinstance(data, dict) else []
+        if not isinstance(data, dict):
+            anomalies.append("%s: top-level JSON is not an object — treated as empty"
+                             % path)
+            items = []
+        else:
+            items = data.get("findings", [])
         if not isinstance(items, list):
             anomalies.append("%s: findings is not a list — treated as empty" % path)
             items = []
@@ -236,8 +243,10 @@ def load_priors(path, anomalies):
                          "without priors" % path)
         return []
     priors = []
-    for p in entries:
+    for i, p in enumerate(entries, 1):
         if not isinstance(p, dict) or not isinstance(p.get("thread_id"), str):
+            anomalies.append("prior entry %d of %s skipped (not an object or "
+                             "thread_id not a string)" % (i, path))
             continue
         if isinstance(p.get("resolved"), bool):
             state = "resolved" if p["resolved"] else "open"
@@ -342,8 +351,8 @@ def render_entry(e):
     return ["- %s: %s" % (k, fmt_val(v)) for k, v in e.items()]
 
 
-def render_item(heading, entries, extra=""):
-    lines = ["### %s%s" % (heading, extra), ""]
+def render_item(heading, entries):
+    lines = ["### %s" % heading, ""]
     for e in entries:
         lines.extend(render_entry(e))
         lines.append("")
@@ -368,7 +377,7 @@ def render_worklist(clusters):
             sections[section_for(c)].append(c)
 
     lines = [WORKLIST_TITLE, ""]
-    for sec in (SEC_ALREADY, SEC_CONFLICT, SEC_CROSS, SEC_SAME_LOCUS, SEC_SUB):
+    for _, sec in SECTION_FOR_REASON:
         lines.append(sec)
         items = sections[sec]
         if sec == SEC_SUB:

@@ -655,6 +655,61 @@ class TestOmniConsolidate(unittest.TestCase):
         self.assertNotIn("prior_match", clusters[0])
         self.assertGreaterEqual(stdout_json(proc)["anomalies"], 1)
 
+    # --- review round 1: loader tolerance + path normalization ---
+
+    def test_non_object_findings_file_anomaly(self):
+        d = tmp_dir(self)
+        bad = os.path.join(d, "bare.findings.json")
+        with open(bad, "w") as fh:
+            json.dump([finding()], fh)                # bare top-level array
+        proc = run_consolidate([bad], os.path.join(d, "out"))
+        self.assertEqual(proc.returncode, 0, proc.stderr)   # degrade, never crash
+        st = stdout_json(proc)
+        self.assertEqual(st["clusters"], 0)                 # treated as empty
+        self.assertGreaterEqual(st["anomalies"], 1)
+        self.assertIn("not an object", proc.stderr)
+
+    def test_dotfile_prefix_never_merges(self):
+        # identical text/lines/category, but ".hidden.py" and "hidden.py" are
+        # DISTINCT files: "./"-stripping must not eat the leading dot of a
+        # dotfile basename.
+        d = tmp_dir(self)
+        a = finding(file=".hidden.py")
+        b = finding(file="hidden.py", confidence=84)
+        f1 = write_findings(d, "codebase.findings.json", "codebase", [a])
+        f2 = write_findings(d, "security.findings.json", "security", [b])
+        out = os.path.join(d, "out")
+        proc = run_consolidate([f1, f2], out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        clusters, _ = read_out(out)
+        self.assertEqual(len(clusters), 2)            # never merged
+        self.assertEqual(sorted(c["locus"]["file"] for c in clusters),
+                         [".hidden.py", "hidden.py"])
+        mod = load_consolidator_module()
+        self.assertEqual(mod.norm_path("././src/app.py"), "src/app.py")
+        self.assertEqual(mod.norm_path(".hidden.py"), ".hidden.py")
+
+    def test_nonstring_thread_id_prior_anomaly(self):
+        d = tmp_dir(self)
+        f1 = write_findings(d, "codebase.findings.json", "codebase",
+                            [finding(file="src/app.py", line_range=[42, 44],
+                                     confidence=85)])
+        prior = write_prior(d, "prior.json", [
+            {"thread_id": 42, "resolved": True, "file_path": "src/app.py",
+             "line_number": 43, "body": "bad prior"},
+            {"thread_id": "T-ok", "resolved": True, "file_path": "src/app.py",
+             "line_number": 43, "body": "fine prior"},
+        ])
+        out = os.path.join(d, "out")
+        proc = run_consolidate([f1], out, prior=prior)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        clusters, _ = read_out(out)
+        # the valid prior still matches; the bad entry is skipped with a note
+        self.assertEqual(clusters[0]["prior_match"],
+                         {"thread_id": "T-ok", "state": "resolved"})
+        self.assertGreaterEqual(stdout_json(proc)["anomalies"], 1)
+        self.assertIn("thread_id", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
