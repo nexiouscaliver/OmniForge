@@ -24,7 +24,7 @@ FINDINGS_HEADING = "## Machine-readable findings block (REQUIRED — final block
 # "never adjusted, never recomputed" must not self-violate the test.
 ARITHMETIC_TOKENS = ("+15", "+25", "-30", "−30")
 
-ONE_DISPATCH_MARKER = "do NOT spawn child subagents"
+ONE_DISPATCH_MARKER = "Do NOT spawn child subagents"
 
 
 def read(rel):

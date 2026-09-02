@@ -262,9 +262,9 @@ If the waiter exits 2 (or its JSON reports stalled/missing agents): do NOT re-di
 
 ## Phase 4: Consolidation
 
-**Threshold: 70.** Only findings with confidence >= 70 appear in the final report.
+**Threshold: 70.** Only findings with confidence >= 70 appear in the final report. The threshold applies to agent-assigned scores ONLY — never adjusted, never recomputed. Python never does confidence arithmetic; agents own their own scores.
 
-**REQUIRED REFERENCE:** `./references/consolidation-guide.md` — you MUST read this before consolidating. Contains the full algorithm: confidence scoring, cross-correlation (+15 for 2 agents, +25 for 3), false positive auto-reduction (-30), deduplication, verdict logic, report template, and agent agreement matrix. Do NOT attempt consolidation from memory — the algorithm has specific rules that must be followed exactly.
+**REQUIRED REFERENCE:** `./references/consolidation-guide.md` — you MUST read this before consolidating. The flow: (1) run `scripts/omni_validate_findings.py` on each waiter report from Phase 3, (2) run `scripts/omni_consolidate.py` on the validated findings files, (3) consume the generated `worklist.md` in ONE pass — top to bottom, in a single response, deciding each item from its quoted verbatim entries: no per-item re-verification loops, no re-deriving subagent evidence, no hand-merging, no severity-picking. Conflicts stay dual-perspective **Needs Human Judgment**. Auto clusters flow straight into the Phase 5 report. Any agent whose validator output says `passthrough: true` falls back to consolidating that agent's prose report directly (pre-3.3.0 behavior) — note the fallback in the final report's Summary. Do NOT attempt consolidation from memory — the algorithm has specific rules that must be followed exactly.
 
 ---
 

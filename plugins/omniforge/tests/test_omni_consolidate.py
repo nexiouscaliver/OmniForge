@@ -252,8 +252,10 @@ class TestOmniConsolidate(unittest.TestCase):
                     confidence=55, one_liner="Unrelated changes mixed into one MR",
                     evidence="Commit d41b mixes a refactor with the feature it ships"),
         ]
-        f1 = write_findings(d, "codebase.findings.json", "codebase", inputs[0:3] + [inputs[4]])
-        f2 = write_findings(d, "security.findings.json", "security", [inputs[1], inputs[3]])
+        f1 = write_findings(d, "codebase.findings.json", "codebase",
+                            [inputs[0], inputs[2], inputs[4]])
+        f2 = write_findings(d, "security.findings.json", "security",
+                            [inputs[1], inputs[3]])
         f3 = write_findings(d, "analyst.findings.json", "analyst", [inputs[5]])
         out = os.path.join(d, "out")
         proc = run_consolidate([f1, f2, f3], out)
