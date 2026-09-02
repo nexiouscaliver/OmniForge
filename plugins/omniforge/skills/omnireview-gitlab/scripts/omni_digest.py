@@ -146,7 +146,14 @@ def diff_recarry_lines(mr):
         counts, hunks, current = {}, {}, None
         for line in diff.split("\n"):
             if line.startswith("+++"):
-                current = line[6:] if line.startswith("+++ b/") else None
+                if line.startswith("+++ b/"):
+                    current = line[6:]
+                elif line.startswith("+++ /dev/null"):
+                    current = None                # deleted file: no new side
+                else:
+                    # unprefixed header (+++ src/app.py); a trailing
+                    # tab-separated timestamp is not part of the path
+                    current = line[4:].split("\t")[0].strip() or None
                 if current is not None:
                     counts.setdefault(current, [0, 0])
                     hunks.setdefault(current, [])
@@ -220,42 +227,63 @@ def build_thread_blocks(threads):
 
 
 def render(header, blocks, diff_lines):
-    parts = [header, ""]
+    """Render the digest: chunks joined by blank lines, one trailing
+    newline. The FINAL chunk's own trailing newlines are preserved exactly
+    (bot artifacts are byte-verbatim) — only the separator is added, never
+    a blanket rstrip."""
+    chunks = [header]
     for b in blocks:
-        parts.append(b["head"])
-        parts.append("")
+        chunks.append(b["head"])
         for kind, text in b["segs"]:
-            if text is None:                     # dropped by the budget pass
-                continue
-            parts.append(text)
-            parts.append("")
+            if text is not None:                 # dropped by the budget pass
+                chunks.append(text)
     if diff_lines:
-        parts.append(DIFF_SECTION_HEAD)
-        parts.append("")
-        parts.extend(diff_lines)
-        parts.append("")
-    return "\n".join(parts).rstrip("\n") + "\n"
+        chunks.append(DIFF_SECTION_HEAD)
+        chunks.append("\n".join(diff_lines))
+    return "\n\n".join(chunks) + "\n"
+
+
+def rendered_len(header, blocks, diff_lines):
+    """Exact len() of render(...) without building the string: chunk sizes
+    + one \\n\\n separator per chunk boundary + the final newline. Keeping
+    this in lockstep with render() makes the budget pass pure arithmetic."""
+    n = len(header) + 1                           # final "\n"
+    for b in blocks:
+        n += 2 + len(b["head"])
+        for kind, text in b["segs"]:
+            if text is not None:
+                n += 2 + len(text)
+    if diff_lines:
+        n += 2 + len(DIFF_SECTION_HEAD)
+        n += 2 + len("\n".join(diff_lines))
+    return n
 
 
 def enforce_budget(header, blocks, diff_lines, budget):
-    """While over budget and droppable prose remains, drop the OLDEST
-    threads' prose entirely (bot segments and headings always stay)."""
-    def render_now():
+    """Drop the OLDEST prose (oldest thread first, notes in note order)
+    until the rendered digest fits the budget; bot segments, thread
+    headings, and machine fields always stay. Per-segment cost is computed
+    ONCE and drops are arithmetic — the document renders exactly once at
+    the end (never re-rendered per drop). When even dropping every prose
+    segment cannot reach the budget (heading overhead alone is over), the
+    pass exhausts the droppable bytes and returns the best-effort render.
+    """
+    total = rendered_len(header, blocks, diff_lines)
+    if total <= budget:
         return render(header, blocks, diff_lines)
-
-    text = render_now()
-    while len(text) > budget:
-        target = None
-        for b in reversed(blocks):               # oldest thread with prose
-            if any(k == "prose" and t is not None for k, t in b["segs"]):
-                target = b
-                break
-        if target is None:
-            break                                # only undroppable content left
-        target["segs"] = [(k, None) if k == "prose" else (k, t)
-                          for k, t in target["segs"]]
-        text = render_now()
-    return text
+    need = total - budget                         # bytes to shed
+    for b in reversed(blocks):                    # oldest thread first
+        if need <= 0:
+            break
+        segs = []
+        for kind, text in b["segs"]:
+            if kind == "prose" and text is not None and need > 0:
+                need -= 2 + len(text)             # chunk + its separator
+                segs.append((kind, None))
+            else:
+                segs.append((kind, text))
+        b["segs"] = segs
+    return render(header, blocks, diff_lines)
 
 
 def degrade(reason):
@@ -367,7 +395,6 @@ def main(argv=None):
         "prior_out": prior_path,
         "threads_total": len(threads),
         "threads_truncated": truncated,
-        "prior_findings": len(priors),
         "digest_chars": len(digest_text),
     }))
     return 0

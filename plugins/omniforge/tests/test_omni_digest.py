@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 DIGEST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
@@ -99,7 +100,8 @@ BOT_FINDING_NOTE = """**Important** — Missing null check before dict access
 
 Confidence: 82/100 | Found by: Codebase Reviewer (OmniForge)"""
 
-BOT_SUMMARY_NOTE = """## OmniForge Report: !21 — Add widget API
+BOT_SUMMARY_NOTE = """
+## OmniForge Report: !21 — Add widget API
 
 ### Verdict: APPROVE_WITH_FIXES
 
@@ -320,11 +322,23 @@ class TestOmniDigest(unittest.TestCase):
     # --- overflow: oldest prose dropped, machine fields remain ----------
 
     def test_overflow_drops_oldest_prose(self):
+        # the OLDEST thread also carries a bot note: overflow drops ONLY its
+        # human prose — the bot body must byte-survive the budget pass
+        oldest_bot_note = ("**Minor** — Legacy import order drifted\n\n"
+                           "Confidence: 70/100 | Found by: Codebase "
+                           "Reviewer (OmniForge)")
         threads = []
         for i in range(20):                       # t00 oldest ... t19 newest
             body = ("PROSE-%02d " % i) + "p" * (PROSE_CAP - 20)
-            threads.append(thread("t%02d" % i, body, resolved=False,
-                                  created_at="2026-09-01T10:%02d:00Z" % i))
+            if i == 0:
+                threads.append(thread(
+                    "t00", oldest_bot_note,
+                    replies=[("human", body, "2026-09-01T10:00:30Z")],
+                    resolved=False, created_at="2026-09-01T10:00:00Z"))
+            else:
+                threads.append(thread("t%02d" % i, body, resolved=False,
+                                      created_at="2026-09-01T10:%02d:00Z"
+                                                 % i))
         d = tmp_dir(self)
         mr = write_json(d, "mr.json", mr_data(diff="", comments=""))
         disc = write_json(d, "disc.json", discussions_payload(threads))
@@ -336,9 +350,80 @@ class TestOmniDigest(unittest.TestCase):
         self.assertIn("PROSE-19", digest)          # newest prose survives
         self.assertNotIn("PROSE-00", digest)       # oldest prose dropped
         self.assertNotIn("PROSE-05", digest)
+        self.assertIn(oldest_bot_note, digest)     # bot body NEVER dropped
         self.assertIn("t00", digest)               # thread id + state remain
         self.assertIn("— unresolved —", digest)
         self.assertIn("t19", digest)
+        st = stdout_json(proc)                     # oldest thread is a prior
+        self.assertTrue(st["retrospective"])
+        self.assertEqual(st["prior_count"], 1)
+
+    # --- budget pass is O(n): one render, arithmetic drops --------------
+
+    def test_overflow_perf_10k_threads(self):
+        # 10k threads whose HEADING overhead alone exceeds the budget: every
+        # prose segment ends up dropped (best-effort terminal state) — the
+        # pass must stay arithmetic (one render), not re-render per drop
+        # (the per-drop re-render measured ~18s at this size before the fix).
+        threads = []
+        for i in range(10000):
+            body = ("P%05d " % i) + "x" * 100
+            threads.append(thread("t%05d" % i, body,
+                                  created_at="2026-09-01T10:00:%02dZ"
+                                             % (i % 60)))
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data(diff="", comments=""))
+        disc = write_json(d, "disc.json", discussions_payload(threads))
+        out = os.path.join(d, "out")
+        start = time.monotonic()
+        proc = run_digest(mr, disc, out_dir=out)
+        elapsed = time.monotonic() - start
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        digest = read_file(out, "digest.md")
+        self.assertLess(elapsed, 2.0,
+                        "budget pass must be arithmetic, not per-drop "
+                        "re-rendering (took %.2fs)" % elapsed)
+        self.assertNotIn("P00000", digest)         # all prose dropped
+        self.assertNotIn("P09999", digest)
+        self.assertIn("## Thread t09999", digest)   # headings remain
+
+    # --- render: the document-final bot note keeps its trailing bytes ---
+
+    def test_last_bot_note_trailing_newlines_preserved(self):
+        bot_tail = ("**Minor** — Trailing bytes are part of the artifact\n\n"
+                    "Confidence: 70/100 | Found by: MR Analyst (OmniForge)"
+                    "\n\n\n")
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data(diff="", comments=""))
+        disc = write_json(d, "disc.json", discussions_payload([
+            thread("only1", bot_tail, created_at="2026-09-01T10:00:00Z"),
+        ]))
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, disc, out_dir=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        digest = read_file(out, "digest.md")
+        self.assertIn(bot_tail, digest)            # byte-verbatim tail
+        self.assertTrue(digest.endswith(bot_tail + "\n"))
+
+    # --- diff re-carry: unprefixed +++ headers accepted -----------------
+
+    def test_diff_recarry_accepts_unprefixed_file_header(self):
+        diff = ("diff --git a/src/plain.py b/src/plain.py\n"
+                "--- a/src/plain.py\n"
+                "+++ src/plain.py\n"
+                "@@ -1,2 +1,3 @@\n"
+                " ctx\n"
+                "+new line\n")
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data(diff=diff))
+        disc = write_json(d, "disc.json", discussions_payload([]))
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, disc, out_dir=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        digest = read_file(out, "digest.md")
+        self.assertIn("| src/plain.py | +1/-0 |", digest)
+        self.assertIn("@@ -1,2 +1,3 @@", digest)
+        self.assertNotIn("new line", digest)       # diff body never carried
 
     # --- degrade paths: exit 0 + ONE stderr warning + retrospective off -
 
