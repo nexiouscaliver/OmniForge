@@ -47,7 +47,9 @@ caller-authored exactly as in the posting-guide templates.
 Exit codes: 0 success; 1 posting failure (retries exhausted or 4xx
 fail-fast); 2 usage; 3 duplicate-summary guard refusal.
 Stdout: exactly one JSON line {"posted_summary", "threads", "replies",
-"failures", "dry_run"}. Diagnostics go to stderr (omni_wait.py convention).
+"failures", "dry_run"} on exits 0/1/3; exit 2 (usage) prints no stdout
+JSON — consumers parse stdout only on non-usage exits. Diagnostics go to
+stderr (omni_wait.py convention).
 """
 
 import argparse
@@ -316,6 +318,9 @@ def load_findings(path):
 
 
 def print_dry(argv):
+    # One LOGICAL command per "DRY-RUN: " chunk — bodies containing newlines
+    # make a command span physical lines, so consumers chunk on the prefix,
+    # never on newlines.
     print("DRY-RUN: " + " ".join(shlex.quote(a) for a in argv))
 
 
@@ -341,7 +346,7 @@ def main(argv=None):
               "failures": 0, "dry_run": bool(args.dry_run)}
 
     if args.dry_run:
-        if will_post_summary:
+        if will_post_summary and not args.force:
             print_dry(notes_list_argv(args.project, args.mr))
         if new_threads:
             print_dry(refs_argv(args.project, args.mr))

@@ -373,6 +373,7 @@ class OmniPostReviewTests(unittest.TestCase):
     def test_usage_error_exit_2(self):
         r = self.raw_poster("--mr", MR, "--project", PROJECT)  # missing required
         self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stdout.strip(), "")     # usage prints no stdout JSON
         spath = write_file(os.path.join(self.tmp, "summary.md"),
                            "## OmniForge\n")
         bad = write_file(os.path.join(self.tmp, "bad.json"), "{not json")
@@ -380,6 +381,18 @@ class OmniPostReviewTests(unittest.TestCase):
                              "--summary", spath, "--findings-json", bad)
         self.assertEqual(r2.returncode, 2)
         self.assertIn("findings", r2.stderr)
+        self.assertEqual(r2.stdout.strip(), "")
+
+    # ── dry-run mirrors real-run guard behavior ───────────────
+
+    def test_dry_run_force_skips_guard_command(self):
+        # A real --force run never lists notes; dry-run must match.
+        r = self.run_poster(FINDINGS, extra=["--dry-run", "--force"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("notes?per_page=100", r.stdout)
+        r2 = self.run_poster(FINDINGS, extra=["--dry-run"])
+        self.assertEqual(r2.returncode, 0, r2.stderr)
+        self.assertIn("notes?per_page=100", r2.stdout)
 
 
 if __name__ == "__main__":
