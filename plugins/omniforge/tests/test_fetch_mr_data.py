@@ -31,6 +31,17 @@ SAMPLE_DIFF = "+++ b/file1.py\n@@ -1 +1 @@\n-old\n+new\n+++ b/file2.py\n"
 SAMPLE_COMMITS = "abc1234 feat: first\ndef5678 fix: second"
 
 
+def _git_repo(tmp_path):
+    """Per-test repo root containing a .git dir (passes validate_repo_root).
+
+    Replaces the old shared ``/tmp/.git`` create/remove pattern, which raced
+    across pytest-xdist workers (TOCTOU on one shared directory).
+    """
+    repo = str(tmp_path / "repo")
+    os.makedirs(os.path.join(repo, ".git"), exist_ok=True)
+    return repo
+
+
 def _make_result(returncode, stdout="", stderr=""):
     """Create a mock result matching run_exec's return shape."""
     class Result:
@@ -88,22 +99,10 @@ class TestFetchMrDataSuccess:
     """Happy-path: all subprocess calls succeed."""
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_success(self, mock_run):
+    def test_success(self, mock_run, tmp_path):
         mock_run.side_effect = _build_side_effects()
 
-        # Use a tmp dir with .git to pass validate_repo_root
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
-            result = asyncio.run(_fetch_mr_data("136", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
+        result = asyncio.run(_fetch_mr_data("136", _git_repo(tmp_path)))
 
         assert result["success"] is True
         assert result["mr_id"] == "136"
@@ -134,21 +133,10 @@ class TestFetchMrDataAuthFailure:
     """glab auth status returns non-zero."""
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_auth_failure(self, mock_run):
+    def test_auth_failure(self, mock_run, tmp_path):
         mock_run.return_value = _make_result(1, stderr="not logged in")
 
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
-            result = asyncio.run(_fetch_mr_data("136", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
+        result = asyncio.run(_fetch_mr_data("136", _git_repo(tmp_path)))
 
         assert result["success"] is False
         assert result["error_type"] == "auth_failure"
@@ -159,24 +147,13 @@ class TestFetchMrDataMrNotFound:
     """Auth OK but MR view fails."""
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_mr_not_found(self, mock_run):
+    def test_mr_not_found(self, mock_run, tmp_path):
         mock_run.side_effect = [
             _make_result(0),                          # auth OK
             _make_result(1, stderr="not found"),      # mr view fails
         ]
 
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
-            result = asyncio.run(_fetch_mr_data("999", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
+        result = asyncio.run(_fetch_mr_data("999", _git_repo(tmp_path)))
 
         assert result["success"] is False
         assert result["error_type"] == "mr_not_found"
@@ -186,8 +163,8 @@ class TestFetchMrDataMrNotFound:
 class TestFetchMrDataValidationErrors:
     """Validation failures before any subprocess calls."""
 
-    def test_invalid_mr_id(self):
-        result = asyncio.run(_fetch_mr_data("abc", "/tmp"))
+    def test_invalid_mr_id(self, tmp_path):
+        result = asyncio.run(_fetch_mr_data("abc", _git_repo(tmp_path)))
         assert result["success"] is False
         assert result["error_type"] == "validation_error"
         assert "Invalid MR ID" in result["error"]
@@ -203,7 +180,7 @@ class TestCharacterTruncation:
     """Character-based diff truncation (MAX_DIFF_CHARS)."""
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_diff_truncated_by_chars(self, mock_run):
+    def test_diff_truncated_by_chars(self, mock_run, tmp_path):
         """Diff under MAX_DIFF_LINES but over MAX_DIFF_CHARS gets truncated."""
         from omniforge_mcp_server import MAX_DIFF_CHARS
 
@@ -219,18 +196,7 @@ class TestCharacterTruncation:
 
         mock_run.side_effect = _build_side_effects(diff_stdout=large_diff)
 
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
-            result = asyncio.run(_fetch_mr_data("136", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
+        result = asyncio.run(_fetch_mr_data("136", _git_repo(tmp_path)))
 
         assert result["success"] is True
         assert result["diff_truncated"] is True
@@ -238,7 +204,7 @@ class TestCharacterTruncation:
         assert "TRUNCATED" in result["diff"]
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_diff_line_map_complete_despite_char_truncation(self, mock_run):
+    def test_diff_line_map_complete_despite_char_truncation(self, mock_run, tmp_path):
         """diff_line_map is parsed from raw diff before char truncation."""
         from omniforge_mcp_server import MAX_DIFF_CHARS
 
@@ -251,42 +217,20 @@ class TestCharacterTruncation:
 
         mock_run.side_effect = _build_side_effects(diff_stdout=large_diff)
 
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
-            result = asyncio.run(_fetch_mr_data("136", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
+        result = asyncio.run(_fetch_mr_data("136", _git_repo(tmp_path)))
 
         assert result["success"] is True
         # diff_line_map should have the file from the raw diff
         assert "bigfile.py" in result["diff_line_map"]
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
-    def test_small_diff_not_truncated(self, mock_run):
+    def test_small_diff_not_truncated(self, mock_run, tmp_path):
         """A small diff stays intact (no character truncation applied)."""
         small_diff = "+++ b/small.py\n@@ -1 +1 @@\n-old\n+new\n"
 
         mock_run.side_effect = _build_side_effects(diff_stdout=small_diff)
 
-        repo = "/tmp"
-        git_dir = os.path.join(repo, ".git")
-        created_git = False
-        if not os.path.isdir(git_dir):
-            os.makedirs(git_dir, exist_ok=True)
-            created_git = True
-
-        try:
-            result = asyncio.run(_fetch_mr_data("136", repo))
-        finally:
-            if created_git:
-                os.rmdir(git_dir)
+        result = asyncio.run(_fetch_mr_data("136", _git_repo(tmp_path)))
 
         assert result["success"] is True
         assert result["diff_truncated"] is False
