@@ -5,6 +5,7 @@ Stdlib only. Stdout: exactly one JSON line. Diagnostics: stderr."""
 
 import argparse
 import json
+import os
 import re
 import sys
 
@@ -78,10 +79,14 @@ def main(argv=None):
     passthrough = block is None or (bool(block) and not findings)
     out = {"agent": a.agent, "report": a.report, "findings": findings,
            "anomalies": anomalies, "passthrough": passthrough}
-    out_path = a.out or (a.report.rsplit(".", 1)[0] + ".findings.json")
-    with open(out_path, "w") as fh:
-        json.dump(out, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
+    out_path = a.out or (os.path.splitext(a.report)[0] + ".findings.json")
+    try:
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump(out, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+    except OSError as e:
+        print(f"omni_validate_findings: cannot write findings file: {e}", file=sys.stderr)
+        return 2
     print(json.dumps({"ok": True, "validated": len(findings),
                       "anomalies": len(anomalies), "passthrough": passthrough}))
     for an in anomalies:

@@ -92,11 +92,11 @@ def stdout_json(proc):
 
 
 def default_out(report):
-    return report.rsplit(".", 1)[0] + ".findings.json"
+    return os.path.splitext(report)[0] + ".findings.json"
 
 
 def load_json(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -336,6 +336,38 @@ class TestOmniValidateFindings(unittest.TestCase):
         proc = run_validator(os.path.join(tempfile.gettempdir(),
                                           "omni_no_such_report.md"), "codebase")
         self.assertEqual(proc.returncode, 2)
+
+    # --- review round 1: out-write hardening ---
+
+    def test_unwritable_out_exit2_no_stdout(self):
+        d = tmp_dir(self)
+        report = write_report(d, "reviewer.md", report_text([finding()]))
+        proc = run_validator(report, "codebase",
+                             out=os.path.join(d, "no", "such", "dir", "o.json"))
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(proc.stdout.strip(), "")   # no JSON line on write failure
+        self.assertIn("cannot write", proc.stderr)
+
+    def test_non_ascii_fields_round_trip(self):
+        d = tmp_dir(self)
+        f = finding(one_liner="Nicht geprüfter None-Zugriff — Absturz möglich",
+                    evidence="service.py:88 — cfg.get('x') wird ohne None-Prüfung dereferenziert")
+        report = write_report(d, "reviewer.md", report_text([f]))
+        proc = run_validator(report, "codebase")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        data = load_json(default_out(report))
+        self.assertEqual(data["findings"], [f])
+
+    def test_default_out_stem_handles_dotted_dir(self):
+        d = tmp_dir(self)
+        sub = os.path.join(d, "v1.2.3")             # dotted dir, dotless basename
+        os.makedirs(sub)
+        report = write_report(sub, "reviewer", PROSE + "\n```json\n[]\n```\n")
+        proc = run_validator(report, "codebase")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = os.path.join(sub, "reviewer.findings.json")
+        self.assertTrue(os.path.exists(out), out)   # lands NEXT TO the report
+        self.assertEqual(load_json(out)["agent"], "codebase")
 
 
 if __name__ == "__main__":
