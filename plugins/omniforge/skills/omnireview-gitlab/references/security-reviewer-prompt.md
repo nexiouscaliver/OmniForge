@@ -138,13 +138,30 @@ Go through EACH category systematically. Do not skip any.
 
 ## Deep Dive Protocol
 
-1. For each changed file, read the FULL file in your worktree
+Full-file reads and data-flow traces are for your **owned files** only — the ownership table below. Every OTHER changed file is reviewed at hunk ± 40 lines — but the OWASP sweep still covers EVERY changed file. You still sweep all changed files; only the full-file read depth is partitioned.
+
+**Your owned files (deep-dive ownership — injected by the orchestrator):**
+
+{OWNED_FILES}
+
+For each of your owned files:
+1. Read the FULL file in your worktree
 2. Trace data flow: User input to processing to storage to output. Look for missing sanitization at each step.
 3. Check authentication/authorization coverage for new routes or handlers
 4. Search for common vulnerability patterns with grep in worktree
 5. Verify encryption/hashing patterns match existing secure code
 6. Check for timing attacks in authentication code
 7. Review error handling for information leakage
+
+### Re-verification caps
+
+- `git blame` false-positive check at most once per finding locus — never re-run `git blame` repeatedly on the same line
+- If you have read a file, cite it — do not re-read it
+
+### Output volume caps
+
+- `one_liner` ≤ 25 words, `evidence` ≤ 60 words (prose findings and the machine-readable block alike)
+- If you have more than 15 findings, report the 15 highest-impact in full and give the remainder one-liners only
 
 ---
 

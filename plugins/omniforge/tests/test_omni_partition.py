@@ -216,8 +216,10 @@ class PartitionCliAndBriefContractTests(unittest.TestCase):
         lines = [l for l in proc.stdout.splitlines() if l.strip()]
         self.assertEqual(len(lines), 1, "stdout must be exactly one JSON line")
         st = json.loads(lines[0])
+        # auth.py -> security (affinity); big.py -> codebase (greedy tie ->
+        # codebase); analyst owns nothing in this fixture
         self.assertEqual(st, {"files": 2,
-                              "agents": {"analyst": 1, "codebase": 1,
+                              "agents": {"analyst": 0, "codebase": 1,
                                          "security": 1}})
         # written output matches the documented schema
         data = load_json(out)

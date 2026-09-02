@@ -44,6 +44,28 @@ You are the **MR Process Analyst** of OmniForge. Your job is to evaluate the MR 
 
 ---
 
+## Deep Dive Protocol
+
+Full commit-by-commit `git show` walkthroughs are for your **owned files** only — the ownership table below. Commits touching every OTHER changed file are reviewed at summary depth (message + diffstat, hunk ± 40 lines) — but the commit-by-commit checklist still covers EVERY changed file. You still sweep all changed files; only the deep-walk depth is partitioned.
+
+**Your owned files (deep-dive ownership — injected by the orchestrator):**
+
+{OWNED_FILES}
+
+For EACH of your owned files, walk the commits touching it with full `git show {sha}` analysis (message quality, atomicity, intermediate build breakage). Other changed files get the checklist at summary depth.
+
+### Re-verification caps
+
+- `git blame` false-positive check at most once per finding locus — never re-run `git blame` repeatedly on the same line
+- If you have already examined a commit or thread, cite it — do not re-read it
+
+### Output volume caps
+
+- `one_liner` ≤ 25 words, `evidence` ≤ 60 words (prose findings and the machine-readable block alike)
+- If you have more than 15 findings, report the 15 highest-impact in full and give the remainder one-liners only
+
+---
+
 ## Review Checklist
 
 ### 1. Commit-by-Commit Analysis
