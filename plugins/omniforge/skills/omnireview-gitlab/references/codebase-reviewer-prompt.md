@@ -165,3 +165,34 @@ When done, report:
 - List of files you explored beyond the diff (to show thoroughness)
 
 Do NOT post comments or take any actions. Only report your findings.
+
+---
+
+## Machine-readable findings block (REQUIRED — final block of your report)
+
+Your report MUST end with exactly one fenced ```json block containing a top-level JSON
+array — one object per finding, `[]` when you found nothing (zero findings is signal, not
+failure). Derive it from your own prose findings above; the prose "Finding {N}" blocks stay.
+
+```json
+[
+  {
+    "agent": "codebase",
+    "file": "src/app.py",
+    "line_range": [42, 44],
+    "category": "logic",
+    "severity": "important",
+    "confidence": 82,
+    "one_liner": "Missing None guard before dict access",
+    "evidence": "service.py:88 calls cfg.get('x') and dereferences without a None check"
+  }
+]
+```
+
+Field contract: `agent` one of analyst|codebase|security; `file` repo-relative path or
+`null` for non-file findings; `line_range` `[start, end]` inclusive NEW-side line numbers or
+`null`; `category` from your own vocabulary above (quality | architecture | logic |
+testing | dependencies | performance); `severity` critical|important|minor; `confidence`
+integer 0–100 (you assign it — nothing downstream ever changes it); `one_liner` ≤ 25 words;
+`evidence` ≤ 60 words. Optional extras (impact, attack_scenario, recommendation) are
+preserved verbatim.

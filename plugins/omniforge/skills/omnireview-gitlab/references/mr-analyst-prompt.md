@@ -137,3 +137,34 @@ When done, report:
 - Total findings count by severity
 
 Do NOT post comments or take any actions. Only report your findings.
+
+---
+
+## Machine-readable findings block (REQUIRED — final block of your report)
+
+Your report MUST end with exactly one fenced ```json block containing a top-level JSON
+array — one object per finding, `[]` when you found nothing (zero findings is signal, not
+failure). Derive it from your own prose findings above; the prose "Finding {N}" blocks stay.
+
+```json
+[
+  {
+    "agent": "analyst",
+    "file": null,
+    "line_range": null,
+    "category": "commit-quality",
+    "severity": "minor",
+    "confidence": 85,
+    "one_liner": "Fixup commit not squashed before review",
+    "evidence": "Commit 4b1f2e3 only edits a line introduced by commit 9c0d7aa earlier in this MR"
+  }
+]
+```
+
+Field contract: `agent` one of analyst|codebase|security; `file` repo-relative path or
+`null` for non-file findings (commit hygiene, description, discussions, scope carry no
+locus — use `null`); `line_range` `[start, end]` inclusive NEW-side line numbers or `null`;
+`category` from your own vocabulary above (commit-quality | description | discussions |
+scope | ci); `severity` critical|important|minor; `confidence` integer 0–100 (you assign
+it — nothing downstream ever changes it); `one_liner` ≤ 25 words; `evidence` ≤ 60 words.
+Optional extras (impact, attack_scenario, recommendation) are preserved verbatim.

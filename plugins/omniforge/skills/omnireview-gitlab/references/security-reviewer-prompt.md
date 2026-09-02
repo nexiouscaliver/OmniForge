@@ -208,3 +208,34 @@ When done, report:
 - Total findings count by severity and impact
 
 Do NOT post comments or take any actions. Only report your findings.
+
+---
+
+## Machine-readable findings block (REQUIRED — final block of your report)
+
+Your report MUST end with exactly one fenced ```json block containing a top-level JSON
+array — one object per finding, `[]` when you found nothing (zero findings is signal, not
+failure). Derive it from your own prose findings above; the prose "Finding {N}" blocks stay.
+
+```json
+[
+  {
+    "agent": "security",
+    "file": "src/auth.py",
+    "line_range": [12, 18],
+    "category": "A07",
+    "severity": "critical",
+    "confidence": 90,
+    "one_liner": "JWT claims trusted before the signature is verified",
+    "evidence": "handler.py:40 reads the role claim from the decoded token; verify() only runs on line 44"
+  }
+]
+```
+
+Field contract: `agent` one of analyst|codebase|security; `file` repo-relative path or
+`null` for non-file findings; `line_range` `[start, end]` inclusive NEW-side line numbers or
+`null`; `category` from your own OWASP vocabulary above (A01-A10 or "additional") — the
+`OWASP Category` becomes the `category` value; `severity` critical|important|minor;
+`confidence` integer 0–100 (you assign it — nothing downstream ever changes it);
+`one_liner` ≤ 25 words; `evidence` ≤ 60 words. Optional extras (impact, attack_scenario,
+recommendation) are preserved verbatim.
