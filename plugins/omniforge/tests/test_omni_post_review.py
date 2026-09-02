@@ -96,7 +96,7 @@ if [ "$method" = "POST" ]; then
         notes) spec="$GLAB_FAIL_NOTES" ;;
     esac
     if [ -n "$spec" ]; then
-        code=$(printf '%s' "$spec" | cut -d, -f "$cnt")
+        code=$(printf '%s' "$spec" | awk -F, -v f="$cnt" '{ if (f <= NF) print $f }')
         if [ -n "$code" ]; then
             printf 'HTTP %s: server error body\\n' "$code" >&2
             exit 1
@@ -257,8 +257,10 @@ class OmniPostReviewTests(unittest.TestCase):
     def test_nested_position_workaround_fields_present(self):
         r = self.run_poster(FINDINGS[:1], extra=["--dry-run"])
         self.assertEqual(r.returncode, 0, r.stderr)
-        inline = [ln for ln in r.stdout.splitlines()
-                  if ln.startswith("DRY-RUN:") and "/discussions --method" in ln]
+        # One logical command per DRY-RUN: chunk (bodies contain newlines, so
+        # a command can span physical lines — chunk on the prefix, not \n).
+        chunks = r.stdout.split("DRY-RUN: ")
+        inline = [c for c in chunks[1:] if "/discussions --method" in c]
         self.assertEqual(len(inline), 1)
         for token in ("--raw-field", "position[position_type]=text",
                       "position[base_sha]", "position[head_sha]",

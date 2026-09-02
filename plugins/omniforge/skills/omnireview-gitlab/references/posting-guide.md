@@ -116,4 +116,27 @@ The MCP tools automatically fetch diff position SHAs, URL-encode the project pat
 | Approve | `glab mr approve {id}` |
 | Open browser | `glab mr view {id} -w` |
 
+#### Shipped fallback script: `omni_post_review.py` (recommended over improvised commands)
+
+`plugins/omniforge/skills/omnireview-gitlab/scripts/omni_post_review.py` wraps the fallback commands above with
+per-call retry (3 attempts, 2 s then 4 s exponential backoff; 5xx/429/network errors retried, 4xx fail-fast), the
+nested-position workaround applied automatically (diff refs fetched once per invocation — never once per finding),
+`--reply-to <thread_id>` / per-entry `reply_to_thread_id` for carrying forward OPEN prior findings (replies on the
+recorded thread — never a new one; resolved priors are skipped by the caller before the array is prepared), a
+duplicate-summary guard (`--since <run-start-epoch>`; refuses if an OmniForge summary note newer than `--since`
+exists; `--force` overrides), and `--dry-run`. It accepts the SAME findings array as `post_full_review` — one
+authoring path feeds MCP (primary) and this script (fallback):
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_post_review.py" \
+  --mr {iid} --project {project-id-or-encoded-fullpath} \
+  --summary /tmp/omni_review_{id}_summary.md \
+  --findings-json /tmp/omni_review_{id}_findings.json \
+  --since {run-start-epoch}
+```
+
+MCP `post_full_review` remains the recommended primary (single-call, N+1-safe); open-prior replies in MCP runs use
+`mcp__omniforge__reply_to_discussion`. The script is standalone (stdlib only, glab subprocess only) so posting
+still works when the MCP server cannot start.
+
 **No AI attribution in any posted content.** Write as a standard code review comment.

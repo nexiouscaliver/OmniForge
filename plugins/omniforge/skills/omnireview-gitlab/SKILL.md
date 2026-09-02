@@ -338,6 +338,8 @@ Post summary comment + individual inline threads for each finding >= 70 confiden
 
 **REQUIRED REFERENCE:** `./references/posting-guide.md` — you MUST read this before posting anything. Contains the summary comment template, inline thread template, MCP tool call syntax (`post_full_review` findings JSON format), and bash fallback commands. Do NOT improvise posting format — use the exact templates from the reference.
 
+**Fallback (no MCP server):** When MCP is unavailable, use the shipped `scripts/omni_post_review.py` (see posting-guide.md — retry/backoff, reply routing, duplicate-summary guard, `--dry-run`) — never improvised `/tmp` posting scripts.
+
 ---
 
 ## Phase 7: Cleanup
