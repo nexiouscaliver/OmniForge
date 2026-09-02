@@ -308,7 +308,7 @@ def finalize(groups, n_files, priors, threshold, sim):
             locus = {"file": rep_file, "lines": None, "anchor": rep_file}
         else:
             locus = {"file": rep_file, "lines": [grp["lo"], grp["hi"]],
-                     "anchor": "%s:%d" % (rep_file, rep["line_range"][0])}
+                     "anchor": "%s:%d" % (rep_file, min(rep["line_range"]))}
         reasons = []
         prior_m = match_prior(priors, grp["file"], grp["lo"], grp["hi"])
         if prior_m is not None:

@@ -102,7 +102,7 @@ The partitioner assigns every changed file exactly one deep-dive owner: security
 
 ### Save BOTH tool outputs and build the context digest
 
-Persist BOTH Phase-1 tool responses to /tmp — the `fetch_mr_data` JSON to `/tmp/omni_mr{id}_data.json` (the partitioner input above) AND the `fetch_mr_discussions` JSON to `/tmp/omni_mr{id}_discussions.json` — then run the shipped digest on both:
+Persist BOTH Phase-1 tool responses to /tmp — the `fetch_mr_data` JSON to `/tmp/omni_mr{id}_data.json` (the partitioner input above) AND the `fetch_mr_discussions` JSON (from `mcp__omniforge__fetch_mr_discussions`; the fallback path assembles the same `{"success": true, "discussions": [...]}` envelope) to `/tmp/omni_mr{id}_discussions.json` — then run the shipped digest on both:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_digest.py" \
@@ -395,7 +395,7 @@ rm -rf .worktrees/omni-analyst-{id} .worktrees/omni-codebase-{id} .worktrees/omn
 git worktree prune
 ```
 
-**Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_data.json`, `/tmp/omni_mr{id}_discussions.json`, `/tmp/omni_mr{id}_prior_findings.json`, `/tmp/omni_digest_{id}/` (digest outputs), `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs).
+**Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_data.json`, `/tmp/omni_mr{id}_discussions.json`, `/tmp/omni_mr{id}_prior_findings.json`, `/tmp/omni_digest_{id}/` (digest outputs), `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs) — plus the Phase-4 consolidator outputs `/tmp/omni_consolidate_{id}/` (`clusters.json` + `worklist.md`) and Phase 6's `/tmp/omni_review_{id}_summary.md` and `/tmp/omni_review_{id}_findings.json` (posting inputs, if posting ran).
 
 ---
 

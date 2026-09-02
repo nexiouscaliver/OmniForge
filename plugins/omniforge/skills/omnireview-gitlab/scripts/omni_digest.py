@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""omni_digest.py — build the ONE-FILE Phase-4 context digest from the saved
+"""omni_digest.py — build the ONE-FILE Phase-3 context digest from the saved
 Phase-1 tool outputs (fetch_mr_data JSON + fetch_mr_discussions JSON).
 
 Bot-authored artifacts (OmniForge summary notes, posted finding-thread
@@ -12,8 +12,9 @@ budget, the OLDEST threads' prose is dropped entirely (thread ID + resolved
 state always remain — machine fields). Pure string slicing and counting —
 no LLM calls, no summarization of any content, ever.
 
-Outputs: digest.md (the Phase-4 one-file input) and prior-findings.json
-(the omni_consolidate.py --prior input) into --out-dir, or the explicit
+Outputs: digest.md (the Phase-3 one-file input, injected in place of
+{MR_COMMENTS} in the agent prompts) and prior-findings.json (the Phase-4
+omni_consolidate.py --prior input) into --out-dir, or the explicit
 --out / --prior-out paths. Stdout: exactly one JSON line. Diagnostics:
 stderr. Stdlib only.
 

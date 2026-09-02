@@ -125,7 +125,10 @@ nested-position workaround applied automatically (diff refs fetched once per inv
 recorded thread — never a new one; resolved priors are skipped by the caller before the array is prepared), a
 duplicate-summary guard (`--since <run-start-epoch>`; refuses if an OmniForge summary note newer than `--since`
 exists; `--force` overrides), and `--dry-run`. It accepts the SAME findings array as `post_full_review` — one
-authoring path feeds MCP (primary) and this script (fallback):
+authoring path feeds MCP (primary) and this script (fallback). The array shape matches for new-thread entries,
+but `reply_to_thread_id` is script-only routing: MCP `_post_full_review` posts every entry as a NEW inline thread
+(a reply entry sent via MCP would wrongly create a new thread), so MCP runs must send replies via
+`mcp__omniforge__reply_to_discussion` instead:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_post_review.py" \
