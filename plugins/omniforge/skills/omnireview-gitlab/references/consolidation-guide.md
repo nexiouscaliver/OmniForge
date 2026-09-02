@@ -6,8 +6,8 @@ Consolidation is deterministic and script-driven. Python never does confidence
 arithmetic: every confidence value in the output is byte-identical to an
 agent-assigned input — never adjusted, never recomputed. Corroboration is
 `count`/`of` metadata only. The orchestrator's job is to run two scripts and
-adjudicate ONE generated worklist in a single pass — never to hand-merge,
-hand-boost, or severity-pick by itself.
+adjudicate ONE generated worklist in a single pass — never to hand-merge or
+severity-pick by itself.
 
 ---
 
