@@ -55,6 +55,14 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("omni_consolidate.py", t)
         self.assertIn("ONE pass", t)
 
+    def test_phase6_option1_names_posting_fallback_script(self):
+        t = read("SKILL.md")
+        opt1 = t.index("### Option 1: Full Review Post (Recommended)")
+        phase7 = t.index("## Phase 7")
+        self.assertLess(opt1, phase7)
+        self.assertIn("omni_post_review.py", t[opt1:phase7],
+                      "Phase 6 Option 1 must name the shipped posting fallback script")
+
     def test_one_dispatch_sentence_in_all_briefs(self):
         for name in BRIEFS:
             t = read(os.path.join("references", name))
