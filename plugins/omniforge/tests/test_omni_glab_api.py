@@ -190,6 +190,32 @@ class TransportRequestTests(unittest.TestCase):
                                   form=[("resolved", "true")])
         self.assertEqual(seen, ["DELETE", "POST", "PUT"])
 
+    def test_user_agent_header_sent(self):
+        # gitlab.com's Cloudflare edge challenges the default Python-urllib
+        # UA; every request must carry the explicit User-Agent.
+        seen = []
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def getcode(self):
+                return 200
+
+            def read(self):
+                return b"{}"
+
+        def fake_urlopen(req, timeout=None):
+            seen.append(req.headers.get("User-agent"))
+            return FakeResp()
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            omni_glab_api.request("GET", "/projects/1", "tok")
+        self.assertEqual(seen, [omni_glab_api.USER_AGENT])
+
     def test_get_all_raises_on_unparseable_page(self):
         # A 200 whose body is not a JSON array must raise, never silently
         # terminate pagination as an empty page.

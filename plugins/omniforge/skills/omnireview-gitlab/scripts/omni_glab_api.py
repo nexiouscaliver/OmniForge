@@ -38,6 +38,9 @@ import urllib.request
 AUTH_HEADER_KIND = "Bearer"
 DEFAULT_HOST = "https://gitlab.com"
 HTTP_TIMEOUT_SECS = 60
+# gitlab.com's Cloudflare edge serves a managed challenge (HTTP 403 HTML)
+# to the default "Python-urllib/x" User-Agent; an explicit UA passes.
+USER_AGENT = "omniforge-glab-api/3.3.1"
 
 sleep_fn = time.sleep          # module-level so tests can inject a recorder
 
@@ -135,7 +138,7 @@ def request(method, path, token, host=None, form=None, attempts=3,
     url = api_base(resolve_host(host)) + path
     data = urllib.parse.urlencode(form).encode("utf-8") if form else None
     name, value = auth_header(token)
-    headers = {name: value}
+    headers = {name: value, "User-Agent": USER_AGENT}
     if data is not None:
         headers["Content-Type"] = "application/x-www-form-urlencoded"
     last_status, last_body = 0, ""
