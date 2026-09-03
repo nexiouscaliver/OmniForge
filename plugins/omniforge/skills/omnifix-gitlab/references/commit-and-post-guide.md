@@ -68,6 +68,8 @@ mcp__omniforge__resolve_discussion(
 )
 ```
 
+**No-MCP fallback:** `glab api --method PUT projects/:id/merge_requests/:iid/discussions/:discussion_id --raw-field resolved=true` (flat key — nested-key-safe).
+
 ### Summary Comment
 
 Post a summary comment on the MR:

@@ -14,7 +14,7 @@ This is the most common action. It posts everything in one go:
 
 **Do NOT batch findings.** Each finding gets its own thread so the MR author can resolve them independently. Multiple threads on the same file = expected and encouraged.
 
-**Implementation:** Use the `mcp__omniforge__post_full_review` tool which handles the summary and all inline threads efficiently in a single tool call.
+**Implementation:** use the shipped `omni_post_review.py` (the script wraps the direct GitLab Discussions API — anchored inline threads, retry/backoff, reply routing, duplicate-summary guard).
 
 **Line numbers:** Use the `diff_line_map` from the `fetch_mr_data` response (Phase 1) to get valid line numbers for each file. The `added_lines` array contains exact line numbers where code was added — use these for `line_number` in findings. Do NOT call `map_diff_lines` separately — the data is already available from Phase 1.
 
@@ -87,47 +87,19 @@ Confidence: {score}/100 | Found by: {agent_name(s)}
 
 ### Action Commands
 
-**If MCP tools are available** (recommended — handles all GitLab API complexity automatically):
+#### Shipped script:
 
-| Action | MCP Tool |
-|--------|----------|
-| Full review post | `mcp__omniforge__post_full_review(mr_id, summary, findings_json, repo_root)` |
-| Summary only | `mcp__omniforge__post_review_summary(mr_id, summary, repo_root)` |
-| Inline thread | `mcp__omniforge__post_inline_thread(mr_id, file_path, line_number, body, repo_root)` |
-| Create issue | `mcp__omniforge__create_linked_issue(mr_id, title, description, labels, repo_root)` |
+Run the shipped `scripts/omni_post_review.py` for the summary note and all inline threads —
+anchored via the position payload, with retry/backoff, reply routing, the duplicate-summary
+guard, and `--dry-run` built in. For partial-failure resume use
+`omni_post_review.py --skip-summary --force` as described below.
 
-For `post_full_review`, the `findings` parameter is a JSON string of an array:
-```json
-[
-  {"file_path": "src/app.py", "line_number": 42, "body": "**Important** — Missing null check\n\n**What:** ..."},
-  {"file_path": "src/app.py", "line_number": 87, "body": "**Minor** — Magic number\n\n**What:** ..."}
-]
-```
-
-The MCP tools automatically fetch diff position SHAs, URL-encode the project path, and construct the GitLab API request. The model only needs to provide the text and line numbers.
-
-**Fallback (no MCP server):**
-
-| Action | Command |
-|--------|---------|
-| Summary | `glab mr note {id} -m "{summary}"` |
-| Inline thread | `glab api projects/:fullpath/merge_requests/{iid}/discussions --method POST --raw-field "body={text}" --raw-field "position[position_type]=text" --raw-field "position[base_sha]={sha}" --raw-field "position[head_sha]={sha}" --raw-field "position[start_sha]={sha}" --raw-field "position[new_path]={file}" --raw-field "position[new_line]={line}"` |
-| Create issue | `glab issue create -t "[MR !{id}] {title}" -d "{desc}" --linked-mr {id} --no-editor` |
-| Approve | `glab mr approve {id}` |
-| Open browser | `glab mr view {id} -w` |
-
-#### Shipped fallback script: `omni_post_review.py` (recommended over improvised commands)
-
-`plugins/omniforge/skills/omnireview-gitlab/scripts/omni_post_review.py` wraps the fallback commands above with
-per-call retry (3 attempts, 2 s then 4 s exponential backoff; 5xx/429/network errors retried, 4xx fail-fast), the
-nested-position workaround applied automatically (diff refs fetched once per invocation — never once per finding),
-`--reply-to <thread_id>` / per-entry `reply_to_thread_id` for carrying forward OPEN prior findings (replies on the
-recorded thread — never a new one; resolved priors are skipped by the caller before the array is prepared), a
-duplicate-summary guard (`--since <run-start-epoch>`; refuses if an OmniForge summary note newer than `--since`
-exists; `--force` overrides), and `--dry-run`. It accepts the SAME findings array as `post_full_review` — one
-authoring path feeds MCP (primary) and this script (fallback). The array shape matches for new-thread entries,
-but `reply_to_thread_id` is script-only routing: MCP `_post_full_review` posts every entry as a NEW inline thread
-(a reply entry sent via MCP would wrongly create a new thread), so MCP runs must send replies via
+The script adds `--reply-to <thread_id>` / per-entry `reply_to_thread_id` for carrying forward
+OPEN prior findings (replies on the recorded thread — never a new one; resolved priors are
+skipped by the caller before the array is prepared). It accepts the SAME findings array as
+`post_full_review`. The array shape matches for new-thread entries, but `reply_to_thread_id`
+is script-only routing: MCP `_post_full_review` posts every entry as a NEW inline thread (a
+reply entry sent via MCP would wrongly create a new thread), so MCP runs must send replies via
 `mcp__omniforge__reply_to_discussion` instead:
 
 ```bash
@@ -151,11 +123,40 @@ Exit codes:
 fast — after a mid-batch exit 1 the summary and the leading threads are already on the MR. NEVER rerun the same
 command with `--force`: it skips the guard, reposts the summary, and duplicates every already-posted thread. A
 plain rerun is refused by the guard (exit 3 — this run's own summary is newer than `--since`); that is the guard
-working. Re-post ONLY the remaining findings, using the raw fallback commands above (one inline-thread
-`glab api projects/:fullpath/merge_requests/{iid}/discussions …` call per unposted entry). A script rerun is
-safe only when nothing was posted yet (failure during the diff-refs fetch or the summary post — plain rerun, no
-`--force` needed); past the summary there is no threads-only script mode, so rerunning with the findings array
-edited down to the unposted entries would still repost the summary — use the raw commands instead.
+working. Re-post ONLY the remaining entries: `omni_post_review.py --skip-summary --force` with the findings
+array edited down to the unposted entries (never a plain rerun with `--force` — it reposts the summary). A
+script rerun is safe only when nothing was posted yet (failure during the diff-refs fetch or the summary post —
+plain rerun, no `--force` needed).
+
+**Fallback (no MCP server):**
+
+| Action | Command |
+|--------|---------|
+| Summary | `glab mr note {id} -m "{summary}"` |
+| Create issue | `glab issue create -t "[MR !{id}] {title}" -d "{desc}" --linked-mr {id} --no-editor` |
+| Approve | `glab mr approve {id}` |
+| Open browser | `glab mr view {id} -w` |
+
+**Optional: interactive MCP installs**
+
+**If MCP tools are available** (recommended — handles all GitLab API complexity automatically):
+
+| Action | MCP Tool |
+|--------|----------|
+| Full review post | `mcp__omniforge__post_full_review(mr_id, summary, findings_json, repo_root)` |
+| Summary only | `mcp__omniforge__post_review_summary(mr_id, summary, repo_root)` |
+| Inline thread | `mcp__omniforge__post_inline_thread(mr_id, file_path, line_number, body, repo_root)` |
+| Create issue | `mcp__omniforge__create_linked_issue(mr_id, title, description, labels, repo_root)` |
+
+For `post_full_review`, the `findings` parameter is a JSON string of an array:
+```json
+[
+  {"file_path": "src/app.py", "line_number": 42, "body": "**Important** — Missing null check\n\n**What:** ..."},
+  {"file_path": "src/app.py", "line_number": 87, "body": "**Minor** — Magic number\n\n**What:** ..."}
+]
+```
+
+The MCP tools automatically fetch diff position SHAs, URL-encode the project path, and construct the GitLab API request. The model only needs to provide the text and line numbers.
 
 MCP `post_full_review` remains the recommended primary (single-call, N+1-safe); open-prior replies in MCP runs use
 `mcp__omniforge__reply_to_discussion`. The script is standalone (stdlib only, glab subprocess only) so posting

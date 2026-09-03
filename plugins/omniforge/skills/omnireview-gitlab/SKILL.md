@@ -61,22 +61,34 @@ digraph omnireview_flow {
 
 Fetch ALL data before dispatching agents. Agents get data injected — they never re-fetch.
 
-**If MCP tools are available** (plugin install), use the single tool call:
+**Primary (all runs):** ONE invocation of the shipped gather script produces ONE JSON file
+with everything Phase 1 needs — MR data, diff, diff_line_map, commits, AND every
+discussion thread.
 
-```
-mcp__omniforge__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
+**Precondition:** `GITLAB_TOKEN` must be in the environment. If unset, extract it from the
+authenticated host glab (never printed):
+`export GITLAB_TOKEN=$(glab auth status --hostname <host> -t 2>/dev/null | sed -n 's/^.*- Token: //p')`
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_fetch_mr.py" \
+  --project {project} --mr {id} --out /tmp/omni_mr{id}_gather.json
 ```
 
-Returns a structured JSON package with: mr_id, title, author, source_branch, target_branch, pipeline_status, description, comments, diff, diff_line_count, diff_too_large, diff_truncated, **diff_line_map**, commits, files_changed, labels, assignees, reviewers.
+The gather file carries the full package: mr_id, title, author, source_branch, target_branch,
+pipeline_status, description, comments, diff, diff_line_count, diff_too_large, diff_truncated,
+**diff_line_map**, diff_refs, commits, files_changed, labels, assignees, reviewers, plus the
+embedded discussions envelope and versions. (If `${CLAUDE_PLUGIN_ROOT}` is not set in the
+current context, construct the script path from this skill's own base directory plus
+`scripts/omni_fetch_mr.py`.)
 
 **IMPORTANT: `diff_line_map` is already included in this response.** It contains exact changed line numbers per file (added_lines, all_new_lines, hunks). When posting inline threads, use these line numbers directly — do NOT call `map_diff_lines` separately. The standalone `map_diff_lines` tool is only for re-parsing if you have a diff string from another source.
 
 If `diff_too_large` is true, the diff is auto-truncated to 10,000 lines. Agents explore full files in their worktrees instead.
 
-**Error handling:** If the tool returns `success: false`, check `error_type`:
-- `auth_failure` — Tell user to run `glab auth login`
-- `mr_not_found` — Verify MR number and repository
-- `validation_error` — Check input format
+**Error handling:** the script's exit codes are the contract — 2 = usage/token (stderr names
+the exact `glab auth status` extraction one-liner), 1 = API failure after bounded retries,
+4 = head moved (see the Phase 3 STOP-guard). A gather failure stops Phase 1; report the
+stderr line. (MCP fetch tools remain an optional convenience in interactive installs.)
 
 **Fallback (personal skill install without MCP server):** Use bash commands directly:
 
@@ -91,22 +103,22 @@ git log --oneline origin/{target_branch}..origin/{source_branch}
 
 ### Load balancing (before Phase 3 dispatch)
 
-Save the Phase-1 `fetch_mr_data` JSON (the MCP response, or the assembled fallback output) to `/tmp/omni_mr{id}_data.json`, then run the shipped partitioner and keep `partition.json`:
+The Phase-1 gather file `/tmp/omni_mr{id}_gather.json` (its embedded data object is the fetch_mr_data envelope) feeds the shipped partitioner; keep partition.json:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_partition.py" \
-  --mr-json /tmp/omni_mr{id}_data.json --out /tmp/omni_partition_{id}.json
+  --mr-json /tmp/omni_mr{id}_gather.json --out /tmp/omni_partition_{id}.json
 ```
 
 The partitioner assigns every changed file exactly one deep-dive owner: security-affinity files (auth/token/pipeline/SQL patterns) → Security Reviewer; docs/config files → MR Analyst; the remainder balanced by added lines across Codebase Reviewer / MR Analyst. Inject each agent's ownership table into its Phase 3 prompt via the `{OWNED_FILES}` placeholder: "Deep-dive owner: these files: <list>." + "Cross-cutting: you still sweep ALL changed files at grep depth; full-file reads are your owned files only." Every agent still covers every changed file — only full-file read depth is partitioned.
 
-### Save BOTH tool outputs and build the context digest
+### Build the context digest
 
-Persist BOTH Phase-1 tool responses to /tmp — the `fetch_mr_data` JSON to `/tmp/omni_mr{id}_data.json` (the partitioner input above) AND the `fetch_mr_discussions` JSON (from `mcp__omniforge__fetch_mr_discussions`; the fallback path assembles the same `{"success": true, "discussions": [...]}` envelope) to `/tmp/omni_mr{id}_discussions.json` — then run the shipped digest on both:
+The gather file already embeds the discussions envelope — run the shipped digest on the ONE file (legacy two-file invocations still work; the digest detects both shapes):
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_digest.py" \
-  /tmp/omni_mr{id}_data.json /tmp/omni_mr{id}_discussions.json \
+  /tmp/omni_mr{id}_gather.json \
   --out-dir /tmp/omni_digest_{id} --prior-out /tmp/omni_mr{id}_prior_findings.json
 ```
 
@@ -320,7 +332,7 @@ historically ran ~15 min, so this window is real).
 
 **REQUIRED REFERENCE:** `./references/consolidation-guide.md` — you MUST read this before consolidating. The flow: (1) run `scripts/omni_validate_findings.py` on each waiter report from Phase 3, (2) run `scripts/omni_consolidate.py` on the validated findings files, (3) consume the generated `worklist.md` in ONE pass — top to bottom, in a single response, deciding each item from its quoted verbatim entries: no per-item re-verification loops, no re-deriving subagent evidence, no hand-merging, no severity-picking. Conflicts stay dual-perspective **Needs Human Judgment**. Auto clusters flow straight into the Phase 5 report. Any agent whose validator output says `passthrough: true` falls back to consolidating that agent's prose report directly (pre-3.3.0 behavior) — note the fallback in the final report's Summary. Do NOT attempt consolidation from memory — the algorithm has specific rules that must be followed exactly.
 
-In retrospective runs (Phase 1 digest reported `retrospective: true`), pass `--prior /tmp/omni_mr{id}_prior_findings.json` to `omni_consolidate.py`: prior findings are AUTHORITATIVE context — the worklist's already_adjudicated section is carried forward as-is, never re-adjudicated. Open priors are replied on their recorded thread (`mcp__omniforge__reply_to_discussion` in MCP runs; `omni_post_review.py --reply-to` / per-entry `reply_to_thread_id` as the no-MCP fallback) — never a new thread; resolved priors are never re-posted.
+In retrospective runs (Phase 1 digest reported `retrospective: true`), pass `--prior /tmp/omni_mr{id}_prior_findings.json` to `omni_consolidate.py`: prior findings are AUTHORITATIVE context — the worklist's already_adjudicated section is carried forward as-is, never re-adjudicated. Open priors are replied on their recorded thread (`omni_post_review.py --reply-to` / per-entry `reply_to_thread_id`; MCP reply_to_discussion is optional in interactive installs) — never a new thread; resolved priors are never re-posted.
 
 ---
 
@@ -394,7 +406,7 @@ Post summary comment + individual inline threads for each finding >= 70 confiden
 
 **REQUIRED REFERENCE:** `./references/posting-guide.md` — you MUST read this before posting anything. Contains the summary comment template, inline thread template, MCP tool call syntax (`post_full_review` findings JSON format), and bash fallback commands. Do NOT improvise posting format — use the exact templates from the reference.
 
-**Fallback (no MCP server):** When MCP is unavailable, use the shipped `scripts/omni_post_review.py` (see posting-guide.md — retry/backoff, reply routing, duplicate-summary guard, `--dry-run`) — never improvised `/tmp` posting scripts.
+**Posting path (all runs):** Post via the shipped `scripts/omni_post_review.py` (see posting-guide.md — retry/backoff, reply routing, duplicate-summary guard, `--dry-run`) — never improvised `/tmp` posting scripts. (MCP posting tools are optional in interactive installs.)
 Immediately before posting, re-run the Phase-3 `--verify-head` check — exit 4 (head moved) = STOP protocol above.
 
 ---
@@ -426,7 +438,7 @@ rm -rf .worktrees/omni-analyst-{id} .worktrees/omni-codebase-{id} .worktrees/omn
 git worktree prune
 ```
 
-**Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_data.json`, `/tmp/omni_mr{id}_discussions.json`, `/tmp/omni_mr{id}_prior_findings.json`, `/tmp/omni_digest_{id}/` (digest outputs), `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs) — plus the Phase-4 consolidator outputs `/tmp/omni_consolidate_{id}/` (`clusters.json` + `worklist.md`) and Phase 6's `/tmp/omni_review_{id}_summary.md` and `/tmp/omni_review_{id}_findings.json` (posting inputs, if posting ran).
+**Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_gather.json`, `/tmp/omni_mr{id}_data.json`, `/tmp/omni_mr{id}_discussions.json`, `/tmp/omni_mr{id}_prior_findings.json`, `/tmp/omni_digest_{id}/` (digest outputs), `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs) — plus the Phase-4 consolidator outputs `/tmp/omni_consolidate_{id}/` (`clusters.json` + `worklist.md`) and Phase 6's `/tmp/omni_review_{id}_summary.md` and `/tmp/omni_review_{id}_findings.json` (posting inputs, if posting ran).
 
 ---
 
@@ -451,7 +463,7 @@ git worktree prune
 
 | Phase | What | How |
 |-------|------|-----|
-| 1. Gather | Fetch MR data | `glab mr view/diff` (JSON + raw) |
+| 1. Gather | Fetch MR data | `omni_fetch_mr.py` (one-shot JSON gather) |
 | 2. Setup | Create 3 worktrees | `git worktree add --detach` (×3) |
 | 3. Review | Dispatch OmniForge agents | Agent tool parallel (×3, opus model), then omni_wait.py exit-code loop |
 | 4. Merge | Consolidate findings | `omni_validate_findings.py` + `omni_consolidate.py`, then consume `worklist.md` in ONE pass |
