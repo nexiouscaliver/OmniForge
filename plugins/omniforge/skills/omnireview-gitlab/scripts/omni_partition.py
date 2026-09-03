@@ -126,6 +126,8 @@ def main(argv=None):
     if not isinstance(mr, dict):
         print("omni_partition: mr-json must be a JSON object", file=sys.stderr)
         return 2
+    if isinstance(mr.get("data"), dict) and isinstance(mr.get("discussions"), (dict, list)):
+        mr = mr["data"]          # gather-file form: operate on the embedded envelope
     result = partition(mr)
     try:
         with open(a.out, "w", encoding="utf-8") as fh:

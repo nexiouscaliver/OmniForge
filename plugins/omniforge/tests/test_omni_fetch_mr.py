@@ -48,11 +48,10 @@ import omni_glab_api  # noqa: E402  (same module object the script imports)
 PROJECT = "73279395"
 MR = "21"
 
-APP_DIFF = """diff --git a/src/app.py b/src/app.py
-index 1111111..2222222 100644
---- a/src/app.py
-+++ b/src/app.py
-@@ -40,6 +40,9 @@ def handler(cfg):
+# The /diffs API returns per-file diffs starting directly at the @@ hunks
+# (dev-verified on gitlab.com 2026-09-03 — no diff --git/+++ headers); the
+# script synthesizes unified-diff headers from old_path/new_path.
+APP_HUNK = """@@ -40,6 +40,9 @@ def handler(cfg):
      context line
 +    if cfg is None:
 +        return None
@@ -60,18 +59,18 @@ index 1111111..2222222 100644
      more context
 """
 
-NET_DIFF = """diff --git a/src/net.py b/src/net.py
-index 3333333..4444444 100644
---- a/src/net.py
-+++ b/src/net.py
-@@ -10,4 +10,4 @@ def fetch(url):
+NET_HUNK = """@@ -10,4 +10,4 @@ def fetch(url):
      ctx
 -    old_endpoint = "http://hardcoded"
 +    new_endpoint = url
      tail
 """
 
-DIFF_TEXT = APP_DIFF + NET_DIFF            # assembled diff (server order)
+DIFF_TEXT = (
+    "diff --git a/src/app.py b/src/app.py\n"
+    "--- a/src/app.py\n+++ b/src/app.py\n" + APP_HUNK +
+    "diff --git a/src/net.py b/src/net.py\n"
+    "--- a/src/net.py\n+++ b/src/net.py\n" + NET_HUNK)
 
 # Diff fixtures reused from tests/test_diff_mapping.py for the ported-function
 # equivalence pin (test_diff_line_map_ported).
@@ -145,8 +144,18 @@ META = {
 }
 
 DIFF_PAGE = [
-    {"old_path": "src/app.py", "new_path": "src/app.py", "diff": APP_DIFF},
-    {"old_path": "src/net.py", "new_path": "src/net.py", "diff": NET_DIFF},
+    {"old_path": "src/app.py", "new_path": "src/app.py", "diff": APP_HUNK},
+    {"old_path": "src/net.py", "new_path": "src/net.py", "diff": NET_HUNK},
+]
+
+# new-file and deleted-file items synthesize their /dev/null header sides
+DIFF_PAGE_SPECIAL = [
+    {"old_path": "src/app.py", "new_path": "src/app.py", "diff": APP_HUNK},
+    {"old_path": "brand_new.py", "new_path": "brand_new.py",
+     "new_file": True, "diff": "@@ -0,0 +1,2 @@\n+import os\n+import sys\n"},
+    {"old_path": "gone.py", "new_path": "gone.py", "deleted_file": True,
+     "diff": "@@ -1,2 +0,0 @@\n-a = 1\n-b = 2\n"},
+    {"old_path": "src/net.py", "new_path": "src/net.py", "diff": NET_HUNK},
 ]
 
 RAW_DISCUSSIONS = [
@@ -373,6 +382,32 @@ class OmniFetchMrTests(unittest.TestCase):
         self.assertIsNone(d2["line_number"])
         # versions ride raw
         self.assertEqual(g["versions"], VERSIONS)
+        # synthesized headers: new-file/deleted-file items (the real /diffs
+        # API carries no unified-diff headers — dev-verified on gitlab.com)
+        api3 = FakeAPI(routes=[
+            ("/diffs", resp(DIFF_PAGE_SPECIAL)),
+            ("/discussions", resp(RAW_DISCUSSIONS)),
+            ("/commits", resp(RAW_COMMITS)),
+            ("/versions", resp(VERSIONS)),
+            ("/notes", resp(RAW_NOTES)),
+            ("/merge_requests/" + MR, resp(META)),
+        ])
+        out3 = os.path.join(d, "gather_special.json")
+        rc3, so3, se3 = run_fetch(["--project", PROJECT, "--mr", MR,
+                                   "--out", out3], api=api3)
+        self.assertEqual(rc3, 0, se3)
+        with open(out3, encoding="utf-8") as fh:
+            special = json.load(fh)["data"]
+        self.assertIn("new file mode 100644\n--- /dev/null\n"
+                      "+++ b/brand_new.py\n", special["diff"])
+        self.assertIn("deleted file mode 100644\n--- a/gone.py\n"
+                      "+++ /dev/null\n", special["diff"])
+        self.assertEqual(special["files_changed"],
+                         ["src/app.py", "brand_new.py", "src/net.py"])
+        self.assertIn("brand_new.py", special["diff_line_map"])
+        self.assertEqual(special["diff_line_map"]["brand_new.py"]
+                         ["added_lines"], [1, 2])
+        self.assertNotIn("gone.py", special["diff_line_map"])  # no new side
 
     def test_gather_api_call_count(self):
         d = tmp_dir(self)
@@ -393,7 +428,10 @@ class OmniFetchMrTests(unittest.TestCase):
         # 2-page diffs fixture: exactly one extra diffs GET, page=2 fetched,
         # nothing else changes — no per-file re-fetch
         api2 = FakeAPI(routes=[
-            ("/diffs", [resp([{"diff": APP_DIFF}] * 100), resp(DIFF_PAGE)]),
+            ("/diffs", [resp([{"old_path": "src/app.py",
+                                "new_path": "src/app.py",
+                                "diff": APP_HUNK}] * 100),
+                        resp(DIFF_PAGE)]),
             ("/discussions", resp(RAW_DISCUSSIONS)),
             ("/commits", resp(RAW_COMMITS)),
             ("/versions", resp(VERSIONS)),
