@@ -158,8 +158,7 @@ For `post_full_review`, the `findings` parameter is a JSON string of an array:
 
 The MCP tools automatically fetch diff position SHAs, URL-encode the project path, and construct the GitLab API request. The model only needs to provide the text and line numbers.
 
-MCP `post_full_review` remains the recommended primary (single-call, N+1-safe); open-prior replies in MCP runs use
-`mcp__omniforge__reply_to_discussion`. The script is standalone (stdlib only, glab subprocess only) so posting
-still works when the MCP server cannot start.
+Open-prior replies in interactive MCP installs use `mcp__omniforge__reply_to_discussion`. The script is
+standalone (stdlib only, glab subprocess only) so posting still works when the MCP server cannot start.
 
 **No AI attribution in any posted content.** Write as a standard code review comment.

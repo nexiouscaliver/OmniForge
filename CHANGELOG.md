@@ -5,6 +5,31 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-09-03
+
+### Added
+- **`omni_fetch_mr.py` one-shot MR gather** (`skills/omnireview-gitlab/scripts/`) — ONE stdlib-only invocation gathers everything review Phase 1 needs into ONE JSON file (MR metadata, paginated diffs, unified-diff headers synthesized where the API omits them, diff_line_map, commits, discussions envelope, versions, notes) with bounded retry/backoff (2 s / 4 s on 5xx/429/network, fail-fast on 400/401/403/404), atomic write, and a one-line stdout JSON receipt (`elapsed_ms`, `api_calls`); replaces the improvised dozens-of-calls Phase-1 gather
+- **`--verify-head` mid-run STOP guard** on `omni_fetch_mr.py` + the deterministic STOP protocol pinned in SKILL.md (Phase 3 after the waiter, and again immediately before Phase 6 posting): a moved `diff_refs.head_sha` → exit 4, no re-partition/re-dispatch/re-gather, one flat top-level addendum note, no inline threads on stale anchors — fixes the !1403 class (3 passes / 9 dispatches, watchdog kill, nothing posted)
+- **Gather-file shims** — `omni_partition.py` and `omni_digest.py` detect the gather file's shape (`data` + `discussions` at top level) and operate on the embedded envelope; legacy single-/two-file invocations byte-identical
+- **`--skip-summary` on `omni_post_review.py`** — threads/replies-only resume path for mid-batch failures (`--skip-summary --force`), closing the guide's old unanchored raw-command escape hatch
+- **`omni_glab_api.py` shared direct REST transport** (`skills/omnireview-gitlab/scripts/`) — one tested host/token/auth/retry/pagination contract (stdlib urllib, Bearer auth, token redaction) used by both scripts
+
+### Changed
+- **`omni_post_review.py` posts via the direct GitLab Discussions API** — every `glab` subprocess call replaced with `omni_glab_api.request`; inline threads carry the full documented `position[...]` payload, so every thread posts ANCHORED first-try (live-proven on scratch MR !21: the probe thread's first note carries `position.new_path`; see `w4-glab-io-validation.md`); all 3.3.0 poster contracts preserved (exit codes 0/1/2/3, stdout JSON + `elapsed_ms`, duplicate-summary guard, reply routing, `--dry-run` executes nothing and works without a token, refs fetched once per invocation)
+- **SKILL.md is script-first** — Phase 1 names `omni_fetch_mr.py` as the primary gather (MCP fetch demoted to optional-interactive); posting-guide names the shipped poster script as the Implementation path (MCP posting tools optional in interactive installs)
+- Test suite 362 (was 325)
+- Version bumped to 3.3.1
+
+### Fixed
+- **Unanchored inline threads** — root cause: `glab api --raw-field "position[base_sha]=..."` drops nested `position[…]` keys, so threads landed as unanchored general notes (measured ~209 s / 27 turns of delete+repost anchor repair per review); the direct-API transport sends literal bracket keys form-encoded and the guide's unanchored raw fallback command is removed
+- **Headless MCP −32000 diagnosed (record-only)** — the `.mcp.json` launch line `uv run --with mcp[cli]` resolves the latest mcp (2.x), where `from mcp.server.fastmcp import FastMCP` dies at import; proven end-to-end, and a one-line pin (`mcp[cli]>=1.0.0,<2.0.0`) fixes it locally — NOT shipped in 3.3.1 (operator keep/drop decision pending; the standalone script path is primary either way, so headless runs are unaffected). Full evidence: `w4-mcp-diagnosis.md`
+- posting-guide's trailing "MCP `post_full_review` remains the recommended primary" claim removed — contradicted the script-first Implementation line
+
+### A/B
+- A/B VALIDATION PENDING — orchestrator fills after the arms run: `A/B e2e (same MR !21, same head): total wall X vs Y s (±Z%), Phase-1 gather N API calls / W s vs dozens-of-calls improvise, posting wall, 100% anchored first-try — see w4-glab-io-validation.md`
+
+---
+
 ## [3.3.0] - 2026-09-02
 
 ### Added
