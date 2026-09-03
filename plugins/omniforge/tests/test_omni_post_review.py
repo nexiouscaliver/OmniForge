@@ -169,6 +169,7 @@ class OmniPostReviewTests(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
         self.mod = load_poster_module()
         self.transport = FakeTransport()
+        self.real_request = omni_glab_api.request   # pre-patch reference
         patcher = mock.patch.object(omni_glab_api, "request",
                                     self.transport.request)
         patcher.start()
@@ -183,7 +184,7 @@ class OmniPostReviewTests(unittest.TestCase):
         return [c for c in self.transport.calls
                 if c[1] == path and (method is None or c[0] == method)]
 
-    def run_poster(self, findings, extra=(),
+    def run_poster(self, findings, extra=(), token="tok-test",
                    summary="## OmniForge\n\n**Verdict:** APPROVE\n"):
         spath = write_file(os.path.join(self.tmp, "summary.md"), summary)
         fpath = write_file(os.path.join(self.tmp, "findings.json"),
@@ -191,13 +192,16 @@ class OmniPostReviewTests(unittest.TestCase):
         argv = ["--mr", MR, "--project", PROJECT,
                 "--summary", spath, "--findings-json", fpath,
                 "--backoff-base", "0"] + list(extra)
-        return self.raw_poster(*argv)
+        return self.raw_poster(*argv, token=token)
 
     def raw_poster(self, *argv, token="tok-test"):
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, run_env(token), clear=True), \
                 redirect_stdout(out), redirect_stderr(err):
-            code = self.mod.main(list(argv))
+            try:
+                code = self.mod.main(list(argv))
+            except SystemExit as e:              # argparse usage errors (2)
+                code = e.code
         return types.SimpleNamespace(returncode=code, stdout=out.getvalue(),
                                      stderr=err.getvalue())
 
@@ -241,30 +245,34 @@ class OmniPostReviewTests(unittest.TestCase):
         self.assertEqual(self.stdout_json(r)["failures"], 1)
 
     def test_backoff_schedule_2s_4s(self):
-        # REAL transport: script omni_glab_api._http 500,500,200 and record
-        # sleeps — pins the poster's default 2 s / 4 s wiring.
+        # REAL transport (the setUp FakeTransport patch is reverted for
+        # this test): script omni_glab_api._http 500,500,200 on the FORM
+        # POSTs and record sleeps — pins the poster's default 2 s / 4 s
+        # wiring through the actual retry loop.
+        real_request = self.real_request
         scripted = [(500, "HTTP 500: boom"), (500, "HTTP 500: boom"),
                     (200, "{}")]
         state = {"n": 0}
 
         def fake_http(url, headers, data=None, method=None):
+            if data is None:                        # GETs succeed at once
+                return 200, json.dumps(DIFF_REFS)
             result = scripted[state["n"]]
             state["n"] += 1
             return result
 
-        spath = write_file(os.path.join(self.tmp, "summary.md"),
-                           "## OmniForge\n")
         fpath = write_file(os.path.join(self.tmp, "findings.json"),
                            json.dumps(FINDINGS[:1]))
         sleeps = []
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, run_env(), clear=True), \
                 redirect_stdout(out), redirect_stderr(err), \
+                mock.patch.object(omni_glab_api, "request", real_request), \
                 mock.patch.object(omni_glab_api, "_http", fake_http), \
                 mock.patch.object(omni_glab_api, "sleep_fn", sleeps.append):
             code = self.mod.main(["--mr", MR, "--project", PROJECT,
-                                  "--summary", spath, "--findings-json",
-                                  fpath])
+                                  "--skip-summary", "--force",
+                                  "--findings-json", fpath])
         self.assertEqual(code, 0, err.getvalue())
         self.assertEqual(sleeps, [2.0, 4.0])        # base * 2^(attempt-1)
 

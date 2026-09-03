@@ -1,82 +1,76 @@
 #!/usr/bin/env python3
-"""omni_post_review.py — MCP-free GitLab MR review posting fallback (omnireview-gitlab).
+"""omni_post_review.py — GitLab MR review poster via the direct REST API.
 
-MCP-PRIMARY NOTE: when the MCP server is available, posting runs through
-mcp__omniforge__post_full_review (single-call, N+1-safe — the b5efc0b fix in
-tools/omniforge_mcp_server.py), and open-prior replies run through
-mcp__omniforge__reply_to_discussion. This script is the FALLBACK for runs
-where the MCP server cannot start (e.g. mcp 2.x renamed FastMCP, so the
-server import fails on the box): it is STANDALONE — stdlib only, imports
-nothing from omniforge_mcp_server, shells out to `glab` only, runs under
-bare python3 (same convention as omni_wait.py).
+TRANSPORT (W4): all traffic goes through the shared omni_glab_api transport
+(direct stdlib-urllib REST — Bearer auth, bounded retry, redacted errors).
+The former `glab api ... --raw-field position[...]` path is GONE: glab drops
+nested position keys, so those threads landed UNANCHORED. Inline threads are
+now created via POST .../discussions with the documented position[…] form
+keys sent form-encoded with literal bracket keys — anchored first-try.
 
-Behavior (spec D6):
-- posts ONE summary note (glab api .../notes --method POST --raw-field body=...)
-- posts one inline thread per finding via
-  glab api .../discussions --method POST with the posting-guide nested-position
-  workaround kept verbatim (--raw-field position[position_type]=text /
-  position[base_sha] / position[head_sha] / position[start_sha] /
-  position[new_path] / position[new_line]); diff refs are fetched ONCE per
-  invocation — never per finding (N+1 discipline, mirrors the MCP fix)
-- per-call retry with exponential backoff: up to --attempts (default 3),
-  sleeping --backoff-base * 2^(attempt-1) seconds (2 s then 4 s by default);
-  ONLY 5xx / 429 / transient-network stderr is retried — 4xx fails fast
-  naming the failing command + response. (These are bounded posting retries
-  inside one invocation — unrelated to the forbidden subagent sleep-poll.)
-- duplicate-summary guard: when this invocation would post a summary, it
-  first lists existing notes; a top-level note starting `## OmniForge` with
+Behavior (spec D6, preserved through the W4 transport swap):
+- posts ONE summary note (POST .../notes, form body=<summary>)
+- posts one inline thread per finding via POST .../discussions with form
+  pairs: body, position[position_type]=text, position[base_sha|start_sha|
+  head_sha|new_path|old_path], position[new_line] (or position[old_line]
+  when the entry carries old_line); diff refs are fetched ONCE per
+  invocation — never per finding (N+1 discipline, mirrors the MCP fix).
+  line_range is NOT sent (3.3.2 candidate).
+- retry/backoff and 4xx fail-fast live in omni_glab_api.request: up to
+  --attempts (default 3), sleeping --backoff-base * 2^(attempt-1) seconds
+  (2 s then 4 s by default); ONLY 5xx / 429 / transient network is retried —
+  400/401/403/404 fails fast naming the failing call.
+- duplicate-summary guard: when this invocation is not reply-only, it first
+  lists existing notes; a top-level note starting `## OmniForge` with
   created_at > --since (default 0) => REFUSE (exit 3, nothing posted) unless
   --force. Reply-only invocations (--reply-to, or a batch whose every entry
   carries reply_to_thread_id) never post a summary and never evaluate the
-  guard — invocation 2 of an N-reply batch cannot trip on invocation 1's
-  summary (the guard compares against --since, which predates the run).
+  guard. --skip-summary posts threads/replies only but STILL evaluates the
+  guard unless --force (mid-batch resume = --skip-summary --force, which
+  cannot repost the summary).
 - --reply-to <thread_id>: post the finding body/bodies as REPLY notes on
   that recorded discussion (.../discussions/<id>/notes) instead of new
   inline threads. Findings-json entries carrying reply_to_thread_id are
-  routed the same way and EXCLUDED from new-thread posting (the batch form
-  for OPEN prior findings). Resolved priors are the CALLER's skip decision —
-  this script posts what it is given.
-- --dry-run: print each exact command prefixed `DRY-RUN:` and execute
-  nothing. Position SHA values print as <base_sha>/<head_sha>/<start_sha>
-  placeholders (resolving them requires an API call, which dry-run never
-  makes).
+  routed the same way and EXCLUDED from new-thread posting.
+- --dry-run: print each logical call as `DRY-RUN: <METHOD> <url> <k=v form
+  pairs>` and execute NOTHING (zero transport calls; the token is never
+  resolved on this path). Position SHA values print as
+  <base_sha>/<head_sha>/<start_sha> placeholders (resolving them requires
+  an API call, which dry-run never makes).
 
 The script never adds text to any body — no AI attribution, ever; bodies are
 caller-authored exactly as in the posting-guide templates.
 
 Exit codes: 0 success; 1 posting failure (retries exhausted or 4xx
-fail-fast); 2 usage; 3 duplicate-summary guard refusal.
+fail-fast); 2 usage (including a missing token on real runs — dry-run works
+without one); 3 duplicate-summary guard refusal.
 Stdout: exactly one JSON line {"posted_summary", "threads", "replies",
-"failures", "dry_run"} on exits 0/1/3; exit 2 (usage) prints no stdout
-JSON — consumers parse stdout only on non-usage exits. Diagnostics go to
-stderr (omni_wait.py convention).
+"failures", "dry_run", "elapsed_ms"} on exits 0/1/3; exit 2 (usage) prints
+no stdout JSON — consumers parse stdout only on non-usage exits.
+Diagnostics go to stderr (omni_wait.py convention).
 """
 
 import argparse
 import json
-import re
+import os
 import shlex
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import omni_glab_api
+
 EXIT_OK, EXIT_API, EXIT_USAGE, EXIT_GUARD = 0, 1, 2, 3
 
 SUMMARY_HEADING = "## OmniForge"
-POSITION_TYPE = "position[position_type]=text"
-
-# Retryable: HTTP 5xx, 429, transient-network stderr tokens (checked lowercase).
-NETWORK_TOKENS = ("connection reset", "connection refused", "timeout",
-                  "network", "eof", "dial tcp")
-FATAL_4XX_RE = re.compile(r"\b(400|401|403|404)\b")
-RETRYABLE_5XX_RE = re.compile(r"\b5\d\d\b")
 
 # Dry-run placeholders for the run-time-resolved diff-ref SHAs.
 PLACEHOLDER_REFS = {"base_sha": "<base_sha>", "head_sha": "<head_sha>",
                     "start_sha": "<start_sha>"}
 
-sleep_fn = time.sleep          # module-level so tests can inject a recorder
+TOKEN_FIX = ("export GITLAB_TOKEN=$(glab auth status --hostname <host> -t "
+             "2>/dev/null | sed -n 's/^.*- Token: //p')")
 
 
 class UsageError(Exception):
@@ -84,103 +78,77 @@ class UsageError(Exception):
 
 
 class PostingError(Exception):
-    """A glab call failed (retries exhausted, 4xx fail-fast, or bad payload)."""
-
-    def __init__(self, argv, detail, returncode, attempts):
-        self.command = " ".join(shlex.quote(a) for a in argv)
-        super().__init__(
-            "glab failed (%s; exit %d, attempt %d) — command: %s"
-            % (detail, returncode, attempts, self.command))
+    """A payload-level failure (non-JSON / malformed API response)."""
 
 
-def _exec(argv):
-    p = subprocess.run(argv, capture_output=True, text=True)
-    return p.returncode, p.stdout, p.stderr
+# ── paths + form builders (documented Discussions API spellings) ───────────
 
 
-def is_retryable(stderr):
-    """True iff stderr signals 5xx / 429 / a transient network error."""
-    s = (stderr or "").lower()
-    if FATAL_4XX_RE.search(s):
-        return False
-    if "429" in s or RETRYABLE_5XX_RE.search(s):
-        return True
-    return any(tok in s for tok in NETWORK_TOKENS)
-
-
-def run_glab(argv, attempts, backoff_base):
-    """Run one glab command with bounded exponential-backoff retry.
-
-    Sleeps backoff_base * 2^(attempt-1) between attempts (2 s then 4 s at the
-    defaults). Returns stdout on success; raises PostingError otherwise.
-    """
-    for attempt in range(1, attempts + 1):
-        returncode, stdout, stderr = _exec(argv)
-        if returncode == 0:
-            return stdout
-        if attempt < attempts and is_retryable(stderr):
-            sleep_fn(backoff_base * (2 ** (attempt - 1)))
-            continue
-        raise PostingError(argv, stderr.strip() or "unknown error",
-                           returncode, attempt)
-    raise PostingError(argv, "no attempt made", 1, 0)   # unreachable
-
-
-# ── command builders (posting-guide.md fallback shapes, verbatim) ──────────
-
-
-def mr_endpoint(project, mr):
+def mr_path(project, mr):
     return "projects/%s/merge_requests/%s" % (project, mr)
 
 
-def refs_argv(project, mr):
-    return ["glab", "api", mr_endpoint(project, mr)]
+def refs_path(project, mr):
+    return mr_path(project, mr)
 
 
-def notes_list_argv(project, mr):
-    return ["glab", "api", mr_endpoint(project, mr) + "/notes?per_page=100"]
+def notes_list_path(project, mr):
+    return mr_path(project, mr) + "/notes?per_page=100"
 
 
-def summary_argv(project, mr, body):
-    return ["glab", "api", mr_endpoint(project, mr) + "/notes",
-            "--method", "POST", "--raw-field", "body=" + body]
+def summary_path(project, mr):
+    return mr_path(project, mr) + "/notes"
 
 
-def thread_argv(project, mr, body, refs, file_path, line_number):
-    return ["glab", "api", mr_endpoint(project, mr) + "/discussions",
-            "--method", "POST",
-            "--raw-field", "body=" + body,
-            "--raw-field", POSITION_TYPE,
-            "--raw-field", "position[base_sha]=" + refs["base_sha"],
-            "--raw-field", "position[head_sha]=" + refs["head_sha"],
-            "--raw-field", "position[start_sha]=" + refs["start_sha"],
-            "--raw-field", "position[new_path]=" + file_path,
-            "--raw-field", "position[new_line]=" + str(line_number)]
+def discussions_path(project, mr):
+    return mr_path(project, mr) + "/discussions"
 
 
-def reply_argv(project, mr, thread_id, body):
-    return ["glab", "api",
-            mr_endpoint(project, mr) + "/discussions/" + thread_id + "/notes",
-            "--method", "POST", "--raw-field", "body=" + body]
+def reply_path(project, mr, thread_id):
+    return mr_path(project, mr) + "/discussions/" + thread_id + "/notes"
 
 
-# ── API steps ──────────────────────────────────────────────────────────────
+def thread_form(body, refs, file_path, line_number,
+                old_path=None, old_line=None):
+    """Form pairs for an ANCHORED inline thread — literal bracket keys,
+    exactly the documented REST spellings (position[old_line] replaces
+    position[new_line] for deleted-file findings; line_range is NOT sent)."""
+    form = [("body", body),
+            ("position[position_type]", "text"),
+            ("position[base_sha]", refs["base_sha"]),
+            ("position[start_sha]", refs["start_sha"]),
+            ("position[head_sha]", refs["head_sha"]),
+            ("position[new_path]", file_path),
+            ("position[old_path]", old_path or file_path)]
+    if old_line is not None:
+        form.append(("position[old_line]", str(old_line)))
+    else:
+        form.append(("position[new_line]", str(line_number)))
+    return form
 
 
-def fetch_diff_refs(project, mr, attempts, backoff_base):
+# ── API steps (all via the shared transport) ───────────────────────────────
+
+
+def api(method, path, token, host, form, attempts, backoff_base):
+    return omni_glab_api.request(method, path, token, host=host, form=form,
+                                 attempts=attempts,
+                                 backoff_base=backoff_base)
+
+
+def fetch_diff_refs(project, mr, token, host, attempts, backoff_base):
     """Fetch diff_refs ONCE per invocation (never per finding)."""
-    argv = refs_argv(project, mr)
-    out = run_glab(argv, attempts, backoff_base)
-    try:
-        meta = json.loads(out)
-    except json.JSONDecodeError:
-        raise PostingError(argv, "MR metadata response is not JSON", 0, 0)
-    refs = (meta or {}).get("diff_refs") or {}
+    path = refs_path(project, mr)
+    resp = api("GET", path, token, host, None, attempts, backoff_base)
+    meta = resp.get("json")
+    if not isinstance(meta, dict):
+        raise PostingError("GET %s: MR metadata response is not JSON" % path)
+    refs = meta.get("diff_refs") or {}
     missing = [k for k in ("base_sha", "head_sha", "start_sha")
                if not refs.get(k)]
     if missing:
         raise PostingError(
-            argv, "MR metadata lacks diff_refs.%s" % ", ".join(missing), 0, 0)
+            "GET %s: MR metadata lacks diff_refs.%s" % (path, ", ".join(missing)))
     return refs
 
 
@@ -201,16 +169,14 @@ def iso_to_epoch(value):
     return dt.timestamp()
 
 
-def newer_summary_note(project, mr, since, attempts, backoff_base):
+def newer_summary_note(project, mr, since, token, host, attempts, backoff_base):
     """Return the OmniForge summary note newer than `since`, else None."""
-    argv = notes_list_argv(project, mr)
-    out = run_glab(argv, attempts, backoff_base)
-    try:
-        notes = json.loads(out)
-    except json.JSONDecodeError:
-        raise PostingError(argv, "notes list response is not JSON", 0, 0)
+    path = notes_list_path(project, mr)
+    resp = api("GET", path, token, host, None, attempts, backoff_base)
+    notes = resp.get("json")
     if not isinstance(notes, list):
-        raise PostingError(argv, "notes list response is not a JSON array", 0, 0)
+        raise PostingError("GET %s: notes list response is not a JSON array"
+                           % path)
     for note in notes:
         if not isinstance(note, dict):
             continue
@@ -228,20 +194,25 @@ def newer_summary_note(project, mr, since, attempts, backoff_base):
 
 def parse_args(argv):
     ap = argparse.ArgumentParser(
-        description="MCP-free GitLab MR review posting fallback (glab only; "
-                    "one JSON line on stdout).")
+        description="GitLab MR review poster via the direct Discussions API "
+                    "(one JSON line on stdout).")
     ap.add_argument("--mr", required=True, help="merge request IID")
     ap.add_argument("--project", required=True,
-                    help="GitLab project ID or URL-encoded full path "
-                         "(the literal :fullpath is passed through to glab)")
-    ap.add_argument("--summary", required=True,
-                    help="path to the summary markdown file")
+                    help="GitLab project ID or URL-encoded full path")
+    ap.add_argument("--summary", default=None,
+                    help="path to the summary markdown file (required "
+                         "unless --skip-summary)")
+    ap.add_argument("--skip-summary", action="store_true",
+                    help="post threads/replies only, no summary note (the "
+                         "duplicate-summary guard still applies unless "
+                         "--force)")
     ap.add_argument("--findings-json", required=True,
-                    help="path to the post_full_review findings array "
-                         "[{file_path, line_number, body, "
-                         "[reply_to_thread_id]}]")
+                    help="path to the findings array [{file_path, "
+                         "line_number, body, [reply_to_thread_id], "
+                         "[old_path], [old_line]}]")
     ap.add_argument("--dry-run", action="store_true",
-                    help="print the exact glab commands, execute nothing")
+                    help="print the exact API calls, execute nothing "
+                         "(works without a token)")
     ap.add_argument("--attempts", type=int, default=3,
                     help="max attempts per API call (default 3)")
     ap.add_argument("--backoff-base", type=float, default=2,
@@ -262,6 +233,11 @@ def parse_args(argv):
         ap.error("--backoff-base must be >= 0")
     if args.reply_to is not None and not args.reply_to.strip():
         ap.error("--reply-to must be a non-empty thread id")
+    if args.skip_summary and args.reply_to is not None:
+        ap.error("--skip-summary cannot be combined with --reply-to "
+                 "(reply-only runs never post a summary anyway)")
+    if not args.summary and not args.skip_summary:
+        ap.error("--summary is required unless --skip-summary is set")
     return args
 
 
@@ -280,8 +256,9 @@ def load_findings(path):
     """Validate the findings array and split it into (new_threads, replies).
 
     Entries carrying reply_to_thread_id are routed as replies and EXCLUDED
-    from new-thread posting. Invalid input is a usage error — the script
-    never silently skips a finding.
+    from new-thread posting. Optional old_path (default = file_path) and
+    old_line are forwarded when present. Invalid input is a usage error —
+    the script never silently skips a finding.
     """
     try:
         with open(path, encoding="utf-8") as fh:
@@ -312,22 +289,42 @@ def load_findings(path):
                 or line_number < 1):
             raise UsageError("finding %d: line_number must be an integer >= 1"
                              % i)
+        old_path = entry.get("old_path")
+        if old_path is not None and (not isinstance(old_path, str)
+                                     or not old_path.strip()):
+            raise UsageError("finding %d: old_path must be a non-empty "
+                             "string" % i)
+        old_line = entry.get("old_line")
+        if old_line is not None and (not isinstance(old_line, int)
+                                     or isinstance(old_line, bool)
+                                     or old_line < 1):
+            raise UsageError("finding %d: old_line must be an integer >= 1"
+                             % i)
         new_threads.append({"file_path": file_path, "line_number": line_number,
-                            "body": body})
+                            "body": body, "old_path": old_path,
+                            "old_line": old_line})
     return new_threads, replies
 
 
-def print_dry(argv):
-    # One LOGICAL command per "DRY-RUN: " chunk — bodies containing newlines
-    # make a command span physical lines, so consumers chunk on the prefix,
+# ── dry-run ────────────────────────────────────────────────────────────────
+
+
+def dry_line(method, url, form=None):
+    # One LOGICAL call per "DRY-RUN: " chunk — bodies containing newlines
+    # make a chunk span physical lines, so consumers chunk on the prefix,
     # never on newlines.
-    print("DRY-RUN: " + " ".join(shlex.quote(a) for a in argv))
+    if form:
+        pairs = " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in form)
+        print("DRY-RUN: %s %s %s" % (method, url, pairs))
+    else:
+        print("DRY-RUN: %s %s" % (method, url))
 
 
 def main(argv=None):
+    start = time.time()
     args = parse_args(argv if argv is not None else sys.argv[1:])
     try:
-        summary = load_summary(args.summary)
+        summary = load_summary(args.summary) if args.summary else None
         new_threads, replies = load_findings(args.findings_json)
     except UsageError as e:
         print("omni_post_review: %s" % e, file=sys.stderr)
@@ -340,66 +337,88 @@ def main(argv=None):
         new_threads = []
 
     reply_only = bool(args.reply_to) or (bool(replies) and not new_threads)
-    will_post_summary = not reply_only
+    will_post_summary = not reply_only and not args.skip_summary
+    # The guard applies to every non-reply-only invocation (including
+    # --skip-summary) unless --force — mid-batch resume is
+    # --skip-summary --force, which cannot repost the summary.
+    guard_applies = not reply_only and not args.force
 
     counts = {"posted_summary": False, "threads": 0, "replies": 0,
               "failures": 0, "dry_run": bool(args.dry_run)}
 
+    def emit():
+        counts["elapsed_ms"] = int(round((time.time() - start) * 1000))
+        print(json.dumps(counts))
+        return counts
+
     if args.dry_run:
-        if will_post_summary and not args.force:
-            print_dry(notes_list_argv(args.project, args.mr))
+        # Token resolution is DEFERRED past this path — dry-run executes
+        # nothing and works without a token.
+        if guard_applies:
+            dry_line("GET", notes_list_path(args.project, args.mr))
         if new_threads:
-            print_dry(refs_argv(args.project, args.mr))
+            dry_line("GET", refs_path(args.project, args.mr))
         if will_post_summary:
-            print_dry(summary_argv(args.project, args.mr, summary))
+            dry_line("POST", summary_path(args.project, args.mr),
+                     [("body", summary)])
             counts["posted_summary"] = True
         for t in new_threads:
-            print_dry(thread_argv(args.project, args.mr, t["body"],
-                                  PLACEHOLDER_REFS, t["file_path"],
-                                  t["line_number"]))
+            dry_line("POST", discussions_path(args.project, args.mr),
+                     thread_form(t["body"], PLACEHOLDER_REFS, t["file_path"],
+                                 t["line_number"], t["old_path"],
+                                 t["old_line"]))
             counts["threads"] += 1
         for r in replies:
-            print_dry(reply_argv(args.project, args.mr, r["thread_id"],
-                                 r["body"]))
+            dry_line("POST", reply_path(args.project, args.mr, r["thread_id"]),
+                     [("body", r["body"])])
             counts["replies"] += 1
-        print(json.dumps(counts))
+        emit()
         return EXIT_OK
 
+    token = omni_glab_api.resolve_token()
+    if not token:
+        print("omni_post_review: GITLAB_TOKEN is not set — fix:\n  %s"
+              % TOKEN_FIX, file=sys.stderr)
+        return EXIT_USAGE
+
     try:
-        if will_post_summary and not args.force:
+        if guard_applies:
             note = newer_summary_note(args.project, args.mr, args.since,
-                                      args.attempts, args.backoff_base)
+                                      token, None, args.attempts,
+                                      args.backoff_base)
             if note is not None:
                 print("omni_post_review: REFUSING to post — an OmniForge "
                       "summary note (created %s) newer than --since %s "
                       "already exists on MR !%s; pass --force to override"
                       % (note.get("created_at"), args.since, args.mr),
                       file=sys.stderr)
-                print(json.dumps(counts))
+                emit()
                 return EXIT_GUARD
-        refs = (fetch_diff_refs(args.project, args.mr, args.attempts,
-                                args.backoff_base)
+        refs = (fetch_diff_refs(args.project, args.mr, token, None,
+                                args.attempts, args.backoff_base)
                 if new_threads else None)
         if will_post_summary:
-            run_glab(summary_argv(args.project, args.mr, summary),
-                     args.attempts, args.backoff_base)
+            api("POST", summary_path(args.project, args.mr), token, None,
+                [("body", summary)], args.attempts, args.backoff_base)
             counts["posted_summary"] = True
         for t in new_threads:
-            run_glab(thread_argv(args.project, args.mr, t["body"], refs,
-                                 t["file_path"], t["line_number"]),
-                     args.attempts, args.backoff_base)
+            api("POST", discussions_path(args.project, args.mr), token, None,
+                thread_form(t["body"], refs, t["file_path"], t["line_number"],
+                            t["old_path"], t["old_line"]),
+                args.attempts, args.backoff_base)
             counts["threads"] += 1
         for r in replies:
-            run_glab(reply_argv(args.project, args.mr, r["thread_id"],
-                                r["body"]), args.attempts, args.backoff_base)
+            api("POST", reply_path(args.project, args.mr, r["thread_id"]),
+                token, None, [("body", r["body"])], args.attempts,
+                args.backoff_base)
             counts["replies"] += 1
-    except PostingError as e:
+    except (omni_glab_api.GlabApiError, PostingError) as e:
         counts["failures"] += 1
         print("omni_post_review: %s" % e, file=sys.stderr)
-        print(json.dumps(counts))
+        emit()
         return EXIT_API
 
-    print(json.dumps(counts))
+    emit()
     return EXIT_OK
 
 

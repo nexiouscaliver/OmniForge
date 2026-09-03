@@ -457,7 +457,7 @@ class OmniFetchMrTests(unittest.TestCase):
         out = os.path.join(d, "g.json")
         calls = {"diffs": 0}
 
-        def http(url, headers, data=None):
+        def http(url, headers, data=None, method=None):
             if "/diffs" in url:
                 calls["diffs"] += 1
                 if calls["diffs"] == 1:

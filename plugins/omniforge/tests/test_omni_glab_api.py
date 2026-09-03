@@ -127,7 +127,7 @@ class TransportRequestTests(unittest.TestCase):
             ([503, 503, 200], "ok", [2.0, 4.0]),
             ([400], "err", []),
             ([404], "err", []),
-            ([500, 500, 500], GlabApiError, [2.0, 4.0]),
+            ([500, 500, 500], "err", [2.0, 4.0]),
         ]
         for scripted, expected, sleeps in cases:
             with self.subTest(scripted=scripted):

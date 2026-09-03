@@ -99,13 +99,15 @@ def redact(text, token):
     return text
 
 
-def _http(url, headers, data=None):
+def _http(url, headers, data=None, method=None):
     """ONE urllib round trip -> (status, body). urllib.error.URLError /
     socket.timeout propagate; urllib.error.HTTPError is unwound into its
-    (code, body). Module-level seam so tests can script responses."""
+    (code, body). Module-level seam so tests can script responses. The
+    verb comes from the caller's `method` (a bodyless DELETE/POST must not
+    silently become a GET), falling back to data presence."""
     req = urllib.request.Request(
         url, data=data, headers=headers,
-        method="POST" if data is not None else "GET")
+        method=method or ("POST" if data is not None else "GET"))
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECS) as r:
             return r.getcode(), r.read().decode("utf-8", errors="replace")
@@ -139,7 +141,7 @@ def request(method, path, token, host=None, form=None, attempts=3,
     last_status, last_body = 0, ""
     for attempt in range(1, attempts + 1):
         try:
-            status, body = _http(url, headers, data)
+            status, body = _http(url, headers, data, method=method)
         except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
             status, body = 0, str(e)
         if 200 <= status < 300:
@@ -166,7 +168,13 @@ def get_all(path, token, host=None, attempts=3, backoff_base=2.0):
         resp = request("GET", "%s%sper_page=100&page=%d" % (path, sep, page),
                        token, host=host, attempts=attempts,
                        backoff_base=backoff_base)
-        batch = resp.get("json") or []
+        batch = resp.get("json")
+        if not isinstance(batch, list):
+            # A 200 whose body is not a JSON array must never silently
+            # terminate pagination as an empty page.
+            raise GlabApiError("GET", path, resp.get("status", 0),
+                               "paginated response body is not a JSON array",
+                               retryable=False)
         items.extend(batch)
         if len(batch) < 100:
             return items
