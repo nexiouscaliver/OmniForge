@@ -326,5 +326,70 @@ class PartitionCliAndBriefContractTests(unittest.TestCase):
             self.assertIn("{OWNED_FILES}", t, name)
 
 
+class GatherFileInputTests(unittest.TestCase):
+    """W4 T1 shim: --mr-json accepts the omniforge-mr-gather/1 file by
+    operating on its embedded data envelope; legacy single-envelope inputs
+    are byte-identical to 3.3.0."""
+
+    @staticmethod
+    def gather_file(envelope):
+        return {
+            "schema": "omniforge-mr-gather/1",
+            "fetched_at": "2026-09-03T00:00:00Z",
+            "project": "73279395",
+            "mr_iid": "21",
+            "diff_refs": {"base_sha": "b", "head_sha": "h", "start_sha": "s"},
+            "data": envelope,
+            "discussions": {"success": True, "mr_id": "21",
+                            "discussions": [], "total": 0, "unresolved": 0,
+                            "resolved": 0},
+            "versions": [],
+        }
+
+    def test_partition_accepts_gather_file(self):
+        d = tmp_dir(self)
+        envelope = mr({"src/auth.py": 20, "src/big.py": 300})
+        gather = write_json(d, "gather.json", self.gather_file(envelope))
+        plain = write_json(d, "data.json", envelope)
+        out1 = os.path.join(d, "from_gather.json")
+        out2 = os.path.join(d, "from_data.json")
+        p1 = run_script(gather, out1)
+        p2 = run_script(plain, out2)
+        self.assertEqual(p1.returncode, 0, p1.stderr)
+        self.assertEqual(p2.returncode, 0, p2.stderr)
+        with open(out1, "rb") as f1, open(out2, "rb") as f2:
+            self.assertEqual(f1.read(), f2.read(),
+                             "gather file must partition as its embedded data")
+        self.assertEqual(p1.stdout, p2.stdout)
+
+    def test_partition_legacy_mr_json_unchanged(self):
+        d = tmp_dir(self)
+        envelope = mr({"src/auth.py": 20, "src/big.py": 300, "README.md": 40})
+        src = write_json(d, "mr.json", envelope)
+        out1 = os.path.join(d, "p1.json")
+        out2 = os.path.join(d, "p2.json")
+        p1 = run_script(src, out1)
+        p2 = run_script(src, out2)
+        self.assertEqual(p1.returncode, 0, p1.stderr)
+        with open(out1, "rb") as f1, open(out2, "rb") as f2:
+            self.assertEqual(f1.read(), f2.read())   # deterministic
+        # and identical to the in-process pure function's dump (3.3.0 shape)
+        mod = load_partition_module()
+        expected = json.dumps(mod.partition(envelope), indent=2,
+                              ensure_ascii=False) + "\n"
+        with open(out1, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), expected)
+        # a top-level "data" key ALONE (no discussions) must NOT unwrap
+        quirky = dict(envelope)
+        quirky["data"] = {"files_changed": [], "diff_line_map": {}}
+        src2 = write_json(d, "quirky.json", quirky)
+        out3 = os.path.join(d, "p3.json")
+        p3 = run_script(src2, out3)
+        self.assertEqual(p3.returncode, 0, p3.stderr)
+        with open(out3, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), expected,
+                             "detection requires BOTH data and discussions")
+
+
 if __name__ == "__main__":
     unittest.main()

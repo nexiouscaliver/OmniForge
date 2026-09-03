@@ -93,8 +93,28 @@ class SkillContractTests(unittest.TestCase):
                       "Phase 1 must name the shipped partition script")
         self.assertIn("omni_digest.py", t[phase1:phase2],
                       "Phase 1 must name the shipped digest script")
-        self.assertIn("/tmp/omni_mr{id}_discussions.json", t[phase1:phase2],
-                      "Phase 1 must save the fetch_mr_discussions output")
+        self.assertIn("/tmp/omni_mr{id}_gather.json", t[phase1:phase2],
+                      "Phase 1 must save the one-shot gather file "
+                      "(omni_fetch_mr.py output)")
+
+    def test_phase1_names_fetch_script(self):
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        self.assertIn("omni_fetch_mr.py", t[phase1:phase2],
+                      "Phase 1 gather must name the shipped one-shot "
+                      "fetch script as the primary path")
+
+    def test_posting_guide_primary_is_script(self):
+        t = read(os.path.join("references", "posting-guide.md"))
+        impl = t.index("Implementation:")
+        self.assertIn("omni_post_review.py",
+                      t[impl:impl + t[impl:].index("\n\n")],
+                      "posting-guide's Implementation sentence must name "
+                      "the shipped script")
+        self.assertNotIn('--raw-field "position[base_sha]', t,
+                         "posting-guide must not carry the unanchored "
+                         "nested-position glab command")
 
     def test_phase4_wires_prior_flag_for_retrospective(self):
         t = read("SKILL.md")
@@ -118,6 +138,19 @@ class SkillContractTests(unittest.TestCase):
             self.assertEqual(headings[0], want, name)
             seen.add(headings[0])
         self.assertEqual(len(seen), 1)      # byte-identical across templates
+
+    def test_stop_guard_protocol_pinned(self):
+        t = read("SKILL.md")
+        phase3 = t.index("## Phase 3")
+        phase4 = t.index("## Phase 4")
+        guard = t[phase3:phase4]
+        self.assertIn("--verify-head", guard)
+        self.assertIn("NO re-partition, NO re-dispatch", guard)
+        self.assertIn("OmniForge addendum", guard)
+        # the pre-posting (Phase 6) second verification is also pinned
+        phase6 = t.index("### Option 1: Full Review Post")
+        phase7 = t.index("## Phase 7")
+        self.assertIn("--verify-head", t[phase6:phase7])
 
 
 if __name__ == "__main__":

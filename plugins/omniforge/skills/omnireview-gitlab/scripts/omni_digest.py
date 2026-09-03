@@ -307,6 +307,12 @@ def load_discussions(path):
     except ValueError as e:
         degrade("discussions file is not valid JSON (%s)" % e)
         return None
+    return load_discussions_from_value(data)
+
+
+def load_discussions_from_value(data):
+    """load_discussions' degrade logic on an already-loaded envelope value
+    (the gather file's embedded discussions object)."""
     if not isinstance(data, dict):
         degrade("discussions JSON is not an object envelope")
         return None
@@ -350,7 +356,17 @@ def main(argv=None):
         print("omni_digest: mr_data must be a JSON object", file=sys.stderr)
         return 2
 
-    raw_threads = load_discussions(a.discussions)
+    # Gather-file detection applies ONLY in the 1-file case (plan §T1
+    # ambiguity resolution 1): a 2-positional invocation keeps mr raw so
+    # legacy two-file runs stay byte-identical even if the first file
+    # happens to be a gather file.
+    if a.discussions is None and isinstance(mr.get("data"), dict) \
+            and isinstance(mr.get("discussions"), (dict, list)):
+        gather = mr
+        mr = gather["data"]
+        raw_threads = load_discussions_from_value(gather["discussions"])
+    else:
+        raw_threads = load_discussions(a.discussions)
     diff_lines = diff_recarry_lines(mr)
 
     if raw_threads is None:
