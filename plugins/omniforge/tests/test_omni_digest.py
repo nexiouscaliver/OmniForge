@@ -472,5 +472,121 @@ class TestOmniDigest(unittest.TestCase):
         self.assertIn("C" * 300, digest)
 
 
+# --- W4 T1: gather-file shim fixtures ----------------------------------
+
+GATHER_FILE = {
+    "schema": "omniforge-mr-gather/1",
+    "fetched_at": "2026-09-03T00:00:00Z",
+    "project": "73279395",
+    "mr_iid": "21",
+    "diff_refs": {"base_sha": "b000", "head_sha": "head1", "start_sha": "s000"},
+    "data": {
+        "success": True, "mr_id": "21", "title": "Add widget API",
+        "description": "Adds the widget endpoint.", "comments": "",
+        "diff": DIFF_TEXT, "files_changed": ["src/app.py", "src/net.py"],
+    },
+    "discussions": {
+        "success": True, "mr_id": "21",
+        "discussions": [
+            thread("g1", BOT_FINDING_NOTE, file_path="src/app.py",
+                   line_number=42),
+            thread("g2", "human question", created_at="2026-09-01T12:00:00Z"),
+        ],
+        "total": 2, "unresolved": 1, "resolved": 0,
+    },
+    "versions": [],
+}
+
+# The byte-exact 3.3.0 digest output for the legacy two-file fixture used by
+# test_digest_two_file_legacy_unchanged (generated from the pristine script
+# before the shim landed — the 2-file path must stay byte-identical).
+LEGACY_MR = {
+    "success": True, "mr_id": 21, "title": "T", "description": "D",
+    "comments": "",
+    "diff": "diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n"
+            "+++ b/src/a.py\n@@ -1,2 +1,3 @@\n ctx\n+new\n",
+    "files_changed": ["src/a.py"],
+}
+
+LEGACY_DISC = discussions_payload([
+    thread("t1", "human note", file_path="src/a.py", line_number=2),
+])
+
+EXPECTED_LEGACY_DIGEST = (
+    "# MR digest — retrospective: false\n"
+    "\n"
+    "## Thread t1 — unresolved — src/a.py:2\n"
+    "\n"
+    "human note\n"
+    "\n"
+    "## Diff re-carry (hunk headers + per-file counts only — full diff "
+    "stays at the Phase-1 temp path)\n"
+    "\n"
+    "| src/a.py | +1/-0 |\n"
+    "@@ -1,2 +1,3 @@\n"
+)
+
+
+class GatherFileShimTests(unittest.TestCase):
+    """W4 T1: the digest accepts the ONE-file gather shape (embedded data +
+    discussions envelope); legacy invocations are unchanged."""
+
+    def test_digest_single_gather_file(self):
+        d = tmp_dir(self)
+        gather = write_json(d, "gather.json", GATHER_FILE)
+        out = os.path.join(d, "out")
+        proc = run_digest(gather, out_dir=out)      # ONE positional file
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, "")           # embedded envelope healthy
+        digest = read_file(out, "digest.md")
+        # threads come from the embedded discussions envelope
+        self.assertIn(BOT_FINDING_NOTE, digest)
+        self.assertIn("## Thread g1 — unresolved — src/app.py:42", digest)
+        self.assertIn("## Thread g2 — unresolved — no locus", digest)
+        # mr comes from the embedded data envelope (diff re-carry proves it)
+        self.assertIn("| src/app.py | +3/-0 |", digest)
+        with open(os.path.join(out, "prior-findings.json"),
+                  encoding="utf-8") as fh:
+            prior = json.load(fh)
+        self.assertTrue(prior["retrospective"])
+        self.assertEqual([p["thread_id"] for p in prior["prior_findings"]],
+                         ["g1"])
+        st = stdout_json(proc)
+        self.assertTrue(st["retrospective"])
+        self.assertEqual(st["prior_count"], 1)
+        self.assertEqual(st["threads_total"], 2)
+
+    def test_digest_two_file_legacy_unchanged(self):
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", LEGACY_MR)
+        disc = write_json(d, "disc.json", LEGACY_DISC)
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, disc, out_dir=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(read_file(out, "digest.md"), EXPECTED_LEGACY_DIGEST)
+
+    def test_digest_single_legacy_file_degrades(self):
+        # a single NON-gather-shaped positional keeps 3.3.0's degrade: one
+        # stderr warning, retrospective false, prior_findings [], exit 0 —
+        # never a usage error
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data())
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, out_dir=out)
+        self.assertEqual(proc.returncode, 0,
+                         "single legacy file must degrade, not fail")
+        warnings = [l for l in proc.stderr.splitlines() if l.strip()]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("omni_digest", warnings[0])
+        st = stdout_json(proc)
+        self.assertFalse(st["retrospective"])
+        self.assertEqual(st["prior_count"], 0)
+        with open(os.path.join(out, "prior-findings.json"),
+                  encoding="utf-8") as fh:
+            prior = json.load(fh)
+        self.assertFalse(prior["retrospective"])
+        self.assertEqual(prior["prior_findings"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
