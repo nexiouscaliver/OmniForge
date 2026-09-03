@@ -190,6 +190,34 @@ class TransportRequestTests(unittest.TestCase):
                                   form=[("resolved", "true")])
         self.assertEqual(seen, ["DELETE", "POST", "PUT"])
 
+    def test_url_join_with_and_without_leading_slash(self):
+        # api_base + path must join to exactly one "/" whether or not the
+        # caller's path carries a leading slash (a missing slash produced
+        # .../api/v4projects/... and a Cloudflare 403 in the wild).
+        seen = []
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def getcode(self):
+                return 200
+
+            def read(self):
+                return b"{}"
+
+        def fake_urlopen(req, timeout=None):
+            seen.append(req.full_url)
+            return FakeResp()
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            omni_glab_api.request("GET", "/projects/1", "tok")
+            omni_glab_api.request("GET", "projects/1", "tok")
+        self.assertEqual(seen, ["https://gitlab.com/api/v4/projects/1"] * 2)
+
     def test_user_agent_header_sent(self):
         # gitlab.com's Cloudflare edge challenges the default Python-urllib
         # UA; every request must carry the explicit User-Agent.

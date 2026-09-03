@@ -135,7 +135,9 @@ def request(method, path, token, host=None, form=None, attempts=3,
     and on retry exhaustion (retryable=True so callers may page-retry).
     """
     _sleep = sleep_fn if sleep_fn is not None else globals()["sleep_fn"]
-    url = api_base(resolve_host(host)) + path
+    # Join robustly regardless of a leading "/" on `path` (a missing slash
+    # once produced .../api/v4projects/... and a Cloudflare 403).
+    url = api_base(resolve_host(host)).rstrip("/") + "/" + path.lstrip("/")
     data = urllib.parse.urlencode(form).encode("utf-8") if form else None
     name, value = auth_header(token)
     headers = {name: value, "User-Agent": USER_AGENT}
