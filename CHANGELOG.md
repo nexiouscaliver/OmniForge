@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - posting-guide's trailing "MCP `post_full_review` remains the recommended primary" claim removed — contradicted the script-first Implementation line
 
 ### A/B
-- A/B VALIDATION PENDING — orchestrator fills after the arms run: `A/B e2e (same MR !21, same head): total wall X vs Y s (±Z%), Phase-1 gather N API calls / W s vs dozens-of-calls improvise, posting wall, 100% anchored first-try — see w4-glab-io-validation.md`
+- A/B e2e (same MR !21, same head, both arms real-posting, inter-arm reset, w4 arm first): total wall **1335 s vs 1380 s** (−45 s, within single-pair noise); gather = **6 API calls / 4.3 s** once parameterized vs 5 improvised calls + 7 inline heredocs (~104 s); posting = **~48 s** (dry-run validation + one 20.8 s real post) vs ~86 s + an ~80 s token detour + 1 failed post; **threads anchored first-try 24/24 (100%) vs 0/30** (3.3.0 posted every finding as an unanchored top-level note and never repaired — silent anchor loss, worse than the known delete+repost loop); improvised /tmp executables 0 in both arms; sleeps 0 (w4, main + all subs) vs 2 in one 3.3.0 subagent; STOP-guard `--verify-head` ran at both checkpoints, exit 0 both. Honest misses: 3 failed fetch invocations (~72 s — unencoded full-path 404s + a token detour) before the run settled on the numeric project ID (3.3.2 candidate: accept/URL-encode full project paths); adjudication turns 31 vs 24 (the ≤12 target remains unmet — unchanged lever, not a W4 regression). Full tables: `w4-glab-io-validation.md`
 
 ---
 
