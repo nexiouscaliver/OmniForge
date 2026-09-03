@@ -282,6 +282,36 @@ If the waiter exits 2 (or its JSON reports stalled/missing agents): do NOT re-di
 
 **Coverage degraded (N/3 reviewers)** — missing: <which of MR Analyst / Codebase Reviewer / Security Reviewer>
 
+### Mid-run head-move guard (STOP protocol)
+
+After the waiter exits (0 or 2) and BEFORE Phase 4 consolidation, verify the MR head has
+not moved since the Phase-1 gather:
+
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_fetch_mr.py" \
+  --project {project} --mr {id} --verify-head <diff_refs.head_sha from /tmp/omni_mr{id}_gather.json>
+
+Exit 0 → proceed to Phase 4. Exit 4 (head moved) → STOP, deterministically:
+- NO re-partition, NO re-dispatch, NO new gather.
+- Consolidate whatever completed (cheap, local) and present the report in your final message.
+- Post EXACTLY ONE addendum note (a top-level note has no nested keys — glab api or the
+  notes API is safe) and NO inline threads (stale anchors would mislead):
+
+  ## OmniForge addendum — MR head moved mid-review
+
+  Recorded head `{recorded}` moved to `{current}` while the review agents were running.
+  Verdict at the recorded state: {VERDICT} ({N} findings >= 70 confidence — summary only,
+  no inline threads posted because line anchors may be stale).
+  This run STOPPED per protocol — no re-review was performed. Push a new commit and
+  comment `/omnireview force` for a fresh review.
+
+- Then Phase 7 cleanup as usual.
+
+A SECOND identical `--verify-head` invocation runs immediately BEFORE the Phase 6 poster
+call (same exit-4 STOP protocol + addendum path). Justification: a head move between
+consolidation and posting means posting line numbers computed against a stale diff —
+silently misanchored threads, the exact harm this guard exists to prevent (posting phases
+historically ran ~15 min, so this window is real).
+
 ---
 
 ## Phase 4: Consolidation
@@ -365,6 +395,7 @@ Post summary comment + individual inline threads for each finding >= 70 confiden
 **REQUIRED REFERENCE:** `./references/posting-guide.md` — you MUST read this before posting anything. Contains the summary comment template, inline thread template, MCP tool call syntax (`post_full_review` findings JSON format), and bash fallback commands. Do NOT improvise posting format — use the exact templates from the reference.
 
 **Fallback (no MCP server):** When MCP is unavailable, use the shipped `scripts/omni_post_review.py` (see posting-guide.md — retry/backoff, reply routing, duplicate-summary guard, `--dry-run`) — never improvised `/tmp` posting scripts.
+Immediately before posting, re-run the Phase-3 `--verify-head` check — exit 4 (head moved) = STOP protocol above.
 
 ---
 
