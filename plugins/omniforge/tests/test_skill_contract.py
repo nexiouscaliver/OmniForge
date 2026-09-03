@@ -93,8 +93,28 @@ class SkillContractTests(unittest.TestCase):
                       "Phase 1 must name the shipped partition script")
         self.assertIn("omni_digest.py", t[phase1:phase2],
                       "Phase 1 must name the shipped digest script")
-        self.assertIn("/tmp/omni_mr{id}_discussions.json", t[phase1:phase2],
-                      "Phase 1 must save the fetch_mr_discussions output")
+        self.assertIn("/tmp/omni_mr{id}_gather.json", t[phase1:phase2],
+                      "Phase 1 must save the one-shot gather file "
+                      "(omni_fetch_mr.py output)")
+
+    def test_phase1_names_fetch_script(self):
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        self.assertIn("omni_fetch_mr.py", t[phase1:phase2],
+                      "Phase 1 gather must name the shipped one-shot "
+                      "fetch script as the primary path")
+
+    def test_posting_guide_primary_is_script(self):
+        t = read(os.path.join("references", "posting-guide.md"))
+        impl = t.index("Implementation:")
+        self.assertIn("omni_post_review.py",
+                      t[impl:impl + t[impl:].index("\n\n")],
+                      "posting-guide's Implementation sentence must name "
+                      "the shipped script")
+        self.assertNotIn('--raw-field "position[base_sha]', t,
+                         "posting-guide must not carry the unanchored "
+                         "nested-position glab command")
 
     def test_phase4_wires_prior_flag_for_retrospective(self):
         t = read("SKILL.md")
