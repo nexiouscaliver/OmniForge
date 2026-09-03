@@ -119,6 +119,19 @@ class SkillContractTests(unittest.TestCase):
             seen.add(headings[0])
         self.assertEqual(len(seen), 1)      # byte-identical across templates
 
+    def test_stop_guard_protocol_pinned(self):
+        t = read("SKILL.md")
+        phase3 = t.index("## Phase 3")
+        phase4 = t.index("## Phase 4")
+        guard = t[phase3:phase4]
+        self.assertIn("--verify-head", guard)
+        self.assertIn("NO re-partition, NO re-dispatch", guard)
+        self.assertIn("OmniForge addendum", guard)
+        # the pre-posting (Phase 6) second verification is also pinned
+        phase6 = t.index("### Option 1: Full Review Post")
+        phase7 = t.index("## Phase 7")
+        self.assertIn("--verify-head", t[phase6:phase7])
+
 
 if __name__ == "__main__":
     unittest.main()
