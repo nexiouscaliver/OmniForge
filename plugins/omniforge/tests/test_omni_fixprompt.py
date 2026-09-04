@@ -39,6 +39,10 @@ from contextlib import redirect_stderr, redirect_stdout
 SCRIPTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
     "skills", "omnireview-gitlab", "scripts"))
 FIXPROMPT = os.path.join(SCRIPTS, "omni_fixprompt.py")
+SKILL_MD = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
+    "skills", "omnireview-gitlab", "SKILL.md"))
+POSTING_GUIDE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
+    "skills", "omnireview-gitlab", "references", "posting-guide.md"))
 
 WEB_URL = "https://gitlab.example.test/regenai/regenai-base/merge_requests/136"
 GOLDEN_META = {"title": "Add cache layer",
@@ -594,6 +598,42 @@ class FixPromptTests(unittest.TestCase):
                 roots.add(node.module.split(".")[0])
         self.assertTrue(roots)
         self.assertLessEqual(roots, {"argparse", "json", "re", "sys", "os"})
+
+
+class FixPromptDocsContractTests(unittest.TestCase):
+    """Doc-contract tests (R2-P T3): SKILL.md Phase 7 (AC-11) and the
+    posting-guide findings-format block (AC-12) document the automatic fix
+    brief, the optional findings rich keys, and the additive stdout keys.
+    The assertions pin BOTH the new content and pre-existing pinned strings
+    (summary heading, inline-thread template, exit-code table rows) so the
+    doc edits cannot drift into neighboring sections."""
+
+    def test_skill_phase7_documents_fix_brief(self):
+        with open(SKILL_MD, encoding="utf-8") as fh:
+            t = fh.read()
+        phase7 = t[t.index("## Phase 7"):t.index("## Error Handling")]
+        for needle in ("omni_fixprompt.py", "fix brief",
+                       "references/posting-guide.md", "never a",
+                       "stale brief"):
+            self.assertIn(needle, phase7)
+        # fix-brief content is confined to Phase 7 (the reviewer
+        # additionally checks the git diff hunk headers fall inside the
+        # Phase 7 line range — AC-11)
+        self.assertNotIn("fix brief", t[:t.index("## Phase 7")])
+
+    def test_posting_guide_documents_rich_keys_and_brief(self):
+        with open(POSTING_GUIDE, encoding="utf-8") as fh:
+            t = fh.read()
+        for needle in ("severity", "recommendation", "omni_fixprompt.py",
+                       "fix_brief", "thread_map", "out of scope",
+                       "none given — derive from the problem statement"):
+            self.assertIn(needle, t)
+        # pinned pre-existing strings survive unchanged (AC-12): the
+        # summary heading, the inline-thread template's title line, and
+        # the exit-code table's 0/3 rows
+        for pinned in ("## OmniForge", "**{SEVERITY}** — {short_title}",
+                       "| `0` |", "| `3` |"):
+            self.assertIn(pinned, t)
 
 
 if __name__ == "__main__":
