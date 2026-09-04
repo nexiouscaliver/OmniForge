@@ -411,10 +411,6 @@ class GatherFileInputTests(unittest.TestCase):
                              "detection requires BOTH data and discussions")
 
 
-CANARY_AB = os.path.join(os.path.dirname(__file__), "ab",
-                         "canary_synth_gather.json")
-
-
 def load_ab_gather(name):
     with open(os.path.join(os.path.dirname(__file__), "ab", name),
               encoding="utf-8") as fh:
@@ -502,10 +498,14 @@ class WeightBalanceTests(unittest.TestCase):
         aff_w = sum(mod.weight(p, mod.added_lines(data, p)) for p in aff)
         sec_files = result["agents"]["security"]["files"]
         by_path = {f["path"]: f for f in result["files"]}
-        # security always owns AT LEAST its affinity set (section 3.4 invariant);
-        # with affinity in [0.5x, 1.0x) ideal it sits above the floor but below
-        # ideal, so greedy ALSO spills filler to it (it is a full greedy bin) —
-        # exact equality with the affinity set holds ONLY at affinity >= ideal.
+        # security always owns AT LEAST its affinity set (section 3.4
+        # invariant); exact equality with the affinity set holds ONLY at
+        # affinity >= ideal. With affinity under the floor (< 0.5x ideal)
+        # greedy MUST spill to it (asserted strictly below); in [0.5x, 1.0x)
+        # ideal it is above the floor but below ideal, so greedy still
+        # spills filler to it (it is a full greedy bin). The committed
+        # fixture's draws put affinity at ~0.33x ideal — below the floor,
+        # the stronger case.
         self.assertGreaterEqual(set(sec_files), set(aff))
         for p in sec_files:
             if p not in set(aff):
@@ -514,9 +514,8 @@ class WeightBalanceTests(unittest.TestCase):
         if 6 * aff_w < total:            # affinity alone under the floor
             self.assertGreater(len(sec_files), len(aff),
                                "security starved but got no spill")
-        ideal = total // 3
         print("canary: affinity weight %d / ideal %d / security owns %d files"
-              % (aff_w, ideal, len(sec_files)))
+              % (aff_w, total // 3, len(sec_files)))
 
     def test_cap_enforcement_excludes_full_bins(self):
         mod = load_partition_module()
