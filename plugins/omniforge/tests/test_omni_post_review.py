@@ -117,6 +117,49 @@ def reply_path(thread_id, project=PROJECT, mr=MR):
     return refs_path(project, mr) + "/discussions/%s/notes" % thread_id
 
 
+# ── fix-brief fixtures (R2-P, module level per F6 so BOTH test classes can
+# seed/inspect brief runs; each helper takes the test's transport explicitly) ──
+
+WEB_URL = ("https://gitlab.example.test/regenai/regenai-base/"
+           "merge_requests/136")
+
+DISCUSSION_CREATED = {"id": 501, "notes": [{"id": 901}]}
+NOTE_CREATED = {"id": 903}
+
+MR_META_FULL = {"title": "Add cache layer",
+                "description": "Adds a read-through cache.",
+                "source_branch": "feat/cache", "target_branch": "main",
+                "web_url": WEB_URL,
+                "path_with_namespace": "regenai/regenai-base"}
+FULL_MR = {**DIFF_REFS, **MR_META_FULL}
+
+
+def seed_brief_run(transport, project=PROJECT):
+    """Seed a run whose MR GET returns full meta and whose thread/note POSTs
+    return created-object ids — the brief fires and permalinks resolve."""
+    transport.gets[refs_path(project)] = FULL_MR
+    transport.posts[discussions_path(project)] = DISCUSSION_CREATED
+    transport.posts[summary_path(project)] = NOTE_CREATED
+
+
+def brief_posts(transport, project=PROJECT):
+    """POSTs to the notes endpoint whose body IS the fix brief."""
+    return [c for c in transport.calls if c[0] == "POST"
+            and c[1] == summary_path(project)
+            and dict(c[2]).get("body", "").startswith("## OmniForge fix brief")]
+
+
+def summary_posts(transport, project=PROJECT):
+    """POSTs to the notes endpoint that are SUMMARY notes — body-prefix
+    classification so counts stay correct under brief-seeded fixtures (a
+    summary starts `## OmniForge` but never `## OmniForge fix brief`)."""
+    return [c for c in transport.calls if c[0] == "POST"
+            and c[1] == summary_path(project)
+            and dict(c[2]).get("body", "").startswith("## OmniForge")
+            and not dict(c[2]).get("body", "").startswith(
+                "## OmniForge fix brief")]
+
+
 class FakeTransport:
     """Stand-in for omni_glab_api.request honoring the same contract:
     bounded retry (attempts) on 429/5xx with backoff_base * 2^(attempt-1)
@@ -124,8 +167,10 @@ class FakeTransport:
     {"status","body","json"} on success. Every attempt is recorded in
     self.calls as (method, path, form). GET fixtures are served by exact
     path from self.gets; POST failure sequences by exact path from
-    self.scripts (one status code consumed per attempt; exhausted or
-    absent => success).
+    self.scripts (one item consumed per attempt — an int status, or a
+    (status, payload) tuple scripting a 2xx WITH a JSON body; exhausted or
+    absent => success); static 2xx POST bodies by exact path from
+    self.posts (checked AFTER scripts so failure scripts still win).
     """
 
     def __init__(self):
@@ -133,6 +178,7 @@ class FakeTransport:
         self.hosts = []          # host arg per request (parallel to calls)
         self.gets = {}
         self.scripts = {}
+        self.posts = {}
         self.sleeps = []
 
     def script(self, path, codes):
@@ -140,11 +186,15 @@ class FakeTransport:
 
     def _attempt_status(self, method, path):
         if method == "GET" and path in self.gets:
-            value = self.gets[path]
-            return 200, value
+            return 200, self.gets[path]
         codes = self.scripts.get(path)
         if codes:
-            return codes.pop(0), None
+            item = codes.pop(0)
+            if isinstance(item, tuple):   # (status, payload) — seeded JSON
+                return item
+            return item, None
+        if method == "POST" and path in self.posts:
+            return 200, self.posts[path]
         return 200, {}
 
     def request(self, method, path, token, host=None, form=None, attempts=3,
@@ -251,7 +301,7 @@ class OmniPostReviewTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         # thread 1: attempt fails then succeeds (2 attempts); thread 2: 1
         self.assertEqual(len(self.attempts(discussions_path(), "POST")), 3)
-        self.assertEqual(len(self.attempts(summary_path(), "POST")), 1)
+        self.assertEqual(len(summary_posts(self.transport)), 1)
         out = self.stdout_json(r)
         self.assertTrue(out["posted_summary"])
         self.assertEqual(out["threads"], 2)
@@ -271,7 +321,7 @@ class OmniPostReviewTests(unittest.TestCase):
         self.transport.script(summary_path(), [400])
         r = self.run_poster(FINDINGS)
         self.assertEqual(r.returncode, 1)
-        self.assertEqual(len(self.attempts(summary_path(), "POST")), 1)
+        self.assertEqual(len(summary_posts(self.transport)), 1)
         self.assertEqual(len(self.attempts(discussions_path(), "POST")), 0)
         self.assertIn("400", r.stderr)
         self.assertIn("POST", r.stderr)             # error names the call
@@ -425,7 +475,7 @@ class OmniPostReviewTests(unittest.TestCase):
         forced = self.run_poster(
             FINDINGS, extra=["--since", str(SUMMARY_EPOCH - 100), "--force"])
         self.assertEqual(forced.returncode, 0, forced.stderr)
-        self.assertEqual(len(self.attempts(summary_path(), "POST")), 1)
+        self.assertEqual(len(summary_posts(self.transport)), 1)
 
     def test_summary_guard_ignores_same_run_summary(self):
         self.set_notes(NOTES_WITH_SUMMARY)
@@ -442,14 +492,14 @@ class OmniPostReviewTests(unittest.TestCase):
         self.set_notes(NOTES_WITH_SUMMARY)
         r = self.run_poster(FINDINGS, extra=["--since", str(SUMMARY_EPOCH + 100)])
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(len(self.attempts(summary_path(), "POST")), 1)
+        self.assertEqual(len(summary_posts(self.transport)), 1)
 
     # ── single summary note + N+1 refs discipline ─────────────
 
     def test_posts_exactly_one_summary_note(self):
         r = self.run_poster(FINDINGS)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(len(self.attempts(summary_path(), "POST")), 1)
+        self.assertEqual(len(summary_posts(self.transport)), 1)
 
     def test_diff_refs_fetched_once(self):
         findings = [{"file_path": "src/f%d.py" % i, "line_number": i + 1,
@@ -490,7 +540,7 @@ class OmniPostReviewTests(unittest.TestCase):
     def test_skip_summary_posts_threads_only(self):
         r = self.run_poster(FINDINGS, extra=["--skip-summary"])
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.attempts(summary_path(), "POST"), [])
+        self.assertEqual(summary_posts(self.transport), [])
         # guard STILL evaluated (not reply-only, not --force): exactly ONE
         # notes GET when a single page suffices — pinned across the 3.3.2
         # pagination change (path form may vary, count may not).
@@ -564,7 +614,9 @@ class OmniPostReviewTests(unittest.TestCase):
                             "--findings-json", fpath, "--backoff-base", "0")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.attempts(discussions_path(), "POST"), [])
-        self.assertEqual(self.attempts(refs_path(), "GET"), [])
+        # R2-P (F7): a brief-eligible note-only batch now makes exactly ONE
+        # MR GET — the merged fetch serves brief meta alongside nothing else.
+        self.assertEqual(len(self.attempts(refs_path(), "GET")), 1)
         self.assertEqual(self.guard_gets(), [])       # implied skip: no guard
         notes_posts = self.attempts(summary_path(), "POST")
         self.assertEqual(len(notes_posts), 1)         # the note, no summary
@@ -575,6 +627,8 @@ class OmniPostReviewTests(unittest.TestCase):
         self.assertEqual(out["replies"], 0)
         self.assertEqual(out["notes"], 1)             # additive stdout key
         self.assertEqual(out["failures"], 0)
+        # default {} POST fixture = id-less 2xx => the brief is skipped
+        self.assertFalse(out["fix_brief"])
 
     def test_mixed_batch_summary_thread_reply_note_counts(self):
         findings = [
@@ -713,6 +767,232 @@ class OmniPostReviewTests(unittest.TestCase):
         self.assertEqual(len(self.guard_gets()), 2)
         self.assertIn("OmniForge", r.stderr)
 
+    # ── R2-P: the automatic fix brief ──────────────────────────
+
+    def test_zero_findings_posts_no_brief(self):
+        # T4: zero findings => the summary posts, nothing else — no brief,
+        # no extra calls (constraint 8).
+        r = self.run_poster([])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(summary_posts(self.transport)), 1)
+        self.assertEqual(brief_posts(self.transport), [])
+        self.assertEqual(len(self.transport.calls), 2, self.transport.calls)
+        self.assertIs(self.stdout_json(r)["fix_brief"], False)
+
+    def test_brief_posted_last_with_permalinks(self):
+        # T5 (expect-test), the end-to-end criterion: through the real
+        # main() the brief is the run's LAST transport call, posted exactly
+        # once, with permalinks built from THIS run's seeded response ids;
+        # the reply entry never enters it (AC-5/AC-9, SC-4/SC-5).
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "severity": "critical", "title": "Missing null check on cfg",
+             "category": "correctness",
+             "problem": "cfg.get('x') is dereferenced without a None guard.",
+             "recommendation": "Guard cfg.get('x') with a None check.",
+             "body": "**Critical** — cfg.get('x') dereferenced without a "
+                     "None guard."},
+            {"body": "REPLY-ENTRY-BODY", "reply_to_thread_id": "T7"},
+            {"body": "**Minor** — stale docstring on public API",
+             "severity": "minor", "title": "Stale docstring on public API"},
+        ]
+        seed_brief_run(self.transport)
+        r = self.run_poster(findings)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        # guard GET + MR GET + summary + thread + reply + note + brief —
+        # the brief POST is the LAST call of the run.
+        self.assertEqual(len(self.transport.calls), 7, self.transport.calls)
+        last = self.transport.calls[-1]
+        self.assertEqual(last[0], "POST")
+        self.assertEqual(last[1], summary_path())
+        self.assertTrue(dict(last[2])["body"].startswith(
+            "## OmniForge fix brief"))
+        posted = brief_posts(self.transport)
+        self.assertEqual(len(posted), 1)
+        body = dict(posted[0][2])["body"]
+        self.assertIn(WEB_URL + "#note_901", body)   # this run's thread id
+        self.assertIn(WEB_URL + "#note_903", body)   # this run's note id
+        self.assertNotIn("REPLY-ENTRY-BODY", body)   # replies never listed
+        self.assertEqual(len(self.attempts(refs_path(), "GET")), 1)  # AC-9
+        # T6 echo: each eligible finding's resolved title, exactly once
+        self.assertEqual(
+            body.count("**[critical] Missing null check on cfg**"), 1)
+        self.assertEqual(
+            body.count("**[minor] Stale docstring on public API**"), 1)
+        out = self.stdout_json(r)
+        self.assertIs(out["fix_brief"], True)
+        self.assertEqual(out["thread_map"],
+                         {"0": WEB_URL + "#note_901",
+                          "2": WEB_URL + "#note_903"})
+
+    def test_reply_only_batch_no_brief_no_get(self):
+        # T8: a reply-only batch — no brief, zero MR GETs, zero guard GETs.
+        findings = [{"body": "REPLY-ONE", "reply_to_thread_id": "T1"},
+                    {"body": "REPLY-TWO", "reply_to_thread_id": "T2"}]
+        r = self.run_poster(findings)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(brief_posts(self.transport), [])
+        self.assertIs(self.stdout_json(r)["fix_brief"], False)
+        self.assertEqual(self.attempts(refs_path(), "GET"), [])
+        self.assertEqual(self.guard_gets(), [])
+
+    def test_reply_to_flag_no_brief_no_get(self):
+        # T8: --reply-to suppresses the brief even when note entries
+        # coexist, and the run still makes ZERO MR GETs (F7 condition).
+        findings = [{"file_path": "src/app.py", "line_number": 42,
+                     "body": "THREAD-BODY"},
+                    {"body": "NOTE-BODY"}]
+        r = self.run_poster(findings, extra=["--reply-to", "T1"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(brief_posts(self.transport), [])
+        self.assertIs(self.stdout_json(r)["fix_brief"], False)
+        self.assertEqual(self.attempts(refs_path(), "GET"), [])
+
+    def test_brief_post_failure_exits_1(self):
+        # T9: the brief POST exhausting retries is a posting failure —
+        # exit 1, failures >= 1, fix_brief false, and every prior
+        # artifact's call stays in the transport record (AC-6).
+        seed_brief_run(self.transport)
+        self.transport.script(summary_path(), [200, 500, 500, 500])
+        r = self.run_poster(FINDINGS[:1])
+        self.assertEqual(r.returncode, 1)
+        out = self.stdout_json(r)
+        self.assertGreaterEqual(out["failures"], 1)
+        self.assertIs(out["fix_brief"], False)
+        self.assertGreaterEqual(len(summary_posts(self.transport)), 1)
+        self.assertEqual(len(self.attempts(discussions_path(), "POST")), 1)
+
+    def test_brief_skip_on_missing_web_url(self):
+        # T10: a missing MR meta field => skip, exactly one stderr line,
+        # exit 0, no brief POST (AC-7).
+        seed_brief_run(self.transport)
+        self.transport.gets[refs_path()] = {
+            k: v for k, v in FULL_MR.items() if k != "web_url"}
+        r = self.run_poster(FINDINGS[:1])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(brief_posts(self.transport), [])
+        skip_lines = [ln for ln in r.stderr.splitlines()
+                      if "fix brief skipped — " in ln]
+        self.assertEqual(len(skip_lines), 1)
+        self.assertIn("web_url", skip_lines[0])
+        self.assertIs(self.stdout_json(r)["fix_brief"], False)
+
+    def test_brief_skip_on_notes_only_get_failure(self):
+        # T10: a notes-only-batch MR GET failure is a SKIP, not a failure —
+        # the note still posts, exit 0, one skip line (resolution E).
+        findings = [{"body": "NOTE-BODY-GET-FAIL"}]
+        self.transport.gets.pop(refs_path())
+        self.transport.script(refs_path(), [500, 500, 500])
+        fpath = write_file(os.path.join(self.tmp, "findings.json"),
+                           json.dumps(findings))
+        r = self.raw_poster("--mr", MR, "--project", PROJECT,
+                            "--findings-json", fpath, "--backoff-base", "0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(summary_posts(self.transport), [])
+        self.assertEqual(len(self.attempts(summary_path(), "POST")), 1)
+        self.assertEqual(
+            len([ln for ln in r.stderr.splitlines()
+                 if "fix brief skipped" in ln]), 1)
+        self.assertIs(self.stdout_json(r)["fix_brief"], False)
+
+    def test_dry_run_brief_final_chunk_tokenless(self):
+        # T11: --dry-run renders the brief offline (placeholder tokens
+        # verbatim, finding fields real), prints it as the FINAL DRY-RUN
+        # chunk, makes ZERO transport calls, works without a token
+        # (AC-10/AC-16).
+        r = self.run_poster(FINDINGS, extra=["--dry-run"], token=None)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.transport.calls, [])
+        chunks = r.stdout.split("DRY-RUN: ")[1:]
+        self.assertTrue(chunks)
+        last = chunks[-1]
+        self.assertTrue(last.startswith("POST " + summary_path()), last)
+        self.assertIn("## OmniForge fix brief", last)
+        for token in ("<mr-title>", "<mr-intent>", "<mr-source>",
+                      "<mr-target>", "<link>"):
+            self.assertIn(token, last)
+        out = self.stdout_json(r)
+        self.assertIs(out["fix_brief"], True)
+        self.assertEqual(out["thread_map"], {"0": "<link>", "1": "<link>"})
+
+    def test_resume_subset_brief_covers_only_remaining(self):
+        # T12: a --skip-summary --force resume with the array edited down
+        # to the remaining entry posts a brief covering EXACTLY that entry
+        # — accurate-but-partial, never stale.
+        first = self.run_poster(FINDINGS)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        seed_brief_run(self.transport)
+        r = self.run_poster([FINDINGS[1]],
+                            extra=["--skip-summary", "--force"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        posted = brief_posts(self.transport)
+        self.assertEqual(len(posted), 1)
+        body = dict(posted[0][2])["body"]
+        self.assertEqual(body.count("1. **[minor] Magic number**"), 1)
+        self.assertNotIn("Missing null check", body)  # the already-posted
+        out = self.stdout_json(r)
+        self.assertIs(out["fix_brief"], True)
+        self.assertEqual(out["thread_map"], {"0": WEB_URL + "#note_901"})
+
+    def test_midbatch_exit1_no_brief_thread_map_persisted(self):
+        # T13: a mid-batch exit 1 posts NO brief, but the stdout JSON still
+        # carries thread_map = exactly the artifacts that succeeded so far
+        # — the persisted manual-reconstruction source (AC-19).
+        self.transport.gets[refs_path()] = FULL_MR
+        self.transport.script(discussions_path(),
+                              [(200, DISCUSSION_CREATED), 500, 500, 500])
+        r = self.run_poster(FINDINGS)
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(brief_posts(self.transport), [])
+        out = self.stdout_json(r)
+        self.assertIs(out["fix_brief"], False)
+        self.assertEqual(out["thread_map"], {"0": WEB_URL + "#note_901"})
+
+    def test_idless_2xx_response_skips_brief(self):
+        # T14: a 2xx response that yields no note id (the default {}
+        # fixture shape) => the brief is skipped, never rendered with a
+        # missing link. This is the implicit path EVERY default-fixture
+        # existing test in this file depends on.
+        self.transport.gets[refs_path()] = FULL_MR
+        r = self.run_poster(FINDINGS[:1])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(brief_posts(self.transport), [])
+        self.assertEqual(
+            len([ln for ln in r.stderr.splitlines()
+                 if "fix brief skipped" in ln]), 1)
+        self.assertIs(self.stdout_json(r)["fix_brief"], False)
+
+    def test_backward_compat_no_rich_keys_brief_fallbacks(self):
+        # T7 (poster half): today's FINDINGS payloads (no rich keys) still
+        # get a brief — fallback derivation from the body severity markers
+        # (thread POST forms themselves stay byte-identical per the
+        # existing suite, AC-8).
+        seed_brief_run(self.transport)
+        r = self.run_poster(FINDINGS)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        posted = brief_posts(self.transport)
+        self.assertEqual(len(posted), 1)
+        body = dict(posted[0][2])["body"]
+        self.assertIn("[important] Missing null check", body)
+        self.assertIn("none given — derive from the problem statement", body)
+
+    def test_host_flag_reaches_brief_post(self):
+        # brief-seeded variant of test_host_flag_reaches_every_request: 7
+        # calls (the brief included), every one on the flagged host.
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "body": "THREAD-BODY"},
+            {"body": "REPLY-BODY", "reply_to_thread_id": "T7"},
+            {"body": "NOTE-BODY"},
+        ]
+        seed_brief_run(self.transport)
+        r = self.run_poster(findings,
+                            extra=["--host", "https://glab.example.test"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.transport.calls), 7, self.transport.calls)
+        self.assertEqual(set(self.transport.hosts),
+                         {"https://glab.example.test"})
+
 
 class ProjectPathEncodingTests(unittest.TestCase):
     """3.3.3: bare full-path --project values are URL-encoded on EVERY
@@ -797,6 +1077,27 @@ class ProjectPathEncodingTests(unittest.TestCase):
             self.assertIn("projects/group%2Fsub%2Fproject/merge_requests",
                           path)
             self.assertNotIn("%25", path)         # not double-encoded
+
+    def test_full_path_encoded_on_brief_post(self):
+        # R2-P brief-seeded variant (module-level helper, F6): the brief
+        # POST path is full-path encoded too — 7 calls, every path encoded,
+        # exactly one brief POST.
+        seed_brief_run(self.transport, self.ENC)
+        self.transport.gets[notes_list_path(self.ENC)] = []
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "body": "THREAD-BODY"},
+            {"body": "REPLY-BODY", "reply_to_thread_id": "T7"},
+            {"body": "NOTE-BODY"},
+        ]
+        code, so, se = self._run(self.FULL, findings)
+        self.assertEqual(code, 0, se)
+        self.assertEqual(len(self.transport.calls), 7, self.transport.calls)
+        for _, path, _ in self.transport.calls:
+            self.assertIn("projects/%s/merge_requests/%s" % (self.ENC, MR),
+                          path)
+            self.assertNotIn(self.FULL, path)     # never the raw slashes
+        self.assertEqual(len(brief_posts(self.transport, self.ENC)), 1)
 
 
 if __name__ == "__main__":
