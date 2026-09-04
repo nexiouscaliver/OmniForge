@@ -30,6 +30,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -517,6 +518,227 @@ class PrepareEdgeCasesTests(unittest.TestCase):
         with open(wrong, "w", encoding="utf-8") as fh:
             json.dump({"no_findings": True}, fh)
         self._fatal_run(wrong, "unrecognized shape")
+
+
+class PrepareHardeningTests(unittest.TestCase):
+    """Slug `prepare-hardening` (T1 code-review carry-forwards).
+
+    Genuinely red at this slug's base: write_atomic leaves its .tmp behind
+    on a failed write; neither subprocess seam carries a timeout (so
+    TimeoutExpired is unmapped); the ownerless-agent brief list is a
+    dangling header; load_gather's shape error names a schema it never
+    checks. The fault-injection exit-branch tests (gather shape, partition
+    read-back, briefs/prepare.json write OSError, wipe OSError) are
+    coverage pins for branches that already behave correctly."""
+
+    def _argv(self, run_dir, extra=None):
+        argv = ["--project", PROJECT, "--iid", MR, "--review-id", "hard-1",
+                "--run-dir", run_dir]
+        if extra:
+            argv += extra
+        return argv
+
+    def test_prepare_write_atomic_removes_tmp_on_failed_write(self):
+        # fault-inject the atomic replace: the .tmp sibling must not be
+        # left behind (mirror omni_fetch_mr.py's write hygiene, extended
+        # beyond the happy-path no-residue pin)
+        mod = load_prepare()
+        d = tmp_dir(self)
+        target = os.path.join(d, "brief.md")
+        with mock.patch.object(mod.os, "replace",
+                               side_effect=OSError("replace boom")):
+            with self.assertRaises(OSError):
+                mod.write_atomic(target, "content")
+        self.assertFalse(os.path.exists(target + ".tmp"))
+        self.assertFalse(os.path.exists(target))
+
+    def test_prepare_load_gather_value_error_maps_exit_1_internal(self):
+        # post-gather shape failure -> exit 1, stage "internal"
+        mod = load_prepare()
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        with mock.patch.object(
+                mod, "load_gather",
+                side_effect=ValueError("unexpected gather shape")):
+            rc, so, se = run_prepare(self._argv(run_dir), host=base)
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "prepare_failed")
+        self.assertEqual(st["stage"], "internal")
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        self.assertIn("omni_prepare", diag[0])
+
+    def test_prepare_partition_readback_failure_maps_exit_1(self):
+        # the partition child "succeeds" (rc 0) but its output is missing:
+        # the read-back failure maps to exit 1, stage "internal", and
+        # nothing downstream lands
+        mod = load_prepare()
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        with mock.patch.object(mod, "run_partition",
+                               return_value=(0, '{"files": 0}')):
+            rc, so, se = run_prepare(self._argv(run_dir), host=base)
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)
+        self.assertEqual(st["stage"], "internal")
+        self.assertIn("partition", st["detail"])
+        self.assertFalse(
+            os.path.exists(os.path.join(run_dir, "prepare.json")))
+
+    def test_prepare_briefs_write_oserror_maps_exit_2(self):
+        mod = load_prepare()
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        with mock.patch.object(mod, "write_atomic",
+                               side_effect=OSError("disk full")):
+            rc, so, se = run_prepare(self._argv(run_dir), host=base)
+        self.assertEqual(rc, 2)
+        self.assertEqual(so.strip(), "")     # no stdout JSON on exit 2
+        self.assertIn("omni_prepare: cannot write", se)
+
+    def test_prepare_run_dir_wipe_oserror_maps_exit_2(self):
+        mod = load_prepare()
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        with mock.patch.object(mod, "_wipe_run_dir",
+                               side_effect=OSError("wipe boom")):
+            rc, so, se = run_prepare(self._argv(run_dir), host=base)
+        self.assertEqual(rc, 2)
+        self.assertEqual(so.strip(), "")
+        self.assertIn("omni_prepare: cannot write", se)
+
+    def test_prepare_subprocess_calls_carry_timeout_and_errors_replace(self):
+        # BOTH subprocess seams (fetch + partition) must carry a positive
+        # timeout and decode child text with errors="replace" (a child
+        # printing non-UTF-8 must never crash the parent's text read)
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        real_run = subprocess.run
+        seen = []
+
+        def spy(cmd, *a, **kw):
+            seen.append((cmd, kw))
+            return real_run(cmd, *a, **kw)
+
+        with mock.patch.object(subprocess, "run", side_effect=spy):
+            rc, so, se = run_prepare(self._argv(run_dir), host=base)
+        self.assertEqual(rc, 0, se)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(sorted(os.path.basename(cmd[1])
+                                for cmd, kw in seen),
+                         ["omni_fetch_mr.py", "omni_partition.py"])
+        for cmd, kw in seen:
+            with self.subTest(script=os.path.basename(cmd[1])):
+                self.assertGreater(kw.get("timeout", 0), 0)
+                self.assertEqual(kw.get("errors"), "replace")
+
+    def test_prepare_fetch_timeout_maps_exit_1_stage_gather(self):
+        # patched seam, no real hang and no server needed (the fetch call
+        # never completes): TimeoutExpired -> exit 1, stage "gather", one
+        # stderr diagnostic line
+        run_dir = os.path.join(tmp_dir(self), "run")
+        with mock.patch.object(
+                subprocess, "run",
+                side_effect=subprocess.TimeoutExpired(
+                    "omni_fetch_mr.py", 600)):
+            rc, so, se = run_prepare(self._argv(run_dir))
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "prepare_failed")
+        self.assertEqual(st["stage"], "gather")
+        self.assertIn("timed out", st["detail"])
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        self.assertIn("timed out", diag[0])
+        self.assertIn("omni_prepare", diag[0])
+
+    def test_prepare_partition_timeout_maps_exit_1_stage_partition(self):
+        # the real fetch runs against the server; only the partition
+        # child's subprocess.run raises TimeoutExpired (propagating out of
+        # run_partition) -> exit 1, stage "partition"
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        real_run = subprocess.run
+
+        def fake_run(cmd, *a, **kw):
+            if any("omni_partition.py" in str(c) for c in cmd):
+                raise subprocess.TimeoutExpired(cmd, 120)
+            return real_run(cmd, *a, **kw)
+
+        with mock.patch.object(subprocess, "run", side_effect=fake_run):
+            rc, so, se = run_prepare(self._argv(run_dir), host=base)
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)
+        self.assertEqual(st["stage"], "partition")
+        self.assertIn("timed out", st["detail"])
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "prepare.json")))
+
+
+class PrepareHardeningRendererNitsTests(unittest.TestCase):
+    """The trivial renderer/loader nits riding the hardening slug: the
+    ownerless-agent Owned-files marker and the load_gather error message."""
+
+    @staticmethod
+    def _gather():
+        return {"review_id": "hard-1", "project": PROJECT, "mr_iid": MR,
+                "fetched_at": "2026-09-04T12:00:00+00:00",
+                "diff_refs": {"head_sha": "head1"},
+                "data": {"title": "Harden widget API",
+                         "source_branch": "feat/widget",
+                         "target_branch": "main",
+                         "files_changed": ["README.md", "src/app.py"],
+                         "diff": "@@ -1,1 +1,2 @@\n ctx\n+new\n"}}
+
+    @staticmethod
+    def _partition():
+        return {
+            "files": [
+                {"path": "README.md", "added_lines": 3, "owner": "analyst",
+                 "reason": "docs-prefer-analyst"},
+                {"path": "src/app.py", "added_lines": 3, "owner": "codebase",
+                 "reason": "greedy-balance"}],
+            "agents": {
+                "analyst": {"files": ["README.md"],
+                            "added_lines_total": 3},
+                "codebase": {"files": ["src/app.py"],
+                             "added_lines_total": 3},
+                "security": {"files": [], "added_lines_total": 0}}}
+
+    def test_prepare_ownerless_agent_brief_renders_none_marker(self):
+        # a non-empty MR where one agent owns nothing: the Owned files
+        # list carries an explicit marker instead of a dangling header
+        mod = load_prepare()
+        brief = mod.render_brief("security", self._gather(),
+                                 self._partition(), None)
+        self.assertIn(NO_OWNED_LINE, brief)
+        # agents that DO own files keep their normal bullet lists
+        for agent in ("analyst", "codebase"):
+            with self.subTest(agent=agent):
+                self.assertNotIn(
+                    NO_OWNED_LINE,
+                    mod.render_brief(agent, self._gather(),
+                                     self._partition(), None))
+
+    def test_prepare_load_gather_shape_error_message_matches_checks(self):
+        # the error must describe what is actually validated (a data
+        # object + a fetched_at string) — not a schema the loader never
+        # reads
+        mod = load_prepare()
+        d = tmp_dir(self)
+        wrong = os.path.join(d, "gather.json")
+        with open(wrong, "w", encoding="utf-8") as fh:
+            fh.write('{"nope": 1}')
+        with self.assertRaises(ValueError) as cm:
+            mod.load_gather(wrong)
+        msg = str(cm.exception)
+        self.assertIn("data", msg)
+        self.assertIn("fetched_at", msg)
+        self.assertNotIn("gather/1", msg)
 
 
 if __name__ == "__main__":
