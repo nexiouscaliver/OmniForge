@@ -191,7 +191,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_partition.p
   --mr-json /tmp/omni_mr{id}_gather.json --out /tmp/omni_partition_{id}.json
 ```
 
-The partitioner assigns every changed file exactly one deep-dive owner: security-affinity files (auth/token/pipeline/SQL patterns) → Security Reviewer; docs/config files → MR Analyst; the remainder balanced by added lines across Codebase Reviewer / MR Analyst. Inject each agent's ownership table into its Phase 3 prompt via the `{OWNED_FILES}` placeholder: "Deep-dive owner: these files: <list>." + "Cross-cutting: you still sweep ALL changed files at grep depth; full-file reads are your owned files only." Every agent still covers every changed file — only full-file read depth is partitioned.
+The partitioner assigns every changed file exactly one deep-dive owner: security-affinity files (auth/token/pipeline/SQL patterns) → Security Reviewer (always — affinity is never spilled off); docs/config files → MR Analyst; the remainder is weight-balanced across ALL THREE reviewers (diff-size × language × test-file cost, per-agent cap ≈ 1.25× the ideal share). Inject each agent's ownership table into its Phase 3 prompt via the `{OWNED_FILES}` placeholder: "Deep-dive owner: these files: <list>." + "Cross-cutting: you still sweep ALL changed files at grep depth; full-file reads are your owned files only." Every agent still covers every changed file — only full-file read depth is partitioned.
 
 #### Digest (improvised gather file)
 
