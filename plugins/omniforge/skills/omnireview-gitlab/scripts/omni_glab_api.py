@@ -22,6 +22,9 @@ Contract:
   detail bodies are redacted). Returns {"status", "body", "json"}.
 - get_all: paginated per_page=100&page=N concatenation until a page
   returns fewer than 100 items.
+- encode_project: the ONE shared project-path encoder (fetcher since
+  3.3.2, poster since 3.3.3) — numeric digits-only passthrough,
+  already-%-encoded passthrough, else urllib.parse.quote(value, safe="").
 - redact: replaces any token occurrence with ***.
 
 Token values are never logged. Stdlib only.
@@ -100,6 +103,20 @@ def redact(text, token):
     if token and text:
         return text.replace(token, "***")
     return text
+
+
+def encode_project(value):
+    """URL-encode a bare full-path project (group/subgroup/project) with
+    safe="" so each "/" reaches GitLab as %2F. Numeric IDs and already-
+    encoded values (carrying %) pass through unchanged. Shared by BOTH
+    scripts — the fetcher since 3.3.2; the poster since 3.3.3 after the
+    production canary passed regenai-gitlab/regenai-digital/cleo to the
+    POSTER unencoded and every request path collapsed (guard GET 404;
+    the run recovered only by switching to the numeric ID)."""
+    s = str(value)
+    if s.isdigit() or "%" in s:
+        return s
+    return urllib.parse.quote(s, safe="")
 
 
 def _http(url, headers, data=None, method=None):
