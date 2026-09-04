@@ -389,6 +389,74 @@ def build_prepare_json(review_id, project, mr_iid, head_sha, run_dir,
     }
 
 
+def build_receipt(run_dir, project, mr_iid, review_id, head_sha, partition,
+                  prior_count, duration_s):
+    """The exit-0 stdout receipt (exactly ONE JSON line, 11 keys)."""
+    return {
+        "ok": True,
+        "run_dir": os.path.abspath(run_dir),
+        "project": project,
+        "mr_iid": str(mr_iid),
+        "review_id": review_id,
+        "head_sha": head_sha,
+        "files": len(partition["files"]),
+        "added_lines": sum(f["added_lines"] for f in partition["files"]),
+        "partitions": {a: len(partition["agents"][a]["files"])
+                       for a in AGENTS},
+        "prior_findings": prior_count,
+        "duration_s": float(duration_s),
+    }
+
+
+def build_phases_line(review_id, duration_s, files, partitions, head_sha,
+                      ts=None):
+    """One phases.jsonl journal entry (7 keys). ts defaults to wall-clock
+    NOW but is injectable. Appended ONLY after every other output landed."""
+    return {
+        "phase": "prepare",
+        "review_id": review_id,
+        "duration_s": float(duration_s),
+        "files": files,
+        "partitions": partitions,
+        "head_sha": head_sha,
+        "ts": ts if ts is not None else datetime.datetime.now(
+            datetime.timezone.utc).isoformat(),
+    }
+
+
+# ── writers ───────────────────────────────────────────────────────────────
+
+def write_atomic(path, text):
+    """Write text to path via <path>.tmp + os.replace (R6 atomicity).
+    Raises OSError; the .tmp sibling lives in the same directory."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
+def _cannot_write(path, e):
+    """The R6 exit-2 diagnostic for OSError writing/wiping outputs."""
+    print("omni_prepare: cannot write %s: %s" % (path, e), file=sys.stderr)
+    return 2
+
+
+def _wipe_run_dir(run_dir):
+    """R1: remove every entry inside run_dir EXCEPT phases.jsonl (the
+    exemption is BY NAME — files, dirs, and symlinks alike), so every
+    successful run starts fresh while the append journal survives. Runs
+    after preconditions, before the fetch: a failing invocation never
+    destroys a prior run's artifacts."""
+    for name in os.listdir(run_dir):
+        if name == PHASES_NAME:
+            continue
+        path = os.path.join(run_dir, name)
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+
+
 # ── entry point ──────────────────────────────────────────────────────────
 
 def main(argv=None):
@@ -398,8 +466,14 @@ def main(argv=None):
         print(json.dumps(dry_run_plan(args)))
         return 0
 
+    started = time.monotonic()
     run_dir = os.path.abspath(args.run_dir)
-    os.makedirs(run_dir, exist_ok=True)
+    try:
+        os.makedirs(run_dir, exist_ok=True)
+    except OSError as e:
+        print("omni_prepare: cannot create run dir: %s" % e,
+              file=sys.stderr)
+        return 2
 
     if not omni_glab_api.resolve_token():
         print(json.dumps({"ok": False, "error": "auth",
@@ -407,6 +481,13 @@ def main(argv=None):
         print(omni_fetch_mr.token_fix_line(omni_glab_api.resolve_host(None)),
               file=sys.stderr)
         return 3
+
+    # R1 wipe: after preconditions, before the fetch (a failing exit-2/3
+    # invocation must not destroy a prior run's artifacts)
+    try:
+        _wipe_run_dir(run_dir)
+    except OSError as e:
+        return _cannot_write(run_dir, e)
 
     paths = output_paths(run_dir)
     proc = subprocess.run(
@@ -446,6 +527,49 @@ def main(argv=None):
         return _fail_stage("partition",
                            _error_from_stdout(part_stdout)
                            or "partition rc=%d" % part_rc)
+
+    try:
+        with open(paths["partition_json"], encoding="utf-8") as fh:
+            partition = json.load(fh)
+    except (OSError, ValueError) as e:
+        return _fail_stage("internal", "cannot read partition: %s" % e)
+
+    gather["review_id"] = args.review_id      # renderer injection
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    prepare_doc = build_prepare_json(
+        review_id=args.review_id, project=args.project, mr_iid=args.iid,
+        head_sha=head_sha, run_dir=run_dir, partition=partition,
+        prior_report=None, elapsed_ms=elapsed_ms)
+    outputs = [(os.path.join(run_dir, "briefs", AGENT_FILES[a]),
+                render_brief(a, gather, partition, None)) for a in AGENTS]
+    outputs.append((paths["prepare_json"],
+                    json.dumps(prepare_doc, indent=2, ensure_ascii=False)
+                    + "\n"))
+    writing = os.path.join(run_dir, "briefs")
+    try:
+        os.makedirs(writing, exist_ok=True)
+        for path, text in outputs:
+            writing = path
+            write_atomic(path, text)
+    except OSError as e:
+        return _cannot_write(writing, e)
+
+    duration_s = time.monotonic() - started
+    part_counts = {a: len(partition["agents"][a]["files"]) for a in AGENTS}
+    try:
+        # R6: the journal append is the LAST writer — a run is recorded
+        # only after every other output landed
+        with open(paths["phases_jsonl"], "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(build_phases_line(
+                args.review_id, duration_s, prepare_doc["files"],
+                part_counts, head_sha), ensure_ascii=False) + "\n")
+    except OSError as e:
+        return _cannot_write(paths["phases_jsonl"], e)
+
+    print(json.dumps(build_receipt(
+        run_dir=run_dir, project=args.project, mr_iid=args.iid,
+        review_id=args.review_id, head_sha=head_sha, partition=partition,
+        prior_count=None, duration_s=duration_s), ensure_ascii=False))
     return 0
 
 

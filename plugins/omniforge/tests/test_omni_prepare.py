@@ -955,7 +955,7 @@ class PrepareOutputTests(unittest.TestCase):
                 "phase", "review_id", "duration_s", "files", "partitions",
                 "head_sha", "ts"})
             self.assertEqual(entry["phase"], "prepare")
-            self.assertEqual(entry["review_id"], "rev-ab"[i])
+            self.assertEqual(entry["review_id"], ("rev-a", "rev-b")[i])
             self.assertIsInstance(entry["duration_s"], float)
             self.assertEqual(entry["files"], 4)
             self.assertEqual(entry["partitions"],
