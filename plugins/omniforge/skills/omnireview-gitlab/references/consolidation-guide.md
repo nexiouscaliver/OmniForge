@@ -143,6 +143,8 @@ machine-readable findings: consolidate that agent's prose report directly
 (pre-3.3.0 behavior — read the report and treat its prose "Finding {N}" blocks
 as that agent's findings). Note the fallback in the final report's Summary, and
 see the "One Agent Failed" edge case below.
+When `omni_adjudicate.py` exits 0, its `adjudication_worklist.json` supersedes this
+worklist-consumption step (see SKILL.md Phase 5); this page remains the fallback flow.
 
 ---
 

@@ -1,0 +1,64 @@
+[
+  {
+    "file_path": "src/client.py",
+    "line_number": 77,
+    "body": "**Critical** — Unbounded retry loop on transient failure\n\n**What:** Unbounded retry loop on transient failure\n\n**Why it matters:** client.py:77 retries forever without a cap on attempts\n\n**Recommendation:**\n```\nUnbounded retry loop on transient failure\n```\n\nConfidence: 91/100 | Found by: codebase"
+  },
+  {
+    "file_path": "src/sec.py",
+    "line_number": 10,
+    "body": "**Critical** — Weak hash used for password reset token\n\n**What:** Weak hash used for password reset token\n\n**Why it matters:** Weak hash used for password reset token\n\n**Recommendation:**\n```\nWeak hash used for password reset token\n```\n\nConfidence: 82/100 | Found by: security"
+  },
+  {
+    "file_path": "src/loader.py",
+    "line_number": 7,
+    "body": "**Important** — Unclosed file handle on error path\n\n**What:** Unclosed file handle on error path\n\n**Why it matters:** Unclosed file handle on error path\n\n**Recommendation:**\n```\nUnclosed file handle on error path\n```\n\nConfidence: 91/100 | Found by: codebase"
+  },
+  {
+    "file_path": "src/app.py",
+    "line_number": 42,
+    "body": "**Important** — Missing None guard before dict access\n\n**What:** Missing None guard before dict access\n\n**Why it matters:** Missing None guard before dict access\n\n**Recommendation:**\n```\nMissing None guard before dict access\n```\n\nConfidence: 88/100 | Found by: codebase, security"
+  },
+  {
+    "file_path": "src/auth.py",
+    "line_number": 30,
+    "body": "**Important** — Missing None guard before dict access\n\n**What:** Missing None guard before dict access\n\n**Why it matters:** Missing None guard before dict access\n\n**Recommendation:**\n```\nMissing None guard before dict access\n```\n\nConfidence: 84/100 | Found by: security, analyst"
+  },
+  {
+    "file_path": "src/view.py",
+    "line_number": 30,
+    "body": "**Important** — User input reaches template render unsanitized\n\n**What:** User input reaches template render unsanitized\n\n**Why it matters:** views.py:30 passes raw request param directly into the template context\n\n**Recommendation:**\n```\nUser input reaches template render unsanitized\n```\n\nConfidence: 84/100 | Found by: security"
+  },
+  {
+    "file_path": "src/store.py",
+    "line_number": 10,
+    "body": "**Important** — Missing None guard before dict access\n\n**What:** Missing None guard before dict access\n\n**Why it matters:** Missing None guard before dict access\n\n**Recommendation:**\n```\nMissing None guard before dict access\n```\n\nConfidence: 81/100 | Found by: codebase, analyst"
+  },
+  {
+    "file_path": "src/view.py",
+    "line_number": 30,
+    "body": "**Important** — User input reaches template render unsanitized\n\n**What:** User input reaches template render unsanitized\n\n**Why it matters:** views.py:30 passes raw request param directly into the template context\n\n**Recommendation:**\n```\nUser input reaches template render unsanitized\n```\n\nConfidence: 80/100 | Found by: codebase"
+  },
+  {
+    "file_path": "src/net.py",
+    "line_number": 11,
+    "body": "**Important** — Hardcoded fallback URL ignores config\n\n**What:** Hardcoded fallback URL ignores config\n\n**Why it matters:** Endpoint address is a string literal instead of reading the settings object\n\n**Recommendation:**\n```\nHardcoded fallback URL ignores config\n```\n\nConfidence: 78/100 | Found by: security"
+  },
+  {
+    "file_path": "src/net.py",
+    "line_number": 10,
+    "body": "**Important** — Race condition in async handler\n\n**What:** Race condition in async handler\n\n**Why it matters:** Two concurrent requests mutate shared cache without a lock at this call site\n\n**Recommendation:**\n```\nRace condition in async handler\n```\n\nConfidence: 75/100 | Found by: codebase"
+  },
+  {
+    "file_path": "src/client.py",
+    "line_number": 77,
+    "body": "**Minor** — Unbounded retry loop on transient failure\n\n**What:** Unbounded retry loop on transient failure\n\n**Why it matters:** client.py:77 retries forever without a cap on attempts\n\n**Recommendation:**\n```\nUnbounded retry loop on transient failure\n```\n\nConfidence: 72/100 | Found by: security"
+  },
+  {
+    "reply_to_thread_id": "T-open",
+    "body": "**Important** — Missing rate limit on login endpoint\n\n**What:** Missing rate limit on login endpoint\n\n**Why it matters:** Missing rate limit on login endpoint\n\n**Recommendation:**\n```\nMissing rate limit on login endpoint\n```\n\nConfidence: 85/100 | Found by: codebase"
+  },
+  {
+    "body": "**Minor** — Unrelated changes mixed into one MR\n\n**What:** Unrelated changes mixed into one MR\n\n**Why it matters:** Unrelated changes mixed into one MR\n\n**Recommendation:**\n```\nUnrelated changes mixed into one MR\n```\n\nConfidence: 78/100 | Found by: analyst"
+  }
+]

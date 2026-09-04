@@ -1,0 +1,86 @@
+{
+  "agent": "security",
+  "report": "security.report.md",
+  "findings": [
+    {
+      "agent": "security",
+      "file": "src/app.py",
+      "line_range": [
+        43,
+        45
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 88,
+      "one_liner": "Missing None guard before dict access",
+      "evidence": "app.py:43 cfg.get('x') dereferences without a None check when backend omits key"
+    },
+    {
+      "agent": "security",
+      "file": "src/auth.py",
+      "line_range": [
+        30,
+        32
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 84,
+      "one_liner": "Missing None guard before dict access",
+      "evidence": "auth.py:31 calls cfg.get('x') and dereferences without a None check"
+    },
+    {
+      "agent": "security",
+      "file": "src/sec.py",
+      "line_range": [
+        10,
+        10
+      ],
+      "category": "a02-crypto",
+      "severity": "critical",
+      "confidence": 82,
+      "one_liner": "Weak hash used for password reset token",
+      "evidence": "tokens.py:10 signs the reset link with md5"
+    },
+    {
+      "agent": "security",
+      "file": "src/client.py",
+      "line_range": [
+        77,
+        79
+      ],
+      "category": "logic",
+      "severity": "minor",
+      "confidence": 72,
+      "one_liner": "Unbounded retry loop on transient failure",
+      "evidence": "client.py:77 retries forever without a cap on attempts"
+    },
+    {
+      "agent": "security",
+      "file": "src/view.py",
+      "line_range": [
+        30,
+        32
+      ],
+      "category": "a03-injection",
+      "severity": "important",
+      "confidence": 84,
+      "one_liner": "User input reaches template render unsanitized",
+      "evidence": "views.py:30 passes raw request param directly into the template context"
+    },
+    {
+      "agent": "security",
+      "file": "src/net.py",
+      "line_range": [
+        11,
+        13
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 78,
+      "one_liner": "Hardcoded fallback URL ignores config",
+      "evidence": "Endpoint address is a string literal instead of reading the settings object"
+    }
+  ],
+  "anomalies": [],
+  "passthrough": false
+}

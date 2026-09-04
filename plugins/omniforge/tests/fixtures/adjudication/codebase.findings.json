@@ -1,0 +1,99 @@
+{
+  "agent": "codebase",
+  "report": "codebase.report.md",
+  "findings": [
+    {
+      "agent": "codebase",
+      "file": "src/app.py",
+      "line_range": [
+        42,
+        44
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 82,
+      "one_liner": "Missing None guard before dict access",
+      "evidence": "app.py:43 calls cfg.get('x') and dereferences without a None check"
+    },
+    {
+      "agent": "codebase",
+      "file": "src/store.py",
+      "line_range": [
+        10,
+        12
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 76,
+      "one_liner": "Missing None guard before dict access",
+      "evidence": "store.py:11 calls cfg.get('x') and dereferences without a None check"
+    },
+    {
+      "agent": "codebase",
+      "file": "src/loader.py",
+      "line_range": [
+        7,
+        8
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 91,
+      "one_liner": "Unclosed file handle on error path",
+      "evidence": "loader.py:7 opens without a context manager on the fallback branch"
+    },
+    {
+      "agent": "codebase",
+      "file": "src/prior_open.py",
+      "line_range": [
+        10,
+        12
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 85,
+      "one_liner": "Missing rate limit on login endpoint",
+      "evidence": "prior_open.py:11 accepts unlimited login attempts per source address"
+    },
+    {
+      "agent": "codebase",
+      "file": "src/client.py",
+      "line_range": [
+        77,
+        79
+      ],
+      "category": "logic",
+      "severity": "critical",
+      "confidence": 91,
+      "one_liner": "Unbounded retry loop on transient failure",
+      "evidence": "client.py:77 retries forever without a cap on attempts"
+    },
+    {
+      "agent": "codebase",
+      "file": "src/view.py",
+      "line_range": [
+        30,
+        32
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 80,
+      "one_liner": "User input reaches template render unsanitized",
+      "evidence": "views.py:30 passes raw request param directly into the template context"
+    },
+    {
+      "agent": "codebase",
+      "file": "src/net.py",
+      "line_range": [
+        10,
+        12
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 75,
+      "one_liner": "Race condition in async handler",
+      "evidence": "Two concurrent requests mutate shared cache without a lock at this call site"
+    }
+  ],
+  "anomalies": [],
+  "passthrough": false
+}
