@@ -258,6 +258,137 @@ def run_partition(gather_path, partition_path):
     return proc.returncode, proc.stdout
 
 
+# ── brief renderer ────────────────────────────────────────────────────────
+
+# Empty-owned marker (T1 scope): files_changed == [] means an EMPTY DIFF.
+# (The deleted-files-only wording variant keys on a non-blank diff and is
+# deliberately NOT implemented at this tip.)
+_EMPTY_DIFF_MARKER = "(none — this MR has an empty diff)"
+
+_DEPTH_SENTENCES = (
+    "Cross-cutting: you still sweep ALL changed files at grep depth; "
+    "full-file reads are your\nowned files only.")
+
+_DISPATCH_NOTE = (
+    "The orchestrator fills `{OWNED_FILES}` in the reference template "
+    "with this brief's\n\"Owned files\" section above (owned list + both "
+    "depth sentences) — nothing else from this\nfile. Worktree path is "
+    "assigned at dispatch (Phase 2).")
+
+
+def render_brief(agent, gather, partition, prior_count):
+    """Render one reviewer brief (section 2c template, byte-pinned by the
+    hand-authored golden fixtures — the renderer was built to match THEM).
+
+    Deterministic: no wall-clock/uuid/random; the only timestamp is
+    gather["fetched_at"], verbatim. No per-file diff content is ever
+    rendered (binary-safe). `gather` carries the run's review_id (main()
+    injects args.review_id before rendering).
+    """
+    data = gather.get("data") or {}
+    head_sha = (gather.get("diff_refs") or {}).get("head_sha") or ""
+    files = partition.get("files") or []
+    files_total = len(files)
+    capped = files_total > BRIEF_FILE_CAP
+    added_by_path = {f["path"]: f["added_lines"] for f in files}
+    reason_by_path = {f["path"]: f["reason"] for f in files}
+    agent_info = (partition.get("agents") or {}).get(agent) or {}
+    owned = list(agent_info.get("files") or [])
+    owned_added = agent_info.get("added_lines_total") or 0
+    added_total = sum(f["added_lines"] for f in files)
+    empty_mr = (data.get("files_changed") or []) == []
+
+    lines = [
+        "# OmniForge reviewer brief — %s (agent-%d)"
+        % (AGENT_TITLES[agent], 1 + AGENTS.index(agent)),
+        "",
+        "- Review ID: %s" % gather.get("review_id", ""),
+        "- Project: %s" % gather.get("project", ""),
+        "- MR: !%s — %s" % (gather.get("mr_iid", ""), data.get("title", "")),
+        "- Branches: %s → %s" % (data.get("source_branch", ""),
+                                 data.get("target_branch", "")),
+        "- Head SHA: %s" % head_sha,
+        "- Generated: %s" % gather.get("fetched_at", ""),
+        "",
+        "## Owned files (deep-dive ownership)",
+        "",
+        "Deep-dive owner: these files:",
+        "",
+    ]
+    if empty_mr:
+        lines.append(_EMPTY_DIFF_MARKER)
+    elif owned:
+        for path in owned:
+            if capped:
+                # cap: owned entries drop the reason; full detail stays in
+                # partition.json
+                lines.append("- `%s` — %d added lines"
+                             % (path, added_by_path.get(path, 0)))
+            else:
+                lines.append("- `%s` — %d added lines — %s"
+                             % (path, added_by_path.get(path, 0),
+                                reason_by_path.get(path, "")))
+    # else: a non-empty MR where this agent owns nothing — no owned bullets
+    # (the cross-cutting sweep below is still this agent's job)
+    lines += ["", _DEPTH_SENTENCES, "",
+              "## Cross-cutting files (all %d changed files)" % files_total,
+              ""]
+    if capped:
+        lines.append("Cross-cutting: all %d changed files (see "
+                     "partition.json)" % files_total)
+    elif empty_mr:
+        lines.append(_EMPTY_DIFF_MARKER)
+    else:
+        lines.extend("- `%s`" % f["path"] for f in files)
+    lines += [
+        "",
+        "## Stats",
+        "",
+        "- Owned: %d files / %d added lines" % (len(owned), owned_added),
+        "- Cross-cutting: %d files" % files_total,
+        "- MR total: %d files / %d added lines" % (files_total, added_total),
+    ]
+    if prior_count is not None:
+        lines.append("- Prior review findings: %d — see prior report"
+                     % prior_count)
+    lines += ["", "## Dispatch note", "", _DISPATCH_NOTE]
+    return "\n".join(lines) + "\n"
+
+
+def build_prepare_json(review_id, project, mr_iid, head_sha, run_dir,
+                       partition, prior_report, elapsed_ms,
+                       created_at=None):
+    """The 15-key prepare.json dict (exact key set, section 2c). Pure:
+    created_at defaults to wall-clock NOW but is injectable so tests can
+    normalize it."""
+    run_dir = os.path.abspath(run_dir)
+    paths = output_paths(run_dir)
+    if created_at is None:
+        created_at = datetime.datetime.now(
+            datetime.timezone.utc).isoformat()
+    return {
+        "schema": SCHEMA,
+        "created_at": created_at,
+        "review_id": review_id,
+        "project": project,
+        "mr_iid": str(mr_iid),
+        "head_sha": head_sha,
+        "run_dir": run_dir,
+        "gather_json": paths["gather_json"],
+        "partition_json": paths["partition_json"],
+        "briefs": {a: os.path.join(run_dir, "briefs", AGENT_FILES[a])
+                   for a in AGENTS},
+        "files": len(partition["files"]),
+        "added_lines": sum(f["added_lines"] for f in partition["files"]),
+        "partitions": {a: {"files": len(partition["agents"][a]["files"]),
+                           "added_lines_total":
+                               partition["agents"][a]["added_lines_total"]}
+                       for a in AGENTS},
+        "prior_report": prior_report,
+        "elapsed_ms": int(elapsed_ms),
+    }
+
+
 # ── entry point ──────────────────────────────────────────────────────────
 
 def main(argv=None):
