@@ -277,7 +277,8 @@ class SkillContractTests(unittest.TestCase):
         t = read("SKILL.md")
         fallback_start = t.index("### Fallback")
         fallback_end = t.index("### Degraded inputs")
-        needle, pos, count = "ONE pass", t.find(needle), 0
+        needle = "ONE pass"
+        pos, count = t.find(needle), 0
         while pos != -1:
             self.assertTrue(fallback_start < pos < fallback_end,
                             "'ONE pass' outside the Phase 5 fallback subsection at %d" % pos)
