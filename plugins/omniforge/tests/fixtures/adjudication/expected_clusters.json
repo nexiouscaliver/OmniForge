@@ -1,0 +1,656 @@
+[
+  {
+    "cluster_id": "c001",
+    "locus": {
+      "file": "src/app.py",
+      "lines": [
+        42,
+        45
+      ],
+      "anchor": "src/app.py:43"
+    },
+    "agents": [
+      "codebase",
+      "security"
+    ],
+    "corroboration": {
+      "count": 2,
+      "of": 3,
+      "agents": [
+        "codebase",
+        "security"
+      ]
+    },
+    "merged": true,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/app.py",
+        "line_range": [
+          42,
+          44
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 82,
+        "one_liner": "Missing None guard before dict access",
+        "evidence": "app.py:43 calls cfg.get('x') and dereferences without a None check"
+      },
+      {
+        "agent": "security",
+        "file": "src/app.py",
+        "line_range": [
+          43,
+          45
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 88,
+        "one_liner": "Missing None guard before dict access",
+        "evidence": "app.py:43 cfg.get('x') dereferences without a None check when backend omits key"
+      }
+    ],
+    "posting": "auto",
+    "worklist_reasons": []
+  },
+  {
+    "cluster_id": "c002",
+    "locus": {
+      "file": "src/store.py",
+      "lines": [
+        10,
+        13
+      ],
+      "anchor": "src/store.py:11"
+    },
+    "agents": [
+      "codebase",
+      "analyst"
+    ],
+    "corroboration": {
+      "count": 2,
+      "of": 3,
+      "agents": [
+        "codebase",
+        "analyst"
+      ]
+    },
+    "merged": true,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/store.py",
+        "line_range": [
+          10,
+          12
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 76,
+        "one_liner": "Missing None guard before dict access",
+        "evidence": "store.py:11 calls cfg.get('x') and dereferences without a None check"
+      },
+      {
+        "agent": "analyst",
+        "file": "src/store.py",
+        "line_range": [
+          11,
+          13
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 81,
+        "one_liner": "Missing None guard before dict access",
+        "evidence": "store.py:11 cfg.get('x') dereferences without a None check when backend omits key"
+      }
+    ],
+    "posting": "auto",
+    "worklist_reasons": []
+  },
+  {
+    "cluster_id": "c003",
+    "locus": {
+      "file": "src/loader.py",
+      "lines": [
+        7,
+        8
+      ],
+      "anchor": "src/loader.py:7"
+    },
+    "agents": [
+      "codebase"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "codebase"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/loader.py",
+        "line_range": [
+          7,
+          8
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 91,
+        "one_liner": "Unclosed file handle on error path",
+        "evidence": "loader.py:7 opens without a context manager on the fallback branch"
+      }
+    ],
+    "posting": "auto",
+    "worklist_reasons": []
+  },
+  {
+    "cluster_id": "c004",
+    "locus": {
+      "file": "src/prior_open.py",
+      "lines": [
+        10,
+        12
+      ],
+      "anchor": "src/prior_open.py:10"
+    },
+    "agents": [
+      "codebase"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "codebase"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/prior_open.py",
+        "line_range": [
+          10,
+          12
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 85,
+        "one_liner": "Missing rate limit on login endpoint",
+        "evidence": "prior_open.py:11 accepts unlimited login attempts per source address"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "already_adjudicated"
+    ],
+    "prior_match": {
+      "thread_id": "T-open",
+      "state": "open"
+    }
+  },
+  {
+    "cluster_id": "c005",
+    "locus": {
+      "file": "src/client.py",
+      "lines": [
+        77,
+        79
+      ],
+      "anchor": "src/client.py:77"
+    },
+    "agents": [
+      "codebase",
+      "security"
+    ],
+    "corroboration": {
+      "count": 2,
+      "of": 3,
+      "agents": [
+        "codebase",
+        "security"
+      ]
+    },
+    "merged": true,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/client.py",
+        "line_range": [
+          77,
+          79
+        ],
+        "category": "logic",
+        "severity": "critical",
+        "confidence": 91,
+        "one_liner": "Unbounded retry loop on transient failure",
+        "evidence": "client.py:77 retries forever without a cap on attempts"
+      },
+      {
+        "agent": "security",
+        "file": "src/client.py",
+        "line_range": [
+          77,
+          79
+        ],
+        "category": "logic",
+        "severity": "minor",
+        "confidence": 72,
+        "one_liner": "Unbounded retry loop on transient failure",
+        "evidence": "client.py:77 retries forever without a cap on attempts"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "conflict"
+    ]
+  },
+  {
+    "cluster_id": "c006",
+    "locus": {
+      "file": "src/view.py",
+      "lines": [
+        30,
+        32
+      ],
+      "anchor": "src/view.py:30"
+    },
+    "agents": [
+      "codebase",
+      "security"
+    ],
+    "corroboration": {
+      "count": 2,
+      "of": 3,
+      "agents": [
+        "codebase",
+        "security"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic",
+      "a03-injection"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/view.py",
+        "line_range": [
+          30,
+          32
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 80,
+        "one_liner": "User input reaches template render unsanitized",
+        "evidence": "views.py:30 passes raw request param directly into the template context"
+      },
+      {
+        "agent": "security",
+        "file": "src/view.py",
+        "line_range": [
+          30,
+          32
+        ],
+        "category": "a03-injection",
+        "severity": "important",
+        "confidence": 84,
+        "one_liner": "User input reaches template render unsanitized",
+        "evidence": "views.py:30 passes raw request param directly into the template context"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "cross_category_same_locus",
+      "same_locus_distinct_findings"
+    ]
+  },
+  {
+    "cluster_id": "c007",
+    "locus": {
+      "file": "src/net.py",
+      "lines": [
+        10,
+        13
+      ],
+      "anchor": "src/net.py:11"
+    },
+    "agents": [
+      "codebase",
+      "security"
+    ],
+    "corroboration": {
+      "count": 2,
+      "of": 3,
+      "agents": [
+        "codebase",
+        "security"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "codebase",
+        "file": "src/net.py",
+        "line_range": [
+          10,
+          12
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 75,
+        "one_liner": "Race condition in async handler",
+        "evidence": "Two concurrent requests mutate shared cache without a lock at this call site"
+      },
+      {
+        "agent": "security",
+        "file": "src/net.py",
+        "line_range": [
+          11,
+          13
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 78,
+        "one_liner": "Hardcoded fallback URL ignores config",
+        "evidence": "Endpoint address is a string literal instead of reading the settings object"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "same_locus_distinct_findings"
+    ]
+  },
+  {
+    "cluster_id": "c008",
+    "locus": {
+      "file": "src/auth.py",
+      "lines": [
+        30,
+        33
+      ],
+      "anchor": "src/auth.py:30"
+    },
+    "agents": [
+      "security",
+      "analyst"
+    ],
+    "corroboration": {
+      "count": 2,
+      "of": 3,
+      "agents": [
+        "security",
+        "analyst"
+      ]
+    },
+    "merged": true,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "security",
+        "file": "src/auth.py",
+        "line_range": [
+          30,
+          32
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 84,
+        "one_liner": "Missing None guard before dict access",
+        "evidence": "auth.py:31 calls cfg.get('x') and dereferences without a None check"
+      },
+      {
+        "agent": "analyst",
+        "file": "src/auth.py",
+        "line_range": [
+          31,
+          33
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 79,
+        "one_liner": "Missing None guard before dict access",
+        "evidence": "auth.py:31 cfg.get('x') dereferences without a None check when backend omits key"
+      }
+    ],
+    "posting": "auto",
+    "worklist_reasons": []
+  },
+  {
+    "cluster_id": "c009",
+    "locus": {
+      "file": "src/sec.py",
+      "lines": [
+        10,
+        10
+      ],
+      "anchor": "src/sec.py:10"
+    },
+    "agents": [
+      "security"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "security"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "a02-crypto"
+    ],
+    "entries": [
+      {
+        "agent": "security",
+        "file": "src/sec.py",
+        "line_range": [
+          10,
+          10
+        ],
+        "category": "a02-crypto",
+        "severity": "critical",
+        "confidence": 82,
+        "one_liner": "Weak hash used for password reset token",
+        "evidence": "tokens.py:10 signs the reset link with md5"
+      }
+    ],
+    "posting": "auto",
+    "worklist_reasons": []
+  },
+  {
+    "cluster_id": "c010",
+    "locus": {
+      "file": null,
+      "lines": null,
+      "anchor": "MR-process"
+    },
+    "agents": [
+      "analyst"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "analyst"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "scope"
+    ],
+    "entries": [
+      {
+        "agent": "analyst",
+        "file": null,
+        "line_range": null,
+        "category": "scope",
+        "severity": "minor",
+        "confidence": 78,
+        "one_liner": "Unrelated changes mixed into one MR",
+        "evidence": "Commit d41b mixes a refactor with the feature it ships"
+      }
+    ],
+    "posting": "auto",
+    "worklist_reasons": []
+  },
+  {
+    "cluster_id": "c011",
+    "locus": {
+      "file": "src/prior_res.py",
+      "lines": [
+        20,
+        22
+      ],
+      "anchor": "src/prior_res.py:20"
+    },
+    "agents": [
+      "analyst"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "analyst"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "analyst",
+        "file": "src/prior_res.py",
+        "line_range": [
+          20,
+          22
+        ],
+        "category": "logic",
+        "severity": "important",
+        "confidence": 87,
+        "one_liner": "SQL query built by concatenation",
+        "evidence": "prior_res.py:21 concatenates user input into the query text"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "already_adjudicated"
+    ],
+    "prior_match": {
+      "thread_id": "T-res",
+      "state": "resolved"
+    }
+  },
+  {
+    "cluster_id": "c012",
+    "locus": {
+      "file": "src/sub1.py",
+      "lines": [
+        5,
+        5
+      ],
+      "anchor": "src/sub1.py:5"
+    },
+    "agents": [
+      "analyst"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "analyst"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "analyst",
+        "file": "src/sub1.py",
+        "line_range": [
+          5,
+          5
+        ],
+        "category": "logic",
+        "severity": "minor",
+        "confidence": 55,
+        "one_liner": "Commit message lacks a why",
+        "evidence": "Commit 1a2b3c4 states what changed with no rationale"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "sub_threshold"
+    ]
+  },
+  {
+    "cluster_id": "c013",
+    "locus": {
+      "file": "src/sub2.py",
+      "lines": [
+        6,
+        6
+      ],
+      "anchor": "src/sub2.py:6"
+    },
+    "agents": [
+      "analyst"
+    ],
+    "corroboration": {
+      "count": 1,
+      "of": 3,
+      "agents": [
+        "analyst"
+      ]
+    },
+    "merged": false,
+    "categories": [
+      "logic"
+    ],
+    "entries": [
+      {
+        "agent": "analyst",
+        "file": "src/sub2.py",
+        "line_range": [
+          6,
+          6
+        ],
+        "category": "logic",
+        "severity": "minor",
+        "confidence": 62,
+        "one_liner": "Docs section omits the rollback step",
+        "evidence": "README.md:6 documents the deploy path but never the rollback path"
+      }
+    ],
+    "posting": "worklist",
+    "worklist_reasons": [
+      "sub_threshold"
+    ]
+  }
+]

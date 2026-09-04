@@ -133,6 +133,30 @@ evaluated. On a pure-deletion MR (zero added lines) or for any finding whose loc
 or a reply on the matching prior thread — never an inline thread: GitLab rejects unanchorable positions (`400 line_code can't be blank`),
 and that failed thread post aborts the whole batch.
 
+**Optional rich keys + the automatic fix brief (R2-P):** thread and note entries MAY
+additionally carry `severity` (`"critical"|"important"|"minor"`), `title`, `category`,
+`problem`, `recommendation` (strings; all optional; never validated — unknown keys are
+never usage errors). When present they enrich the automatic fix brief; when absent the
+brief derives `severity`/`title` from the body's `**Severity**` marker line, `problem`
+from the full body, and renders `none given — derive from the problem statement` for a
+missing recommendation. Reply entries never enter the brief. More than 25 findings →
+the top 25 by severity plus a pointer line.
+
+After any run that posts ≥1 new thread or note entry, the poster appends ONE final
+general MR note — the OmniForge fix brief (rendered by `scripts/omni_fixprompt.py`,
+paste-ready for a coding agent). It is always the LAST artifact posted. The stdout JSON
+line carries two additive keys: `fix_brief` (bool — whether the brief posted) and
+`thread_map` (object mapping `"<findings-array-index>"` → that entry's permalink
+`<web_url>#note_<id>`; after a mid-batch exit 1 it lists exactly the artifacts that
+succeeded — the manual-reconstruction source for a full-set brief on resume). The brief
+is skipped automatically (one stderr line, exit 0) on zero-finding runs, reply-only /
+`--reply-to` runs, a MR-meta GET failure on notes-only batches, POST responses that
+yield no note id, or missing MR meta fields — never a stale brief.
+
+Rich keys (like note entries and `reply_to_thread_id`) are script-path-only: MCP
+`_post_full_review` compatibility is unchanged, and MCP behavior on unknown entry keys
+is out of scope here.
+
 **Partial-failure resume (exit 1 mid-batch):** the summary posts first, then threads in array order, failing
 fast — after a mid-batch exit 1 the summary and the leading threads are already on the MR. NEVER rerun the same
 command with `--force`: it skips the guard, reposts the summary, and duplicates every already-posted thread. A
