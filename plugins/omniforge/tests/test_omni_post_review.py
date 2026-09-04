@@ -23,6 +23,24 @@ per-entry reply_to_thread_id route replies onto recorded threads and exclude
 those entries from new-thread posting; --dry-run prints the exact calls,
 executes nothing (zero transport calls) and works without a token; the
 script never adds text (no AI attribution) to a body.
+
+3.3.2 additions pinned here:
+- NOTE entries — findings objects carrying ONLY {"body": ...} (no
+  file_path/line_number) post as top-level MR notes (POST .../notes, form
+  body=...) AFTER summary/threads/replies, counted in the additive stdout
+  key "notes"; a body-only entry that also carries file_path or line_number
+  is an ambiguous-shape usage error (exit 2, never silently skipped).
+- AUTO-SKIP — --summary is required ONLY when the batch has at least one
+  new-thread entry; reply-only/note-only batches run without a summary and
+  without evaluating the guard when --summary is absent (implied skip);
+  --skip-summary keeps its current meaning (guard still evaluated unless
+  --force).
+- --host threads through EVERY api call (same resolution order as the fetch
+  script; recorded per call in FakeTransport.hosts).
+- GUARD PAGINATION — the duplicate-summary guard lists notes via
+  omni_glab_api.get_all (per_page=100, paginated): a summary on page 2 is
+  still found (exit 3), while a single page still costs exactly ONE notes
+  GET.
 """
 
 import importlib.util
@@ -77,7 +95,14 @@ def refs_path(project=PROJECT, mr=MR):
 
 
 def notes_list_path(project=PROJECT, mr=MR):
-    return refs_path(project, mr) + "/notes?per_page=100"
+    # The guard's paginated notes listing, first page (get_all builds
+    # per_page=100&page=N; page 1 is the exact single-page path).
+    return refs_path(project, mr) + "/notes?per_page=100&page=1"
+
+
+# The 3.3.1 guard path (no &page=1) — seeded too so both the pre- and
+# post-pagination code shapes find the fixtures.
+LEGACY_NOTES_PATH = refs_path() + "/notes?per_page=100"
 
 
 def summary_path(project=PROJECT, mr=MR):
@@ -105,6 +130,7 @@ class FakeTransport:
 
     def __init__(self):
         self.calls = []
+        self.hosts = []          # host arg per request (parallel to calls)
         self.gets = {}
         self.scripts = {}
         self.sleeps = []
@@ -125,6 +151,7 @@ class FakeTransport:
                 backoff_base=2.0, sleep_fn=None):
         for attempt in range(1, attempts + 1):
             self.calls.append((method, path, list(form or [])))
+            self.hosts.append(host)
             status, payload = self._attempt_status(method, path)
             if 200 <= status < 300:
                 return {"status": status, "body": json.dumps(payload),
@@ -176,13 +203,20 @@ class OmniPostReviewTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.transport.gets[refs_path()] = DIFF_REFS
         self.transport.gets[notes_list_path()] = []
+        self.transport.gets[LEGACY_NOTES_PATH] = []
 
     def set_notes(self, notes):
         self.transport.gets[notes_list_path()] = notes
+        self.transport.gets[LEGACY_NOTES_PATH] = list(notes)
 
     def attempts(self, path, method=None):
         return [c for c in self.transport.calls
                 if c[1] == path and (method is None or c[0] == method)]
+
+    def guard_gets(self):
+        """Every notes-listing GET the guard made (any page/query form)."""
+        return [c for c in self.transport.calls
+                if c[0] == "GET" and "/notes?per_page=100" in c[1]]
 
     def run_poster(self, findings, extra=(), token="tok-test",
                    summary="## OmniForge\n\n**Verdict:** APPROVE\n"):
@@ -397,7 +431,7 @@ class OmniPostReviewTests(unittest.TestCase):
         self.set_notes(NOTES_WITH_SUMMARY)
         r = self.run_poster(FINDINGS[:1], extra=["--reply-to", "T1"])
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.attempts(notes_list_path(), "GET"), [])  # guard never evaluated
+        self.assertEqual(self.guard_gets(), [])      # guard never evaluated
         self.assertEqual(self.attempts(summary_path(), "POST"), [])
         self.assertEqual(len(self.attempts(reply_path("T1"), "POST")), 1)
         out = self.stdout_json(r)
@@ -457,8 +491,10 @@ class OmniPostReviewTests(unittest.TestCase):
         r = self.run_poster(FINDINGS, extra=["--skip-summary"])
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.attempts(summary_path(), "POST"), [])
-        # guard STILL evaluated (not reply-only, not --force)
-        self.assertEqual(len(self.attempts(notes_list_path(), "GET")), 1)
+        # guard STILL evaluated (not reply-only, not --force): exactly ONE
+        # notes GET when a single page suffices — pinned across the 3.3.2
+        # pagination change (path form may vary, count may not).
+        self.assertEqual(len(self.guard_gets()), 1)
         self.assertEqual(len(self.attempts(discussions_path(), "POST")), 2)
         out = self.stdout_json(r)
         self.assertFalse(out["posted_summary"])
@@ -515,6 +551,167 @@ class OmniPostReviewTests(unittest.TestCase):
         r2 = self.run_poster(FINDINGS, extra=["--dry-run"])
         self.assertEqual(r2.returncode, 0, r2.stderr)
         self.assertIn("notes?per_page=100", r2.stdout)
+
+    # ── 3.3.2: note entries (body-only findings -> top-level notes) ──
+
+    def test_note_entries_post_as_top_level_notes(self):
+        findings = [{"body": "**Minor** — MR-meta note, no diff locus"}]
+        fpath = write_file(os.path.join(self.tmp, "findings.json"),
+                           json.dumps(findings))
+        # note-only batch: no --summary and no --skip-summary — the implied
+        # skip takes over (3.3.2) instead of a usage error.
+        r = self.raw_poster("--mr", MR, "--project", PROJECT,
+                            "--findings-json", fpath, "--backoff-base", "0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.attempts(discussions_path(), "POST"), [])
+        self.assertEqual(self.attempts(refs_path(), "GET"), [])
+        self.assertEqual(self.guard_gets(), [])       # implied skip: no guard
+        notes_posts = self.attempts(summary_path(), "POST")
+        self.assertEqual(len(notes_posts), 1)         # the note, no summary
+        self.assertEqual(notes_posts[0][2], [("body", findings[0]["body"])])
+        out = self.stdout_json(r)
+        self.assertFalse(out["posted_summary"])
+        self.assertEqual(out["threads"], 0)
+        self.assertEqual(out["replies"], 0)
+        self.assertEqual(out["notes"], 1)             # additive stdout key
+        self.assertEqual(out["failures"], 0)
+
+    def test_mixed_batch_summary_thread_reply_note_counts(self):
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "body": "THREAD-BODY"},
+            {"body": "REPLY-BODY", "reply_to_thread_id": "T7"},
+            {"body": "NOTE-BODY"},
+        ]
+        r = self.run_poster(findings)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.attempts(discussions_path(), "POST")), 1)
+        self.assertEqual(len(self.attempts(reply_path("T7"), "POST")), 1)
+        # summary AND the note share the .../notes endpoint: 2 POSTs
+        notes_posts = self.attempts(summary_path(), "POST")
+        self.assertEqual(len(notes_posts), 2)
+        self.assertEqual(notes_posts[1][2], [("body", "NOTE-BODY")])
+        # execution order: summary -> threads -> replies -> notes (last)
+        calls = self.transport.calls
+
+        def first_idx(pred):
+            return next(i for i, c in enumerate(calls) if pred(c))
+
+        i_summary = first_idx(lambda c: c[0] == "POST"
+                              and c[1] == summary_path())
+        i_thread = first_idx(lambda c: c[0] == "POST"
+                             and c[1] == discussions_path())
+        i_reply = first_idx(lambda c: c[0] == "POST"
+                            and c[1] == reply_path("T7"))
+        i_note = max(i for i, c in enumerate(calls) if c[0] == "POST"
+                     and c[1] == summary_path())
+        self.assertLess(i_summary, i_thread)
+        self.assertLess(i_thread, i_reply)
+        self.assertLess(i_reply, i_note)
+        out = self.stdout_json(r)
+        self.assertTrue(out["posted_summary"])
+        self.assertEqual(out["threads"], 1)
+        self.assertEqual(out["replies"], 1)
+        self.assertEqual(out["notes"], 1)
+
+    def test_note_entry_with_anchor_keys_is_usage_error(self):
+        # line_number without file_path = ambiguous shape: exit 2, never a
+        # silently-skipped or silently-threaded entry
+        bad = write_file(os.path.join(self.tmp, "bad1.json"),
+                         json.dumps([{"body": "x", "line_number": 42}]))
+        r = self.raw_poster("--mr", MR, "--project", PROJECT,
+                            "--findings-json", bad)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("ambiguous", r.stderr)
+        self.assertEqual(r.stdout.strip(), "")
+        # file_path without line_number: same refusal (thread shape needs both)
+        bad2 = write_file(os.path.join(self.tmp, "bad2.json"),
+                          json.dumps([{"body": "x",
+                                       "file_path": "src/app.py"}]))
+        r2 = self.raw_poster("--mr", MR, "--project", PROJECT,
+                             "--findings-json", bad2)
+        self.assertEqual(r2.returncode, 2)
+        self.assertEqual(r2.stdout.strip(), "")
+        self.assertEqual(self.transport.calls, [])
+
+    def test_dry_run_note_path(self):
+        findings = [{"body": "NOTE-BODY"},
+                    {"file_path": "src/app.py", "line_number": 3,
+                     "body": "THREAD-BODY"}]
+        spath = write_file(os.path.join(self.tmp, "summary.md"),
+                           "## OmniForge\n")
+        fpath = write_file(os.path.join(self.tmp, "findings.json"),
+                           json.dumps(findings))
+        r = self.raw_poster("--mr", MR, "--project", PROJECT,
+                            "--summary", spath, "--findings-json", fpath,
+                            "--dry-run")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.transport.calls, [])   # executes nothing
+        self.assertIn("DRY-RUN: POST %s body=NOTE-BODY" % summary_path(),
+                      r.stdout)
+        out = self.stdout_json(r)
+        self.assertTrue(out["dry_run"])
+        self.assertEqual(out["threads"], 1)
+        self.assertEqual(out["notes"], 1)
+
+    # ── 3.3.2: auto-summary-skip for no-new-thread batches ─────
+
+    def test_reply_only_batch_without_summary_auto_skips(self):
+        findings = [{"body": "REPLY-ONLY-BODY",
+                     "reply_to_thread_id": "T9"}]
+        fpath = write_file(os.path.join(self.tmp, "findings.json"),
+                           json.dumps(findings))
+        # production friction this fixes: reply-only batch without
+        # --summary/--skip-summary used to die with argparse exit 2
+        r = self.raw_poster("--mr", MR, "--project", PROJECT,
+                            "--findings-json", fpath, "--backoff-base", "0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.attempts(summary_path(), "POST"), [])
+        self.assertEqual(len(self.attempts(reply_path("T9"), "POST")), 1)
+        self.assertEqual(self.guard_gets(), [])       # guard not evaluated
+        out = self.stdout_json(r)
+        self.assertFalse(out["posted_summary"])
+        self.assertEqual(out["replies"], 1)
+        self.assertEqual(out["notes"], 0)
+
+    # ── 3.3.2: --host reaches every request ────────────────────
+
+    def test_host_flag_reaches_every_request(self):
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "body": "THREAD-BODY"},
+            {"body": "REPLY-BODY", "reply_to_thread_id": "T7"},
+            {"body": "NOTE-BODY"},
+        ]
+        r = self.run_poster(findings,
+                            extra=["--host", "https://glab.example.test"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        # guard GET + refs GET + summary POST + thread POST + reply POST +
+        # note POST — every single call carries the --host value
+        self.assertEqual(len(self.transport.calls), 6, self.transport.calls)
+        self.assertEqual(len(self.transport.hosts), len(self.transport.calls))
+        self.assertEqual(set(self.transport.hosts),
+                         {"https://glab.example.test"})
+
+    # ── 3.3.2: duplicate-summary guard paginates ───────────────
+
+    def test_guard_finds_duplicate_summary_on_page_2(self):
+        # a busy MR can push the OmniForge summary past page 1: 100 filler
+        # notes on page 1, the summary on page 2 — the guard must paginate
+        # (get_all) and still refuse
+        self.transport.gets[notes_list_path()] = [
+            {"body": "filler %d" % i, "created_at": "2026-09-02T09:00:00Z"}
+            for i in range(100)]
+        self.transport.gets[refs_path() +
+                            "/notes?per_page=100&page=2"] = NOTES_WITH_SUMMARY
+        r = self.run_poster(
+            FINDINGS, extra=["--since", str(SUMMARY_EPOCH - 100)])
+        self.assertEqual(r.returncode, 3)
+        # refused: nothing posted (only the guard's two notes-list GETs ran)
+        self.assertEqual(self.attempts(summary_path(), "POST"), [])
+        self.assertEqual(self.attempts(discussions_path(), "POST"), [])
+        self.assertEqual(len(self.guard_gets()), 2)
+        self.assertIn("OmniForge", r.stderr)
 
 
 if __name__ == "__main__":

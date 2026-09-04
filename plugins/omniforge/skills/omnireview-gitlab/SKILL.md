@@ -294,6 +294,8 @@ If the waiter exits 2 (or its JSON reports stalled/missing agents): do NOT re-di
 
 **Coverage degraded (N/3 reviewers)** — missing: <which of MR Analyst / Codebase Reviewer / Security Reviewer>
 
+On a stalled subagent (waiter status reports `stalled`, or a subagent died mid-response), attempt exactly ONE SendMessage resume before harvesting partials — never loop.
+
 ### Mid-run head-move guard (STOP protocol)
 
 After the waiter exits (0 or 2) and BEFORE Phase 4 consolidation, verify the MR head has
@@ -407,6 +409,7 @@ Post summary comment + individual inline threads for each finding >= 70 confiden
 **REQUIRED REFERENCE:** `./references/posting-guide.md` — you MUST read this before posting anything. Contains the summary comment template, inline thread template, MCP tool call syntax (`post_full_review` findings JSON format), and bash fallback commands. Do NOT improvise posting format — use the exact templates from the reference.
 
 **Posting path (all runs):** Post via the shipped `scripts/omni_post_review.py` (see posting-guide.md — retry/backoff, reply routing, duplicate-summary guard, `--dry-run`) — never improvised `/tmp` posting scripts. (MCP posting tools are optional in interactive installs.)
+MR-meta findings with no diff locus (process notes, security posture) go in the same findings array as note entries — objects carrying only `body` — and the poster posts them as top-level MR notes after threads and replies. Never post general notes via raw `glab api --input -`: it silently drops note bodies (production: MR !1388 lost 5/5 notes that way). See posting-guide.md.
 Immediately before posting, re-run the Phase-3 `--verify-head` check — exit 4 (head moved) = STOP protocol above.
 
 ---

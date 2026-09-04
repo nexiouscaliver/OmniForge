@@ -600,6 +600,46 @@ class OmniFetchMrTests(unittest.TestCase):
         self.assertGreaterEqual(st["elapsed_ms"], 0)
 
 
+class ProjectPathEncodingTests(unittest.TestCase):
+    """3.3.2: bare full-path --project values are URL-encoded on EVERY
+    endpoint (production: the A/B arm passed regenai-gitlab/regenai/regenai-base
+    unencoded -> 3x HTTP 404 ~= 72 s). Numeric IDs and already-encoded values
+    pass through unchanged."""
+
+    def _paths(self, project):
+        d = tmp_dir(self)
+        api = FakeAPI()
+        out = os.path.join(d, "g.json")
+        rc, so, se = run_fetch(["--project", project, "--mr", MR,
+                                "--out", out], api=api)
+        self.assertEqual(rc, 0, se)
+        return api, [c["path"] for c in api.calls], stdout_json(so)
+
+    def test_full_path_encoded_on_every_request(self):
+        full = "regenai-gitlab/regenai/regenai-base"
+        enc = "regenai-gitlab%2Fregenai%2Fregenai-base"
+        api, paths, st = self._paths(full)
+        self.assertEqual(len(paths), 6, paths)        # every gather endpoint
+        for p in paths:
+            self.assertIn("projects/%s/merge_requests/%s" % (enc, MR), p)
+            self.assertNotIn(full, p)                 # never the raw slashes
+        self.assertEqual(st["project"], full)         # stdout keeps the input
+
+    def test_numeric_project_passthrough(self):
+        api, paths, st = self._paths(PROJECT)
+        self.assertEqual(paths[0],
+                         "/projects/%s/merge_requests/%s" % (PROJECT, MR))
+        for p in paths:
+            self.assertNotIn("%", p)
+
+    def test_pre_encoded_project_passthrough(self):
+        api, paths, st = self._paths("group%2Fsub%2Fproject")
+        for p in paths:
+            self.assertIn("projects/group%2Fsub%2Fproject/merge_requests", p)
+            self.assertNotIn("%25", p)                # not double-encoded
+        self.assertEqual(st["project"], "group%2Fsub%2Fproject")
+
+
 class VerifyHeadTests(unittest.TestCase):
     def test_verify_head_equal_proceeds(self):
         api = FakeAPI()

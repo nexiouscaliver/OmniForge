@@ -7,9 +7,13 @@ discussion thread (plus versions and top-level notes). Stdlib only; direct
 REST via the shared omni_glab_api transport (no glab subprocess, no MCP).
 
 CLI:
-  python3 omni_fetch_mr.py --project <id-or-urlencoded-path> --mr <iid> \
+  python3 omni_fetch_mr.py --project <id-or-fullpath> --mr <iid> \
       --out <path> [--host <host>] [--attempts 3] [--backoff-base 2.0] \
       [--max-diff-lines 10000] [--verify-head <recorded_sha>]
+
+--project accepts a numeric ID, a pre-encoded URL path, or a bare full path
+(group/subgroup/project — URL-encoded automatically before it reaches any
+endpoint).
 
 Exit/stdout contract (mirrors poster conventions):
   0  gather OK — file written (atomic: <out>.tmp then os.replace) + exactly
@@ -44,6 +48,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import omni_glab_api
@@ -262,7 +267,9 @@ def parse_args(argv=None):
                     "discussions, commits, versions, notes) into a single "
                     "JSON file.")
     ap.add_argument("--project", required=True,
-                    help="project ID or URL-encoded path")
+                    help="project ID, pre-encoded URL path, or bare full "
+                         "path (group/subgroup/project — URL-encoded "
+                         "automatically)")
     ap.add_argument("--mr", required=True, help="merge request IID")
     ap.add_argument("--out", default=None,
                     help="gather JSON output path (required in gather mode; "
@@ -327,8 +334,21 @@ class Gatherer:
         return batch if isinstance(batch, list) else []
 
 
+def encode_project(value):
+    """URL-encode a bare full-path project (group/subgroup/project) with
+    safe="" so each "/" reaches GitLab as %2F. Numeric IDs and already-
+    encoded values (carrying %) pass through unchanged. Production motive:
+    the A/B arm passed regenai-gitlab/regenai/regenai-base unencoded — the
+    path segments collapsed and every gather GET 404'd (3x HTTP 404 ≈ 72 s
+    before the run retreated to the numeric ID)."""
+    s = str(value)
+    if s.isdigit() or "%" in s:
+        return s
+    return urllib.parse.quote(s, safe="")
+
+
 def mr_path(project, mr):
-    return "/projects/%s/merge_requests/%s" % (project, mr)
+    return "/projects/%s/merge_requests/%s" % (encode_project(project), mr)
 
 
 def token_fix_line(host):
