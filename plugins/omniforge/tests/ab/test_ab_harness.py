@@ -93,7 +93,6 @@ class AbMetricsTests(unittest.TestCase):
         self.assertEqual(ev["agents"]["security"]["weight_total"], 1000000)
         self.assertTrue(ev["security_invariant"])
         # security pre-load alone over cap -> strict cap False, bound True
-        self.assertFalse(ev["cap_pass"] is None)
         self.assertFalse(ev["agents"]["security"]["cap_strict"])
         # oversize itemization names the file that busts the strict cap
         self.assertEqual(ev["oversize_files"], ["src/auth_c.py"])

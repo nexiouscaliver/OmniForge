@@ -14,7 +14,9 @@ committed ab_result.json artifact:
         gather is engine-local only (spec D7): pass its path via
         --corpus-real to run corpus (i) on real data; the entry is then
         tagged source "local-uncommitted-real" and only these aggregate
-        metrics (never content) are committed.
+        metrics (never content) are committed. (If the committed fixture
+        itself is ever the real gather again — the D7 re-add-later case
+        — the tag is "real-!1402"; see corpus_source.)
   (ii)  canary-synth  — the committed synthetic 110/109/9 shape control.
   (iii) security-light — the committed synthetic 80/40/2 corpus where
         old-vs-new shows the designed floor lift.
@@ -42,6 +44,8 @@ import tempfile
 AB = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 PARTITION_REL = ("skills", "omnireview-gitlab", "scripts",
                  "omni_partition.py")
+DEFAULT_CORPUS_REAL = os.path.abspath(
+    os.path.join(AB, "..", "fixtures", "prepare", "canary_gather.json"))
 # The git-repo-relative path of the partition script, for `git show`.
 PARTITION_GIT_REL = "plugins/omniforge/" + "/".join(PARTITION_REL)
 
@@ -128,10 +132,13 @@ def fetch_base_script(plugin_root, base):
     the show fails or returns empty (shallow-clone guard, plan risk 3) —
     never falls back to a different base.
     """
-    proc = subprocess.run(
-        ["git", "-C", plugin_root, "show", "%s:%s" % (base,
-                                                      PARTITION_GIT_REL)],
-        capture_output=True, text=True, errors="replace")
+    try:
+        proc = subprocess.run(
+            ["git", "-C", plugin_root, "show", "%s:%s" % (base,
+                                                          PARTITION_GIT_REL)],
+            capture_output=True, text=True, errors="replace", timeout=60)
+    except subprocess.TimeoutExpired:
+        _fail("git show for base %s timed out (60 s)" % base)
     if proc.returncode != 0 or not proc.stdout.strip():
         _fail("cannot fetch base partition script for %s:%s — is the SHA "
               "present in this repository's history? %s"
@@ -144,11 +151,18 @@ def fetch_base_script(plugin_root, base):
 
 
 def run_partition(script_path, gather_path, out_path):
-    """Run one partitioner script over one gather; return its partition."""
-    proc = subprocess.run(
-        [sys.executable, script_path, "--mr-json", gather_path,
-         "--out", out_path],
-        capture_output=True, text=True, errors="replace")
+    """Run one partitioner script over one gather; return its partition.
+
+    timeout parity with omni_prepare.run_partition (PARTITION_TIMEOUT_S).
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, script_path, "--mr-json", gather_path,
+             "--out", out_path],
+            capture_output=True, text=True, errors="replace", timeout=120)
+    except subprocess.TimeoutExpired:
+        _fail("partitioner %s timed out (120 s) on %s"
+              % (script_path, gather_path))
     if proc.returncode != 0:
         _fail("partitioner %s failed on %s (rc=%d): %s"
               % (script_path, gather_path, proc.returncode,
@@ -157,12 +171,21 @@ def run_partition(script_path, gather_path, out_path):
         return json.load(fh)
 
 
+def corpus_source(gather_path, default_path):
+    """Fact-derived provenance tag for a NON-degenerate corpus (i) (the
+    degeneracy record short-circuits before this is consulted): a path
+    other than the committed fixture was passed explicitly — engine-local
+    real data (post-D7); the committed fixture itself, when its bytes
+    differ from the synthetic copy (the D7 re-add-real-later case), is
+    the committed real !1402 gather."""
+    if os.path.abspath(gather_path) != default_path:
+        return "local-uncommitted-real"
+    return "real-!1402"
+
+
 def _sha256(path):
-    h = hashlib.sha256()
     with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 16), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
 def _load_new_module(plugin_root):
@@ -184,10 +207,7 @@ def main(argv=None):
                          "(default: 501bba3)")
     ap.add_argument("--out", required=True,
                     help="ab_result.json output path")
-    ap.add_argument("--corpus-real",
-                    default=os.path.abspath(
-                        os.path.join(AB, "..", "fixtures", "prepare",
-                                     "canary_gather.json")),
+    ap.add_argument("--corpus-real", default=DEFAULT_CORPUS_REAL,
                     help="corpus (i) gather path (default: the committed "
                          "fixture — post-D7 a synthetic copy of corpus "
                          "(ii); pass the engine-local real gather path "
@@ -233,9 +253,10 @@ def main(argv=None):
                                                   "%s_new.json" % name))
             old_ev = evaluate(old_part, mod.weight, mod.is_security)
             new_ev = evaluate(new_part, mod.weight, mod.is_security)
-            source = {"canary-synth": "canary-synth",
-                      "security-light": "security-light"}.get(
-                          name, "local-uncommitted-real")
+            if name == "real-or-synth":
+                source = corpus_source(gather_path, DEFAULT_CORPUS_REAL)
+            else:
+                source = name          # canary-synth / security-light
             out_corpora[name] = {"source": source, "sha256": sha,
                                  "old": old_ev, "new": new_ev,
                                  "new_pass": new_ev["pass"],
