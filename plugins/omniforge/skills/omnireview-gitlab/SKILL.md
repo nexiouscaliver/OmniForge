@@ -74,8 +74,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_prepare.py"
   --project {project} --iid {id} --review-id {id} --run-dir /tmp/omni_run_{id}
 ```
 
-Optional flags: `[--prior-report <path>]` on re-reviews — the prior findings JSON, i.e. the
-digest prior-out artifact `/tmp/omni_mr{id}_prior_findings.json` — and `[--verify-head <prior head>]`
+Optional flags: `[--prior-report <path>]` on re-reviews, when the prior run's digest
+prior-out artifact is still present (`/tmp/omni_mr{id}_prior_findings.json` — Phase 7
+removes it after completed runs) — and `[--verify-head <prior head>]`
 ONLY when a prior run recorded one (the `head_sha` from that run's `prepare.json`);
 `[--dry-run]` validates the invocation only (see the exit codes below). (If
 `${CLAUDE_PLUGIN_ROOT}` is not set in the current context, construct the script path from
@@ -93,7 +94,9 @@ and the brief paths the rest of this skill consumes.
 - **1** — soft-fail (gather/partition/internal failure). Fall back to the improvised path
   (last subsection below).
 - **2** — usage error (bad invocation, fatal `--prior-report`, unwritable run dir). Fix the
-  invocation and re-run — NO fallback.
+  invocation and re-run — NO fallback. (A missing-script shell error — `python3: can't open
+  file ... No such file or directory`, which also exits 2 — is the script-absent case: use
+  the fallback below, not this row.)
 - **3** — auth failed or access denied. Surface the error and STOP — no fallback. (A 403 may
   be a Cloudflare-managed challenge against a valid token; do not assume a valid token is
   the problem.)

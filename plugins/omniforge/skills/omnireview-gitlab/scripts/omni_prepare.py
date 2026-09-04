@@ -100,7 +100,7 @@ def parse_args(argv=None):
                          "except phases.jsonl on every real run)")
     ap.add_argument("--prior-report", default=None,
                     help="prior findings JSON (array, or object with a "
-                         "\"findings\" array)")
+                         "\"findings\" or \"prior_findings\" array)")
     ap.add_argument("--verify-head", default=None, metavar="SHA",
                     help="compare gather.diff_refs.head_sha AFTER the full "
                          "gather; mismatch -> exit 4")
@@ -126,7 +126,9 @@ def output_paths(run_dir):
 
 def load_prior_report(path):
     """Recognized shapes: top-level JSON array, or object with a "findings"
-    array. Returns ("ok", findings_count) or (reason, -1) with reason in
+    or "prior_findings" array (the latter is the digest prior-out artifact
+    omni_digest.py writes — the same alias omni_consolidate.py reads).
+    Returns ("ok", findings_count) or (reason, -1) with reason in
     {"file not found", "unreadable", "invalid JSON", "unrecognized
     shape"}."""
     try:
@@ -142,8 +144,10 @@ def load_prior_report(path):
         return ("invalid JSON", -1)
     if isinstance(obj, list):
         return ("ok", len(obj))
-    if isinstance(obj, dict) and isinstance(obj.get("findings"), list):
-        return ("ok", len(obj["findings"]))
+    if isinstance(obj, dict):
+        for key in ("findings", "prior_findings"):
+            if isinstance(obj.get(key), list):
+                return ("ok", len(obj[key]))
     return ("unrecognized shape", -1)
 
 
@@ -596,6 +600,10 @@ def main(argv=None):
     try:
         with open(paths["partition_json"], encoding="utf-8") as fh:
             partition = json.load(fh)
+        if not (isinstance(partition, dict) and "files" in partition
+                and "agents" in partition):
+            raise ValueError("unexpected partition shape: expected "
+                             "files and agents keys")
     except (OSError, ValueError) as e:
         return _fail_stage("internal", "cannot read partition: %s" % e)
 
