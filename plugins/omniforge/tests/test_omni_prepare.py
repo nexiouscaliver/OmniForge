@@ -837,5 +837,223 @@ class PrepareBriefsGoldenTests(unittest.TestCase):
         self.assertEqual(actual, expected)
 
 
+class PrepareOutputTests(unittest.TestCase):
+    """Full http.server runs against the writers: prepare.json (15 keys,
+    indent=2), the ONE-line stdout receipt (11 keys), briefs on disk, the
+    R1 wipe (everything except phases.jsonl), the R6 phases-append-LAST
+    ordering, exit-2 IO failures, and atomic-write hygiene."""
+
+    def _run(self, review_id="rev-9", extra=None, run_dir=None):
+        base, log = make_http_server(self, default_routes())
+        if run_dir is None:
+            run_dir = os.path.join(tmp_dir(self), "run")
+        argv = ["--project", PROJECT, "--iid", MR,
+                "--review-id", review_id, "--run-dir", run_dir]
+        if extra:
+            argv += extra
+        rc, so, se = run_prepare(argv, host=base)
+        return rc, so, se, run_dir
+
+    def test_prepare_prepare_json_exact_key_set(self):
+        rc, so, se, run_dir = self._run()
+        self.assertEqual(rc, 0, se)
+        with open(os.path.join(run_dir, "prepare.json"),
+                  encoding="utf-8") as fh:
+            raw = fh.read()
+        # indent=2 + trailing newline, written via .tmp + os.replace
+        self.assertTrue(raw.startswith('{\n  "schema"'), raw[:40])
+        self.assertTrue(raw.endswith("\n"))
+        doc = json.loads(raw)
+        self.assertEqual(set(doc), {
+            "schema", "created_at", "review_id", "project", "mr_iid",
+            "head_sha", "run_dir", "gather_json", "partition_json",
+            "briefs", "files", "added_lines", "partitions", "prior_report",
+            "elapsed_ms"})
+        self.assertEqual(doc["schema"], "omniforge-prepare/1")
+        self.assertEqual(doc["review_id"], "rev-9")
+        self.assertEqual(doc["project"], PROJECT)
+        self.assertEqual(doc["mr_iid"], MR)
+        self.assertEqual(doc["head_sha"], "head1")
+        self.assertEqual(doc["run_dir"], os.path.abspath(run_dir))
+        self.assertEqual(doc["briefs"], {
+            "analyst": os.path.join(run_dir, "briefs", "agent-1.md"),
+            "codebase": os.path.join(run_dir, "briefs", "agent-2.md"),
+            "security": os.path.join(run_dir, "briefs", "agent-3.md")})
+        self.assertEqual(doc["files"], 4)
+        self.assertEqual(doc["added_lines"], 9)
+        self.assertEqual(doc["partitions"], {
+            "analyst": {"files": 1, "added_lines_total": 3},
+            "codebase": {"files": 2, "added_lines_total": 4},
+            "security": {"files": 1, "added_lines_total": 2}})
+        self.assertIsNone(doc["prior_report"])
+        self.assertIsInstance(doc["elapsed_ms"], int)
+
+    def test_prepare_stdout_receipt_single_line_keys(self):
+        rc, so, se, run_dir = self._run()
+        self.assertEqual(rc, 0, se)
+        receipt = stdout_json(so)      # exactly ONE line, enforced
+        self.assertEqual(set(receipt), {
+            "ok", "run_dir", "project", "mr_iid", "review_id", "head_sha",
+            "files", "added_lines", "partitions", "prior_findings",
+            "duration_s"})
+        self.assertIs(receipt["ok"], True)
+        self.assertEqual(receipt["run_dir"], os.path.abspath(run_dir))
+        self.assertEqual(receipt["project"], PROJECT)
+        self.assertEqual(receipt["mr_iid"], MR)
+        self.assertEqual(receipt["review_id"], "rev-9")
+        self.assertEqual(receipt["head_sha"], "head1")
+        self.assertEqual(receipt["files"], 4)
+        self.assertEqual(receipt["added_lines"], 9)
+        self.assertEqual(receipt["partitions"],
+                         {"analyst": 1, "codebase": 2, "security": 1})
+        self.assertIsNone(receipt["prior_findings"])
+        self.assertIsInstance(receipt["duration_s"], float)
+
+    def test_prepare_prepare_stdout_not_polluted_by_subprocess(self):
+        # prepare's stdout is the single receipt line; the fetch child's
+        # 12-key receipt and the partition child's one-liner never leak
+        rc, so, se, run_dir = self._run()
+        self.assertEqual(rc, 0, se)
+        receipt = stdout_json(so)
+        self.assertIs(receipt["ok"], True)
+        self.assertEqual(len(receipt), 11)
+        self.assertNotIn("api_calls", receipt)          # fetcher-only key
+        self.assertNotIn("elapsed_ms", receipt)         # fetcher-only key
+        self.assertNotIn("omni_partition", so)
+        self.assertNotIn("OmniForge reviewer brief", so)  # briefs go to files
+
+    def test_prepare_head_always_recorded_without_flag(self):
+        # head_sha lands in prepare.json AND the phases line even with no
+        # --verify-head flag (the flag only adds the compare, never gating
+        # the recording)
+        rc, so, se, run_dir = self._run()
+        self.assertEqual(rc, 0, se)
+        with open(os.path.join(run_dir, "prepare.json"),
+                  encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["head_sha"], "head1")
+        with open(os.path.join(run_dir, "phases.jsonl"),
+                  encoding="utf-8") as fh:
+            lines = [l for l in fh.read().splitlines() if l.strip()]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0])["head_sha"], "head1")
+
+    def test_prepare_phases_jsonl_append_and_two_run_count(self):
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se, run_dir = self._run(review_id="rev-a", run_dir=run_dir)
+        self.assertEqual(rc, 0, se)
+        rc2, so2, se2, run_dir = self._run(review_id="rev-b",
+                                           run_dir=run_dir)
+        self.assertEqual(rc2, 0, se2)
+        with open(os.path.join(run_dir, "phases.jsonl"),
+                  encoding="utf-8") as fh:
+            lines = [l for l in fh.read().splitlines() if l.strip()]
+        self.assertEqual(len(lines), 2, lines)
+        for i, line in enumerate(lines):
+            entry = json.loads(line)
+            self.assertEqual(set(entry), {
+                "phase", "review_id", "duration_s", "files", "partitions",
+                "head_sha", "ts"})
+            self.assertEqual(entry["phase"], "prepare")
+            self.assertEqual(entry["review_id"], "rev-ab"[i])
+            self.assertIsInstance(entry["duration_s"], float)
+            self.assertEqual(entry["files"], 4)
+            self.assertEqual(entry["partitions"],
+                             {"analyst": 1, "codebase": 2, "security": 1})
+            self.assertEqual(entry["head_sha"], "head1")
+            self.assertIsInstance(entry["ts"], str)
+
+    def test_prepare_idempotent_rerun_wipes_stale_and_preserves_phases(self):
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se, run_dir = self._run(review_id="first",
+                                        run_dir=run_dir)
+        self.assertEqual(rc, 0, se)
+        # plant stale artifacts between runs
+        with open(os.path.join(run_dir, "stale.txt"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("stale")
+        with open(os.path.join(run_dir, "briefs", "old.md"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("old brief")
+        rc2, so2, se2, run_dir = self._run(review_id="second",
+                                           run_dir=run_dir)
+        self.assertEqual(rc2, 0, se2)
+        # wipe removed everything except phases.jsonl...
+        self.assertFalse(os.path.exists(
+            os.path.join(run_dir, "stale.txt")))
+        self.assertEqual(sorted(os.listdir(os.path.join(run_dir, "briefs"))),
+                         ["agent-1.md", "agent-2.md", "agent-3.md"])
+        # ...outputs were rewritten fresh...
+        with open(os.path.join(run_dir, "prepare.json"),
+                  encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["review_id"], "second")
+        # ...and the phases journal survived + gained a line
+        with open(os.path.join(run_dir, "phases.jsonl"),
+                  encoding="utf-8") as fh:
+            entries = [json.loads(l) for l in fh.read().splitlines()
+                       if l.strip()]
+        self.assertEqual([e["review_id"] for e in entries],
+                         ["first", "second"])
+
+    def test_prepare_phases_append_is_last_writer(self):
+        # a DIRECTORY named phases.jsonl survives the wipe (name-only
+        # exemption) and then breaks the append open() -> exit 2 AFTER
+        # prepare.json/briefs landed: phases.jsonl is the LAST writer
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        os.makedirs(run_dir)
+        phases = os.path.join(run_dir, "phases.jsonl")
+        os.mkdir(phases)
+        rc, so, se, run_dir = self._run(run_dir=run_dir)
+        self.assertEqual(rc, 2)
+        self.assertEqual(so.strip(), "")     # no stdout JSON on exit 2
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        self.assertIn("omni_prepare", diag[0])
+        self.assertIn("phases.jsonl", diag[0])
+        # every OTHER output landed before the failed append
+        self.assertTrue(os.path.isfile(
+            os.path.join(run_dir, "prepare.json")))
+        self.assertTrue(os.path.isfile(
+            os.path.join(run_dir, "briefs", "agent-1.md")))
+        self.assertTrue(os.path.isfile(
+            os.path.join(run_dir, "briefs", "agent-3.md")))
+        self.assertTrue(os.path.isdir(phases))   # still the planted dir
+
+    def test_prepare_unwritable_run_dir_exit_2(self):
+        d = tmp_dir(self)
+        parent = os.path.join(d, "ro")
+        os.makedirs(parent)
+        os.chmod(parent, 0o500)
+        self.addCleanup(os.chmod, parent, 0o700)
+        base, log = make_http_server(self, default_routes())
+        rc, so, se = run_prepare(
+            ["--project", PROJECT, "--iid", MR, "--review-id", "r",
+             "--run-dir", os.path.join(parent, "run")], host=base)
+        self.assertEqual(rc, 2)
+        self.assertEqual(so.strip(), "")
+        self.assertIn("omni_prepare: cannot create run dir", se)
+
+    def test_prepare_atomic_write_no_tmp_residue(self):
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se, run_dir = self._run(run_dir=run_dir)
+        self.assertEqual(rc, 0, se)
+        # all six outputs landed...
+        for rel in ("gather.json", "partition.json", "prepare.json",
+                    "phases.jsonl", "briefs/agent-1.md", "briefs/agent-2.md",
+                    "briefs/agent-3.md"):
+            self.assertTrue(os.path.isfile(os.path.join(run_dir, rel)), rel)
+        # ...and no *.tmp residue anywhere after the ok run...
+        rc2, so2, se2, run_dir = self._run(
+            run_dir=run_dir, extra=["--verify-head", "oldsha9"])
+        self.assertEqual(rc2, 4)
+        for root, dirs, names in os.walk(run_dir):
+            for name in names:
+                self.assertFalse(name.endswith(".tmp"),
+                                 os.path.join(root, name))
+
+
 if __name__ == "__main__":
     unittest.main()
