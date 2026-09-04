@@ -245,6 +245,19 @@ def _fail_stage(stage, detail):
     return 1
 
 
+# ── partition subprocess ──────────────────────────────────────────────────
+
+def run_partition(gather_path, partition_path):
+    """Run the REAL omni_partition.py subprocess over the gathered JSON (it
+    reads the gather-file shape natively — embedded data envelope). Returns
+    (returncode, stdout); diagnostics stay on the child's stderr."""
+    proc = subprocess.run(
+        [sys.executable, os.path.join(SCRIPTS, "omni_partition.py"),
+         "--mr-json", gather_path, "--out", partition_path],
+        capture_output=True, text=True)
+    return proc.returncode, proc.stdout
+
+
 # ── entry point ──────────────────────────────────────────────────────────
 
 def main(argv=None):
@@ -295,6 +308,13 @@ def main(argv=None):
         print("omni_prepare: head moved: --verify-head %s but gathered "
               "head is %s" % (args.verify_head, head_sha), file=sys.stderr)
         return 4
+
+    part_rc, part_stdout = run_partition(paths["gather_json"],
+                                         paths["partition_json"])
+    if part_rc != 0:
+        return _fail_stage("partition",
+                           _error_from_stdout(part_stdout)
+                           or "partition rc=%d" % part_rc)
     return 0
 
 
