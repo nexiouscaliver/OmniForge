@@ -104,7 +104,7 @@ reply entry sent via MCP would wrongly create a new thread), so MCP runs must se
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_post_review.py" \
-  --mr {iid} --project {project-id-or-encoded-fullpath} \
+  --mr {iid} --project {project-id-or-fullpath} \
   --summary /tmp/omni_review_{id}_summary.md \
   --findings-json /tmp/omni_review_{id}_findings.json \
   --since {run-start-epoch}

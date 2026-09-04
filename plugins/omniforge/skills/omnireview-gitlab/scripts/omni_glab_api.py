@@ -43,7 +43,7 @@ DEFAULT_HOST = "https://gitlab.com"
 HTTP_TIMEOUT_SECS = 60
 # gitlab.com's Cloudflare edge serves a managed challenge (HTTP 403 HTML)
 # to the default "Python-urllib/x" User-Agent; an explicit UA passes.
-USER_AGENT = "omniforge-glab-api/3.3.1"
+USER_AGENT = "omniforge-glab-api/3.3.3"
 
 sleep_fn = time.sleep          # module-level so tests can inject a recorder
 
