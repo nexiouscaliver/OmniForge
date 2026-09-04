@@ -22,7 +22,8 @@ receipt's prior_findings.
 
 Exit codes:
   0   all outputs written; stdout = ONE receipt JSON line (11 keys).
-  1   gather/partition/internal failure:
+  1   gather/partition/internal failure (a hung child is bounded: both
+      subprocess calls carry a timeout whose expiry maps here):
       {"ok":false,"error":"prepare_failed","stage":"gather"|"partition"|
        "internal","detail":<short str>} + one stderr diagnostic line.
   2   argparse usage (natural); --prior-report missing/unreadable/invalid
@@ -72,6 +73,12 @@ AGENT_TITLES = {"analyst": "MR Analyst", "codebase": "Codebase Reviewer",
                 "security": "Security Reviewer"}
 BRIEF_FILE_CAP = 500
 PHASES_NAME = "phases.jsonl"
+# Subprocess ceilings: the fetch child legitimately burns minutes under
+# retry backoff (real sleeps); partition is pure-local JSON work. On
+# expiry subprocess.run raises TimeoutExpired, mapped to exit 1 with the
+# stage named — a hung child must never hang the parent.
+FETCH_TIMEOUT_S = 600
+PARTITION_TIMEOUT_S = 120
 
 _DETAIL_CAP = 300             # short detail strings stay one line
 
@@ -214,8 +221,10 @@ def classify_fetch(rc, stdout_text):
 
 
 def _short(text):
-    """One short single-line detail string for stdout/stderr diagnostics."""
-    t = (text or "").strip()
+    """One short single-line detail string for stdout/stderr diagnostics.
+    Accepts strings or exception objects (the internal-stage failures pass
+    the caught exception)."""
+    t = str(text or "").strip()
     if not t:
         return ""
     return t.splitlines()[0][:_DETAIL_CAP]
@@ -237,8 +246,8 @@ def load_gather(path):
     if not (isinstance(gather, dict) and isinstance(gather.get("data"), dict)
             and isinstance(gather.get("fetched_at"), str)):
         raise ValueError(
-            "unexpected gather shape: expected omniforge-mr-gather/1 with "
-            "fetched_at + data")
+            "unexpected gather shape: expected a JSON object with a data "
+            "object and a fetched_at string")
     return gather
 
 
@@ -256,11 +265,14 @@ def _fail_stage(stage, detail):
 def run_partition(gather_path, partition_path):
     """Run the REAL omni_partition.py subprocess over the gathered JSON (it
     reads the gather-file shape natively — embedded data envelope). Returns
-    (returncode, stdout); diagnostics stay on the child's stderr."""
+    (returncode, stdout); diagnostics stay on the child's stderr. Raises
+    subprocess.TimeoutExpired after PARTITION_TIMEOUT_S (main maps it to
+    exit 1, stage "partition")."""
     proc = subprocess.run(
         [sys.executable, os.path.join(SCRIPTS, "omni_partition.py"),
          "--mr-json", gather_path, "--out", partition_path],
-        capture_output=True, text=True)
+        capture_output=True, text=True, errors="replace",
+        timeout=PARTITION_TIMEOUT_S)
     return proc.returncode, proc.stdout
 
 
@@ -274,6 +286,7 @@ def run_partition(gather_path, partition_path):
 _EMPTY_DIFF_MARKER = "(none — this MR has an empty diff)"
 _NO_ADDED_SIDE_MARKER = ("(none — no added-side files — deep-dive "
                          "partitions are empty)")
+_NO_OWNED_MARKER = "(none — no owned files)"
 
 _DEPTH_SENTENCES = (
     "Cross-cutting: you still sweep ALL changed files at grep depth; "
@@ -344,8 +357,11 @@ def render_brief(agent, gather, partition, prior_count):
                 lines.append("- `%s` — %d added lines — %s"
                              % (path, added_by_path.get(path, 0),
                                 reason_by_path.get(path, "")))
-    # else: a non-empty MR where this agent owns nothing — no owned bullets
-    # (the cross-cutting sweep below is still this agent's job)
+    else:
+        # a non-empty MR where this agent owns nothing — an explicit
+        # marker, never a dangling header (the cross-cutting sweep below
+        # is still this agent's job)
+        lines.append(_NO_OWNED_MARKER)
     lines += ["", _DEPTH_SENTENCES, "",
               "## Cross-cutting files (all %d changed files)" % files_total,
               ""]
@@ -444,11 +460,20 @@ def build_phases_line(review_id, duration_s, files, partitions, head_sha,
 
 def write_atomic(path, text):
     """Write text to path via <path>.tmp + os.replace (R6 atomicity).
-    Raises OSError; the .tmp sibling lives in the same directory."""
+    Raises OSError; on failure the .tmp sibling is removed (no residue —
+    mirrors omni_fetch_mr.py's write hygiene) and the error re-raised."""
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except OSError:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        raise
 
 
 def _cannot_write(path, e):
@@ -519,11 +544,17 @@ def main(argv=None):
         return _cannot_write(run_dir, e)
 
     paths = output_paths(run_dir)
-    proc = subprocess.run(
-        [sys.executable, os.path.join(SCRIPTS, "omni_fetch_mr.py"),
-         "--project", args.project, "--mr", args.iid,
-         "--out", paths["gather_json"]],
-        capture_output=True, text=True)
+    try:
+        proc = subprocess.run(
+            [sys.executable, os.path.join(SCRIPTS, "omni_fetch_mr.py"),
+             "--project", args.project, "--mr", args.iid,
+             "--out", paths["gather_json"]],
+            capture_output=True, text=True, errors="replace",
+            timeout=FETCH_TIMEOUT_S)
+    except subprocess.TimeoutExpired as e:
+        return _fail_stage(
+            "gather", "fetch subprocess timed out after %ss"
+                      % (e.timeout or FETCH_TIMEOUT_S))
     verdict = classify_fetch(proc.returncode, proc.stdout)
     if verdict == "auth":
         detail = _short(_error_from_stdout(proc.stdout)) or "auth failure"
@@ -550,8 +581,13 @@ def main(argv=None):
               "head is %s" % (args.verify_head, head_sha), file=sys.stderr)
         return 4
 
-    part_rc, part_stdout = run_partition(paths["gather_json"],
-                                         paths["partition_json"])
+    try:
+        part_rc, part_stdout = run_partition(paths["gather_json"],
+                                             paths["partition_json"])
+    except subprocess.TimeoutExpired as e:
+        return _fail_stage(
+            "partition", "partition subprocess timed out after %ss"
+                         % (e.timeout or PARTITION_TIMEOUT_S))
     if part_rc != 0:
         return _fail_stage("partition",
                            _error_from_stdout(part_stdout)

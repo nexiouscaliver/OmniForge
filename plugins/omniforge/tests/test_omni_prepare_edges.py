@@ -741,5 +741,92 @@ class PrepareHardeningRendererNitsTests(unittest.TestCase):
         self.assertNotIn("gather/1", msg)
 
 
+class PrepareE2eTests(unittest.TestCase):
+    """Offline mock e2e (plan R4, folded into the prepare-hardening green
+    commit — it cannot produce an honest red once the rest is green): the
+    full fixture MR through the http.server seam, omni_prepare.py run
+    END-TO-END as a real subprocess, plus the new skill flow's main-thread
+    turn budget."""
+
+    def test_prepare_e2e_offline_full_run_and_turn_budget(self):
+        base, log = make_http_server(self, default_routes())
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        env = {"GITLAB_HOST": base, "GITLAB_TOKEN": "fake",
+               "PATH": os.environ.get("PATH", os.defpath)}
+        # real subprocess, foreign cwd: proves CWD-independence and the
+        # inherited-env flow (GITLAB_HOST reaches the fetch grandchild)
+        proc = subprocess.run(
+            [sys.executable, PREPARE, "--project", PROJECT, "--iid", MR,
+             "--review-id", "e2e-1", "--run-dir", run_dir],
+            capture_output=True, text=True, env=env, cwd=d, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # stdout is exactly ONE line: the 11-key receipt
+        receipt = stdout_json(proc.stdout)
+        self.assertEqual(set(receipt), {
+            "ok", "run_dir", "project", "mr_iid", "review_id", "head_sha",
+            "files", "added_lines", "partitions", "prior_findings",
+            "duration_s"})
+        self.assertIs(receipt["ok"], True)
+        self.assertEqual(receipt["files"], 4)
+        self.assertEqual(receipt["partitions"],
+                         {"analyst": 1, "codebase": 2, "security": 1})
+        # all six artifacts land with correct shapes
+        gather = read_json(os.path.join(run_dir, "gather.json"))
+        self.assertEqual(gather["schema"], "omniforge-mr-gather/1")
+        part = read_json(os.path.join(run_dir, "partition.json"))
+        self.assertEqual(set(part), {"files", "agents"})
+        self.assertEqual(len(part["files"]), 4)
+        doc = read_json(os.path.join(run_dir, "prepare.json"))
+        self.assertEqual(len(doc), 15)
+        self.assertEqual(doc["review_id"], "e2e-1")
+        self.assertEqual(doc["head_sha"], "head1")
+        for n, title in ((1, "MR Analyst"), (2, "Codebase Reviewer"),
+                         (3, "Security Reviewer")):
+            with open(brief_path(run_dir, n), encoding="utf-8") as fh:
+                brief = fh.read()
+            with self.subTest(agent=n):
+                self.assertTrue(brief.startswith(
+                    "# OmniForge reviewer brief — %s (agent-%d)"
+                    % (title, n)), brief[:80])
+                self.assertIn("## Owned files (deep-dive ownership)", brief)
+                self.assertIn("## Dispatch note", brief)
+        with open(os.path.join(run_dir, "phases.jsonl"),
+                  encoding="utf-8") as fh:
+            phases = [json.loads(l) for l in fh.read().splitlines()
+                      if l.strip()]
+        self.assertEqual(len(phases), 1)
+        self.assertEqual(set(phases[0]), {
+            "phase", "review_id", "duration_s", "files", "partitions",
+            "head_sha", "ts"})
+        self.assertEqual(phases[0]["review_id"], "e2e-1")
+        # ONE HTTP pass — the exact 6-GET sequence, no re-fetch (SC-2)
+        mr = "/api/v4/projects/%s/merge_requests/%s" % (PROJECT, MR)
+        self.assertEqual([p for _, p in log], [
+            mr,
+            mr + "/diffs?per_page=100&page=1",
+            mr + "/discussions?per_page=100&page=1",
+            mr + "/commits?per_page=100&page=1",
+            mr + "/versions?per_page=100",
+            mr + "/notes?per_page=100",
+        ], log)
+        self.assertTrue(all(m == "GET" for m, _ in log))
+        # The new skill flow's PRIMARY-PATH main-thread steps, enumerated —
+        # the <= 10-turn budget this script exists to enable:
+        #   1. run omni_prepare.py       (this test's subprocess run)
+        #   2. Read prepare.json         (head_sha, partitions, briefs)
+        #   3. run omni_digest.py        (over run_dir/gather.json)
+        #   4. create 3 worktrees (one tool call)
+        #   5. dispatch 3 agents (one message)
+        steps = [
+            "run omni_prepare.py",
+            "Read prepare.json",
+            "run omni_digest.py",
+            "create 3 worktrees (one tool call)",
+            "dispatch 3 agents (one message)",
+        ]
+        self.assertLessEqual(len(steps), 10)
+
+
 if __name__ == "__main__":
     unittest.main()
