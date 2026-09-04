@@ -175,6 +175,86 @@ META = {
     "reviewers": [{"username": "r1"}],
 }
 
+# The /diffs API returns per-file diffs starting directly at the @@ hunks
+# (no diff --git/+++ headers); the fetcher synthesizes the headers. Four
+# files so every agent owns something: src/app.py + src/net.py (generic ->
+# greedy/codebase), README.md (docs -> analyst), src/auth_check.py
+# (security-affinity -> security).
+APP_HUNK = """@@ -40,6 +40,9 @@ def handler(cfg):
+     context line
++    if cfg is None:
++        return None
++    return cfg.get("x")
+     more context
+"""
+
+NET_HUNK = """@@ -10,4 +10,4 @@ def fetch(url):
+     ctx
+-    old_endpoint = "http://hardcoded"
++    new_endpoint = url
+     tail
+"""
+
+README_HUNK = """@@ -1,2 +1,5 @@
+ # Project
++
++## Overview
++
+"""
+
+AUTH_HUNK = """@@ -20,4 +20,6 @@ def check(user):
+     ctx
++    if not user.is_active:
++        raise PermissionError("inactive")
+     return True
+"""
+
+DIFF_PAGE = [
+    {"old_path": "src/app.py", "new_path": "src/app.py", "diff": APP_HUNK},
+    {"old_path": "src/net.py", "new_path": "src/net.py", "diff": NET_HUNK},
+    {"old_path": "README.md", "new_path": "README.md", "diff": README_HUNK},
+    {"old_path": "src/auth_check.py", "new_path": "src/auth_check.py",
+     "diff": AUTH_HUNK},
+]
+
+RAW_DISCUSSIONS = [
+    {"id": "d1", "resolvable": True, "resolved": False,
+     "notes": [
+         {"system": False, "type": "DiffNote", "body": "please guard cfg",
+          "author": {"username": "rev1"},
+          "created_at": "2026-09-01T10:00:00Z",
+          "position": {"new_path": "src/app.py", "new_line": 41,
+                       "position_type": "text"}},
+     ]},
+]
+
+RAW_COMMITS = [
+    {"id": "c111", "title": "Add widget"},
+    {"id": "c222", "title": "Fix lint"},
+]
+
+VERSIONS = [{"id": 1, "head_commit_sha": "head1",
+             "created_at": "2026-09-01T09:00:00Z"}]
+
+RAW_NOTES = [
+    {"system": False, "body": "top-level note",
+     "author": {"username": "rev3"},
+     "created_at": "2026-09-01T12:00:00Z"},
+]
+
+
+def default_routes():
+    # Order matters: substrings are matched most-specific first, the bare
+    # MR path LAST (it is a substring of every sub-endpoint path).
+    return [
+        ("/diffs", 200, DIFF_PAGE),
+        ("/discussions", 200, RAW_DISCUSSIONS),
+        ("/commits", 200, RAW_COMMITS),
+        ("/versions", 200, VERSIONS),
+        ("/notes", 200, RAW_NOTES),
+        ("/merge_requests/" + MR, 200, META),
+    ]
+
 
 class PrepareDryRunTests(unittest.TestCase):
     def test_prepare_dry_run_plan_line_shape(self):
@@ -346,6 +426,87 @@ class PrepareAuthTests(unittest.TestCase):
         # the fetch child failed on its first GET: nothing landed
         self.assertEqual(os.listdir(run_dir), [])
         self.assertFalse(os.path.exists(os.path.join(run_dir, "phases.jsonl")))
+
+
+class PrepareGatherTests(unittest.TestCase):
+    def _run_ok(self, extra=None):
+        base, log = make_http_server(self, default_routes())
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        argv = ["--project", PROJECT, "--iid", MR, "--review-id", "rev-9",
+                "--run-dir", run_dir]
+        if extra:
+            argv += extra
+        rc, so, se = run_prepare(argv, host=base)
+        return rc, so, se, run_dir, log
+
+    def test_prepare_ok_run_writes_gather_json_schema(self):
+        rc, so, se, run_dir, log = self._run_ok()
+        self.assertEqual(rc, 0, se)
+        gather_path = os.path.join(run_dir, "gather.json")
+        self.assertTrue(os.path.isfile(gather_path), os.listdir(run_dir))
+        with open(gather_path, encoding="utf-8") as fh:
+            g = json.load(fh)
+        self.assertEqual(g["schema"], "omniforge-mr-gather/1")
+        self.assertEqual(set(g), {"schema", "fetched_at", "project",
+                                  "mr_iid", "diff_refs", "data",
+                                  "discussions", "versions"})
+        self.assertEqual(g["project"], PROJECT)
+        self.assertEqual(g["mr_iid"], MR)
+        self.assertEqual(g["diff_refs"]["head_sha"], "head1")
+        self.assertEqual(g["data"]["files_changed"],
+                         ["src/app.py", "src/net.py", "README.md",
+                          "src/auth_check.py"])
+        # consumed as-is: prepare's own loader accepts the byte-shape
+        mod = load_prepare()
+        self.assertEqual(mod.load_gather(gather_path), g)
+
+    def test_prepare_one_http_pass_get_sequence(self):
+        rc, so, se, run_dir, log = self._run_ok()
+        self.assertEqual(rc, 0, se)
+        # exactly 6 GETs — one per endpoint, single page each, no re-fetch
+        self.assertEqual(len(log), 6, log)
+        def count(sub):
+            return sum(1 for _, p in log if sub in p)
+        self.assertEqual(count("/diffs"), 1)
+        self.assertEqual(count("/discussions"), 1)
+        self.assertEqual(count("/commits"), 1)
+        self.assertEqual(count("/versions"), 1)
+        self.assertEqual(count("/notes"), 1)
+        self.assertEqual(count("/merge_requests/" + MR), 6)  # prefix of all
+        self.assertTrue(all(m == "GET" for m, _ in log))
+
+    def test_prepare_5xx_exhausted_exit_1_stage_gather(self):
+        # /diffs 500s: the fetch child burns its per-call retries plus the
+        # single page retry (real sleeps, ~12 s) then exits 1 — a
+        # non-auth gather failure maps to exit 1, stage "gather".
+        base, log = make_http_server(self, [
+            ("/diffs", 500, {"error": "boom"}),
+            ("/merge_requests/" + MR, 200, META),
+        ])
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se = run_prepare(
+            ["--project", PROJECT, "--iid", MR, "--review-id", "rev-9",
+             "--run-dir", run_dir], host=base)
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "prepare_failed")
+        self.assertEqual(st["stage"], "gather")
+        self.assertIn("detail", st)
+        self.assertIn("HTTP 500", st["detail"])
+        # one diagnostic stderr line
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        self.assertIn("omni_prepare", diag[0])
+        # no outputs landed (fetch child failed before writing)
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "gather.json")))
+
+    def test_prepare_classify_fetch_exit_2_to_stage_gather(self):
+        # fetcher exit 2 (non-token precondition) is a gather failure, not auth
+        mod = load_prepare()
+        self.assertEqual(mod.classify_fetch(2, ""), "gather_fail")
 
 
 if __name__ == "__main__":
