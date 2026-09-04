@@ -122,12 +122,12 @@ Exit codes:
 **Note entries (3.3.2):** findings with no diff locus (MR-meta process notes, security posture) go in the same
 findings array as note entries — objects carrying ONLY `{"body": ...}` (no `file_path`/`line_number`). The
 script posts them as top-level MR notes AFTER summary/threads/replies, counts them in the stdout `notes` key,
-and validates the shape strictly: a body-only entry that also carries `file_path` or `line_number` is a usage
-error (exit 2 — ambiguous shape, never silently skipped). Note entries replace the raw-glab general-notes
+and validates the shape strictly: a body-only entry that also carries `file_path`, `line_number`, `old_path`, or
+`old_line` is a usage error (exit 2 — ambiguous shape, never silently skipped). Note entries replace the raw-glab general-notes
 path: `glab api --input -` silently drops note bodies (production: MR !1388 lost 5/5 notes to it), so meta
 findings with no diff locus must go through the poster. Like `reply_to_thread_id`, note entries are
-script-only routing — MCP `_post_full_review` would try to post them as inline threads, so interactive MCP
-installs must not receive body-only entries. A batch with no new-thread entries (replies and/or notes only)
+script-only routing — MCP `_post_full_review` rejects body-only entries as invalid findings and fails the
+whole call, so interactive MCP installs must not receive body-only entries. A batch with no new-thread entries (replies and/or notes only)
 may omit `--summary` entirely: the run takes the implied skip — no summary note, duplicate-summary guard not
 evaluated.
 

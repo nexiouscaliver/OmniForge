@@ -121,10 +121,6 @@ def notes_list_path(project, mr):
     return notes_base_path(project, mr) + "?per_page=100&page=1"
 
 
-def summary_path(project, mr):
-    return mr_path(project, mr) + "/notes"
-
-
 def discussions_path(project, mr):
     return mr_path(project, mr) + "/discussions"
 
@@ -418,7 +414,7 @@ def main(argv=None):
         if new_threads:
             dry_line("GET", refs_path(args.project, args.mr))
         if will_post_summary:
-            dry_line("POST", summary_path(args.project, args.mr),
+            dry_line("POST", notes_base_path(args.project, args.mr),
                      [("body", summary)])
             counts["posted_summary"] = True
         for t in new_threads:
@@ -432,7 +428,7 @@ def main(argv=None):
                      [("body", r["body"])])
             counts["replies"] += 1
         for n in notes:
-            dry_line("POST", summary_path(args.project, args.mr),
+            dry_line("POST", notes_base_path(args.project, args.mr),
                      [("body", n["body"])])
             counts["notes"] += 1
         emit()
@@ -461,7 +457,7 @@ def main(argv=None):
                                 args.attempts, args.backoff_base)
                 if new_threads else None)
         if will_post_summary:
-            api("POST", summary_path(args.project, args.mr), token, args.host,
+            api("POST", notes_base_path(args.project, args.mr), token, args.host,
                 [("body", summary)], args.attempts, args.backoff_base)
             counts["posted_summary"] = True
         for t in new_threads:
@@ -477,7 +473,7 @@ def main(argv=None):
                 args.backoff_base)
             counts["replies"] += 1
         for n in notes:
-            api("POST", summary_path(args.project, args.mr), token,
+            api("POST", notes_base_path(args.project, args.mr), token,
                 args.host, [("body", n["body"])], args.attempts,
                 args.backoff_base)
             counts["notes"] += 1
