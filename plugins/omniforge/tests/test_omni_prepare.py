@@ -34,10 +34,13 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 SCRIPTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
@@ -103,6 +106,74 @@ def stdout_json(text):
         raise ValueError("expected exactly one stdout JSON line, got %d: %r" % (
             len(lines), text[:400]))
     return json.loads(lines[0])
+
+
+# ── http.server harness (the seam that reaches BOTH subprocess layers) ───
+#
+# ThreadingHTTPServer with daemon_threads=True (non-daemon per-request
+# threads are a process-exit hang risk); teardown via addCleanup running
+# server.shutdown() then server.server_close(); the handler serves a
+# routes table [(path_substring, status, json_body)] ordered
+# most-specific-first — the bare /merge_requests/{mr} path is a substring
+# of every sub-endpoint and must sit LAST — and records (method, path)
+# into a shared log; log_message is overridden to stay silent.
+
+def make_http_server(testcase, routes):
+    """Start a silent fake GitLab API on 127.0.0.1:<ephemeral>.
+
+    Returns (base_url, requests_log). The log collects ("GET", path) for
+    every request, including query strings, so one-pass GET sequences are
+    assertable across the fetch grandchild subprocess.
+    """
+    requests_log = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests_log.append(("GET", self.path))
+            for sub, status, body in routes:
+                if sub in self.path:
+                    self._respond(status, body)
+                    return
+            self._respond(404, {"error": "no route for %s" % self.path})
+
+        def _respond(self, status, body):
+            payload = json.dumps(body).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
+    thread.start()
+
+    def _teardown():
+        server.shutdown()
+        server.server_close()
+
+    testcase.addCleanup(_teardown)
+    return "http://127.0.0.1:%d" % server.server_address[1], requests_log
+
+
+META = {
+    "iid": 21,
+    "title": "Add widget API",
+    "description": "Adds the widget endpoint.",
+    "author": {"username": "dev"},
+    "source_branch": "feat/widget",
+    "target_branch": "main",
+    "head_pipeline": {"status": "success"},
+    "diff_refs": {"base_sha": "b000", "head_sha": "head1", "start_sha": "s000"},
+    "labels": ["backend"],
+    "assignees": [{"username": "a1"}],
+    "reviewers": [{"username": "r1"}],
+}
 
 
 class PrepareDryRunTests(unittest.TestCase):
@@ -191,6 +262,90 @@ class PrepareDryRunTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("usage", se)
         self.assertEqual(so.strip(), "")
+
+
+class PrepareAuthTests(unittest.TestCase):
+    def test_prepare_missing_token_exit_3_glab_stderr(self):
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se = run_prepare(
+            ["--project", PROJECT, "--iid", MR, "--review-id", "r",
+             "--run-dir", run_dir], token=None)
+        self.assertEqual(rc, 3)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "auth")
+        self.assertIn("detail", st)
+        # stderr reuses the fetcher's glab extraction one-liner verbatim
+        self.assertIn("glab auth status", se)
+        self.assertIn("export GITLAB_TOKEN=$(glab auth status", se)
+
+    def _auth_run(self, status):
+        base, log = make_http_server(self, [
+            ("/merge_requests/" + MR, status,
+             {"message": "%d" % status}),
+        ])
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se = run_prepare(
+            ["--project", PROJECT, "--iid", MR, "--review-id", "r",
+             "--run-dir", run_dir], host=base)
+        return rc, so, se, run_dir, log
+
+    def test_prepare_http_401_during_gather_exit_3(self):
+        rc, so, se, run_dir, log = self._auth_run(401)
+        self.assertEqual(rc, 3)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "auth")
+        self.assertIn("HTTP 401", st["detail"])
+        self.assertIn("glab auth status", se)
+
+    def test_prepare_http_403_during_gather_exit_3(self):
+        rc, so, se, run_dir, log = self._auth_run(403)
+        self.assertEqual(rc, 3)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "auth")
+        self.assertIn("HTTP 403", st["detail"])
+        self.assertIn("glab auth status", se)
+
+    def test_prepare_glab_api_error_message_format_pinned(self):
+        # R5: the status must be extractable as an INTEGER from the true
+        # status position, so a future omni_glab_api refactor cannot
+        # silently degrade exit 3 -> exit 1.
+        for status in ("401", "403"):
+            err = omni_glab_api.GlabApiError("GET", "/projects/p", int(status), "x")
+            m = re.search(r"failed with HTTP (\d+)", str(err))
+            self.assertIsNotNone(m, str(err))
+            self.assertEqual(m.group(1), status)
+
+    def test_prepare_classify_5xx_body_containing_literal_403_is_gather_failure(self):
+        mod = load_prepare()
+        # a 5xx whose redacted detail body contains the literal "HTTP 403"
+        # extracts 503 -> gather failure, NOT auth (integer compare, never
+        # substring)
+        self.assertEqual(
+            mod.classify_fetch(
+                1, '{"ok":false,"error":"GET /p failed with HTTP 503: '
+                   'upstream said HTTP 403 in body"}'),
+            "gather_fail")
+        # the true auth statuses still classify as auth
+        self.assertEqual(
+            mod.classify_fetch(
+                1, '{"ok":false,"error":"GET /p failed with HTTP 401: nope"}'),
+            "auth")
+        self.assertEqual(
+            mod.classify_fetch(
+                1, '{"ok":false,"error":"GET /p failed with HTTP 403: nope"}'),
+            "auth")
+
+    def test_prepare_exit_3_writes_no_outputs(self):
+        rc, so, se, run_dir, log = self._auth_run(401)
+        self.assertEqual(rc, 3)
+        # the fetch child failed on its first GET: nothing landed
+        self.assertEqual(os.listdir(run_dir), [])
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "phases.jsonl")))
 
 
 if __name__ == "__main__":
