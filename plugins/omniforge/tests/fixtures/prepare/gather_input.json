@@ -1,0 +1,169 @@
+{
+  "schema": "omniforge-mr-gather/1",
+  "fetched_at": "2026-09-04T12:00:00+00:00",
+  "project": "73279395",
+  "mr_iid": "21",
+  "diff_refs": {
+    "base_sha": "b000",
+    "head_sha": "head1",
+    "start_sha": "s000"
+  },
+  "data": {
+    "success": true,
+    "mr_id": "21",
+    "title": "Add widget API",
+    "author": "dev",
+    "source_branch": "feat/widget",
+    "target_branch": "main",
+    "pipeline_status": "success",
+    "description": "Adds the widget endpoint.",
+    "comments": "top-level note",
+    "diff": "diff --git a/src/app.py b/src/app.py\n--- a/src/app.py\n+++ b/src/app.py\n@@ -40,6 +40,9 @@ def handler(cfg):\n     context line\n+    if cfg is None:\n+        return None\n+    return cfg.get(\"x\")\n     more context\ndiff --git a/src/net.py b/src/net.py\n--- a/src/net.py\n+++ b/src/net.py\n@@ -10,4 +10,4 @@ def fetch(url):\n     ctx\n-    old_endpoint = \"http://hardcoded\"\n+    new_endpoint = url\n     tail\ndiff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1,2 +1,5 @@\n # Project\n+\n+## Overview\n+\ndiff --git a/src/auth_check.py b/src/auth_check.py\n--- a/src/auth_check.py\n+++ b/src/auth_check.py\n@@ -20,4 +20,6 @@ def check(user):\n     ctx\n+    if not user.is_active:\n+        raise PermissionError(\"inactive\")\n     return True\n",
+    "diff_line_count": 33,
+    "diff_too_large": false,
+    "diff_truncated": false,
+    "diff_line_map": {
+      "src/app.py": {
+        "added_lines": [
+          41,
+          42,
+          43
+        ],
+        "all_new_lines": [
+          40,
+          41,
+          42,
+          43,
+          44
+        ],
+        "hunks": [
+          {
+            "new_start": 40,
+            "new_count": 9
+          }
+        ]
+      },
+      "src/net.py": {
+        "added_lines": [
+          11
+        ],
+        "all_new_lines": [
+          10,
+          11,
+          12
+        ],
+        "hunks": [
+          {
+            "new_start": 10,
+            "new_count": 4
+          }
+        ]
+      },
+      "README.md": {
+        "added_lines": [
+          2,
+          3,
+          4
+        ],
+        "all_new_lines": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "hunks": [
+          {
+            "new_start": 1,
+            "new_count": 5
+          }
+        ]
+      },
+      "src/auth_check.py": {
+        "added_lines": [
+          21,
+          22
+        ],
+        "all_new_lines": [
+          20,
+          21,
+          22,
+          23,
+          24
+        ],
+        "hunks": [
+          {
+            "new_start": 20,
+            "new_count": 6
+          }
+        ]
+      }
+    },
+    "commits": [
+      {
+        "sha": "c111",
+        "message": "Add widget"
+      },
+      {
+        "sha": "c222",
+        "message": "Fix lint"
+      }
+    ],
+    "files_changed": [
+      "src/app.py",
+      "src/net.py",
+      "README.md",
+      "src/auth_check.py"
+    ],
+    "labels": [
+      "backend"
+    ],
+    "assignees": [
+      "a1"
+    ],
+    "reviewers": [
+      "r1"
+    ],
+    "diff_refs": {
+      "base_sha": "b000",
+      "head_sha": "head1",
+      "start_sha": "s000"
+    }
+  },
+  "discussions": {
+    "success": true,
+    "mr_id": "21",
+    "discussions": [
+      {
+        "id": "d1",
+        "resolvable": true,
+        "resolved": false,
+        "notes": [
+          {
+            "system": false,
+            "type": "DiffNote",
+            "body": "please guard cfg",
+            "author": {
+              "username": "rev1"
+            },
+            "created_at": "2026-09-01T10:00:00Z",
+            "position": {
+              "new_path": "src/app.py",
+              "new_line": 41,
+              "position_type": "text"
+            }
+          }
+        ]
+      }
+    ],
+    "total": 1,
+    "unresolved": 1,
+    "resolved": 0
+  },
+  "versions": [
+    {
+      "id": 1,
+      "head_commit_sha": "head1",
+      "created_at": "2026-09-01T09:00:00Z"
+    }
+  ]
+}
