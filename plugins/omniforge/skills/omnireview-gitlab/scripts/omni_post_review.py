@@ -636,7 +636,7 @@ def main(argv=None):
                                                         args.mr, args.project)
                 # UsageError unreachable: load_findings validation is stronger.
                 except (omni_fixprompt.BriefSkip, omni_fixprompt.UsageError) as e:
-                    reason = e.reason
+                    reason = e.reason if isinstance(e, omni_fixprompt.BriefSkip) else str(e)
             if reason is not None:
                 print("omni_post_review: fix brief skipped — %s" % reason,
                       file=sys.stderr)
