@@ -48,7 +48,6 @@ import json
 import os
 import sys
 import time
-import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import omni_glab_api
@@ -334,21 +333,11 @@ class Gatherer:
         return batch if isinstance(batch, list) else []
 
 
-def encode_project(value):
-    """URL-encode a bare full-path project (group/subgroup/project) with
-    safe="" so each "/" reaches GitLab as %2F. Numeric IDs and already-
-    encoded values (carrying %) pass through unchanged. Production motive:
-    the A/B arm passed regenai-gitlab/regenai/regenai-base unencoded — the
-    path segments collapsed and every gather GET 404'd (3x HTTP 404 ≈ 72 s
-    before the run retreated to the numeric ID)."""
-    s = str(value)
-    if s.isdigit() or "%" in s:
-        return s
-    return urllib.parse.quote(s, safe="")
-
-
 def mr_path(project, mr):
-    return "/projects/%s/merge_requests/%s" % (encode_project(project), mr)
+    # Full-path projects are URL-encoded by the ONE shared helper in
+    # omni_glab_api (moved there in 3.3.3 so the poster encodes too).
+    return "/projects/%s/merge_requests/%s" % (
+        omni_glab_api.encode_project(project), mr)
 
 
 def token_fix_line(host):

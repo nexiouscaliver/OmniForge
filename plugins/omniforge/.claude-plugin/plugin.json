@@ -1,7 +1,7 @@
 {
   "name": "omniforge",
   "description": "AI-powered code review toolkit — review MRs/PRs with 3 parallel adversarial agents, auto-fix review findings, verify applied changes, and create MRs/PRs from commits. Supports both GitLab and GitHub. 19 MCP tools, git worktree isolation, confidence-scored findings.",
-  "version": "3.3.2",
+  "version": "3.3.3",
   "author": {
     "name": "Shahil Kadia",
     "email": "shahilkadia@gmail.com"

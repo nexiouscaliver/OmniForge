@@ -104,7 +104,7 @@ reply entry sent via MCP would wrongly create a new thread), so MCP runs must se
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_post_review.py" \
-  --mr {iid} --project {project-id-or-encoded-fullpath} \
+  --mr {iid} --project {project-id-or-fullpath} \
   --summary /tmp/omni_review_{id}_summary.md \
   --findings-json /tmp/omni_review_{id}_findings.json \
   --since {run-start-epoch}
@@ -129,7 +129,9 @@ findings with no diff locus must go through the poster. Like `reply_to_thread_id
 script-only routing — MCP `_post_full_review` rejects body-only entries as invalid findings and fails the
 whole call, so interactive MCP installs must not receive body-only entries. A batch with no new-thread entries (replies and/or notes only)
 may omit `--summary` entirely: the run takes the implied skip — no summary note, duplicate-summary guard not
-evaluated.
+evaluated. On a pure-deletion MR (zero added lines) or for any finding whose locus has no anchorable diff line, plan a note entry —
+or a reply on the matching prior thread — never an inline thread: GitLab rejects unanchorable positions (`400 line_code can't be blank`),
+and that failed thread post aborts the whole batch.
 
 **Partial-failure resume (exit 1 mid-batch):** the summary posts first, then threads in array order, failing
 fast — after a mid-batch exit 1 the summary and the leading threads are already on the MR. NEVER rerun the same

@@ -27,7 +27,15 @@ Behavior (spec D6, preserved through the W4 transport swap):
 - retry/backoff and 4xx fail-fast live in omni_glab_api.request: up to
   --attempts (default 3), sleeping --backoff-base * 2^(attempt-1) seconds
   (2 s then 4 s by default); ONLY 5xx / 429 / transient network is retried —
-  400/401/403/404 fails fast naming the failing call.
+  400/401/403/404 fails fast naming the failing call. A `line_code` 400
+  (position with no anchorable line — pure-deletion MR / unanchorable
+  locus) is a PLANNING failure, not a transport one: the remedy is
+  planning the finding as a note entry or a reply on the matching prior
+  thread, never retrying the same thread post.
+- --project (3.3.3): a numeric ID, a pre-encoded URL path, or a bare full
+  path (group/subgroup/project — URL-encoded automatically via the shared
+  omni_glab_api.encode_project, same semantics as omni_fetch_mr.py, on
+  every request path this script builds).
 - duplicate-summary guard: when this invocation is not reply-only, it first
   lists existing notes (omni_glab_api.get_all — per_page=100, paginated, so
   a busy MR cannot hide an OmniForge summary on page 2; a single page costs
@@ -104,7 +112,11 @@ class PostingError(Exception):
 
 
 def mr_path(project, mr):
-    return "projects/%s/merge_requests/%s" % (project, mr)
+    # Full-path projects are URL-encoded by the ONE shared helper in
+    # omni_glab_api (3.3.3) — every derived path builder (guard notes GET,
+    # refs GET, summary/thread/reply/note POSTs) encodes through here.
+    return "projects/%s/merge_requests/%s" % (
+        omni_glab_api.encode_project(project), mr)
 
 
 def refs_path(project, mr):
@@ -221,7 +233,9 @@ def parse_args(argv):
                     "(one JSON line on stdout).")
     ap.add_argument("--mr", required=True, help="merge request IID")
     ap.add_argument("--project", required=True,
-                    help="GitLab project ID or URL-encoded full path")
+                    help="GitLab project ID, pre-encoded URL path, or bare "
+                         "full path (group/subgroup/project — URL-encoded "
+                         "automatically)")
     ap.add_argument("--host", default=None,
                     help="GitLab host (default: GITLAB_HOST env, "
                          "CI_API_V4_URL env, then https://gitlab.com)")

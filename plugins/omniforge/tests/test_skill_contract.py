@@ -179,6 +179,39 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("ONE SendMessage resume", waiter)
         self.assertIn("never loop", waiter)
 
+    # ── 3.3.3 pins ────────────────────────────────────────────────
+
+    def test_phase4_deletion_mr_prefilter_rule(self):
+        # canary (MR !1388, pure-deletion +0/−16): 4 planned inline
+        # threads -> GitLab 400 "line_code can't be blank" -> batch
+        # aborted, threads burned. Phase 4 must tell the planner to route
+        # unanchorable loci to note entries / prior-thread replies.
+        t = read("SKILL.md")
+        phase4 = t.index("## Phase 4")
+        phase5 = t.index("## Phase 5")
+        wiring = t[phase4:phase5]
+        self.assertIn("never as a thread entry", wiring)
+        self.assertIn("line_code", wiring)
+
+    def test_phase4_reply_preference_rule(self):
+        # canary: two "Prior thread X is confirmed..." follow-ups landed
+        # as top-level NOTES instead of replies on those threads — the
+        # note path had become the path of least resistance. Phase 4
+        # (already_adjudicated/reply routing) must pin the preference.
+        t = read("SKILL.md")
+        phase4 = t.index("## Phase 4")
+        phase5 = t.index("## Phase 5")
+        self.assertIn("never substitute a note where a reply belongs",
+                      t[phase4:phase5])
+
+    def test_posting_guide_prefilter_mention(self):
+        # the note-entries paragraph must carry the matching one-liner:
+        # unanchorable loci (pure-deletion MR) plan as notes/replies,
+        # never inline threads (GitLab line_code 400 aborts the batch)
+        t = read(os.path.join("references", "posting-guide.md"))
+        self.assertIn("line_code", t)
+        self.assertIn("note entries", t)
+
 
 if __name__ == "__main__":
     unittest.main()
