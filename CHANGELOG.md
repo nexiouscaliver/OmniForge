@@ -5,6 +5,27 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.3] - 2026-09-04
+
+Fix release — resolves the three findings from the 3.3.2 production canary (re-review of MR !1388, pure-deletion +0/−16).
+
+### Fixed
+- **Poster full-path project 404** — `omni_post_review.py` URL-encodes non-numeric `--project` values on EVERY request path it builds (guard notes GET, refs GET, summary/thread/reply/note POSTs) via the shared `omni_glab_api.encode_project`; the CLI help now accepts and documents the bare full path. Production motive (canary, session e18dbabb): `omni_post_review.py --project regenai-gitlab/regenai-digital/cleo` → guard GET 404 — the FETCHER got `encode_project` in 3.3.2 but the poster never did; the run recovered only by switching to the numeric ID. Live-proven first-try on scratch MR !21 with the full path (note-only batch, exit 0, `notes: 1`, note re-fetched by id then deleted 204)
+
+### Added
+- **Deletion-MR / unanchorable-loci pre-filter (SKILL.md Phase 4 + posting-guide)** — BEFORE building the findings payload, check the gather data for anchorability: an MR with zero added lines (pure-deletion, e.g. +0/−16) or a finding whose locus has no anchorable line plans as a note entry or a reply on the matching prior thread — never as a thread entry. Production motive (canary, MR !1388): 4 inline threads planned on a pure-deletion MR → GitLab `400 Bad request — Note {:line_code=>["can't be blank"]}` → fail-fast aborted the batch (correct) but the threads were burned; the poster docstring now says the `line_code`-400 remedy is planning (note/reply), not retrying
+- **Reply-preference routing rule (SKILL.md Phase 4)** — follow-ups to an existing OmniForge thread MUST be posted as replies on that thread (`reply_to_thread_id`); note entries are ONLY for genuinely anchorless NEW findings with no existing thread — never substitute a note where a reply belongs. Production motive (canary): two prior-thread follow-ups ("Prior thread X is confirmed…") posted as top-level NOTES because the note path had become the path of least resistance
+
+### Changed
+- **`encode_project` is ONE shared helper** — moved from `omni_fetch_mr.py` into `omni_glab_api.py` (same semantics: numeric digits-only passthrough, already-%-encoded passthrough, else `quote(safe="")`); the fetcher now calls the shared helper (behavior identical — its 3 encoding tests unchanged and green) and the poster uses it on every path builder
+- Test suite 383 + 19 subtests (was 376 + 19)
+- Version bumped to 3.3.3
+
+### Deferred to 3.3.4+
+- line_range positions (needs nested-param dev validation), adjudication-turns lever, dead-subagent watchdog automation — unchanged from 3.3.2
+
+---
+
 ## [3.3.2] - 2026-09-04
 
 ### Added
