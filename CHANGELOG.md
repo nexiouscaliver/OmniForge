@@ -5,6 +5,28 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] - 2026-09-04
+
+### Added
+- **Note entries on `omni_post_review.py`** — findings objects carrying ONLY `{"body": ...}` (no `file_path`/`line_number`) post as top-level MR notes (execution order: summary → threads → replies → notes), counted in the additive stdout key `notes`; mixed batches fine; a body-only entry that also carries anchor keys is an ambiguous-shape usage error (exit 2 — never silently skipped). Replaces the raw-glab general-notes path: `glab api --input -` silently drops note bodies — production !1388 lost 5/5 MR-meta notes to it. Live-proven on scratch MR !21: note-only batch (no `--summary`, no `--skip-summary`) exit 0 with `notes: 1`, the note re-fetched by id, then deleted (204)
+- **`--host` on `omni_post_review.py`** — same resolution order as the fetch script (flag > GITLAB_HOST > CI_API_V4_URL > https://gitlab.com), threaded through EVERY API call including the guard's notes listing and the note posts (parity with `omni_fetch_mr.py`)
+- **Auto-summary-skip for no-new-thread batches** — `--summary` is required ONLY when the batch has at least one new-thread entry; reply-only and note-only batches proceed without it (implied skip: no summary, guard not evaluated — same as reply-only today). Removes the production friction of reply-only batches dying on argparse exit 2 (seen twice in production, one wasted turn each); `--skip-summary` keeps its current meaning
+
+### Changed
+- **Duplicate-summary guard paginates** — the guard's notes listing now goes through `omni_glab_api.get_all` (per_page=100, page-following), so a busy MR (100+ notes) can no longer hide an OmniForge summary beyond page 1; a single page still costs exactly ONE notes GET (pinned by test)
+- **`omni_fetch_mr.py` accepts bare full-path projects** — non-numeric `--project` values are URL-encoded (`urllib.parse.quote(safe="")`) on every endpoint the script builds; numeric IDs and pre-encoded values pass through unchanged, and the CLI help says so. Production motive: the 3.3.1 A/B arm passed `regenai-gitlab/regenai/regenai-base` unencoded → 3× HTTP 404 ≈ 72 s before retreating to the numeric ID. Live-proven first-try on MR !21 with the full path (6 API calls, 4.1 s)
+- **SKILL.md + posting-guide document note entries** — Phase 6 posting instructions and the guide's findings-shape section name note entries as the poster's general-notes path (with the `glab api --input -` body-drop hazard as the reason); Phase 3 gains the stalled-subagent rule: attempt exactly ONE SendMessage resume before harvesting partials — never loop
+- Test suite 376 + 19 subtests (was 362 + 19)
+- Version bumped to 3.3.2
+
+### Fixed
+- **Headless MCP −32000** — the `.mcp.json` launch arg is pinned to `mcp[cli]>=1.0.0,<2.0.0`: the unpinned `uv run --with mcp[cli]` resolves mcp 2.x, where `from mcp.server.fastmcp import FastMCP` dies at import and every tool call returns −32000 (diagnosed end-to-end in 3.3.1 with this exact pin proven locally; now shipped under the operator's keep-MCP decision)
+
+### Deferred to 3.3.3+
+- line_range positions (needs nested-param dev validation), adjudication-turns lever, dead-subagent watchdog automation
+
+---
+
 ## [3.3.1] - 2026-09-03
 
 ### Added
