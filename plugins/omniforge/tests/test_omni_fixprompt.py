@@ -24,6 +24,7 @@ finding fields; the module is stdlib-only with no omni_glab_api or
 sibling-script dependency (AC-4).
 """
 
+import ast
 import importlib.util
 import io
 import json
@@ -175,9 +176,15 @@ steps 1–6 for you.)
 """ % (WEB_URL, WEB_URL, WEB_URL)
 
 ITEM_HEAD_RE = re.compile(
-    r"^(\d+)\. \*\[([a-z]+)\] (.*)\*\* — `([^`]*)` — category: (.*) — thread: (.*)$")
+    r"^(\d+)\. \*\*\[([a-z]+)\] (.*)\*\* — `([^`]*)` — category: (.*) — thread: (.*)$")
 PROBLEM_PREFIX = "   - Problem: "
 FIX_PREFIX = "   - Suggested fix: "
+
+# The template's own truncation pointer (present only when N > 25) — the
+# one non-item line allowed inside the findings-list region.
+POINTER_RE = re.compile(r"^\(Only the top \d+ findings by severity are listed "
+                        r"here — \d+ more are in the inline threads "
+                        r"above\.\)$")
 
 
 def load_fixprompt_module():
@@ -198,7 +205,8 @@ def parse_finding_items(text):
     lines = text.splitlines()
     start = lines.index(UNTRUSTED_LINE)
     end = lines.index("Workflow:")
-    region = [ln for ln in lines[start + 1:end] if ln.strip()]
+    region = [ln for ln in lines[start + 1:end]
+              if ln.strip() and not POINTER_RE.match(ln)]
     if len(region) % 3:
         raise AssertionError("finding list is not 3-line items: %r" % region[:9])
     items = []
@@ -525,11 +533,13 @@ class FixPromptTests(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         with open(FIXPROMPT, encoding="utf-8") as fh:
-            src = fh.read()
-        roots = {m.group(1).split(".")[0]
-                 for m in re.finditer(
-                     r"^\s*(?:import|from)\s+([A-Za-z_][A-Za-z0-9_.]*)",
-                     src, re.M)}
+            tree = ast.parse(fh.read())
+        roots = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                roots.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                roots.add(node.module.split(".")[0])
         self.assertTrue(roots)
         self.assertLessEqual(roots, {"argparse", "json", "re", "sys", "os"})
 
