@@ -37,7 +37,8 @@ Diagnostics on stderr with an "omni_adjudicate: " prefix.
 Exit codes: 0 ok (worklist written; includes an empty clusters array and
 duplicate-agent notes) · 1 soft-fail, NO worklist written (clusters
 unreadable / invalid JSON / not an array / a cluster missing required keys /
-passthrough or malformed --findings / a cluster no rule can classify / any
+passthrough or malformed --findings / a cluster no rule can classify /
+NaN/Infinity values from a corrupt clusters file / any
 unexpected exception) · 2 usage only (argparse failures, more than 3
 --findings files, unwritable --out).
 """
@@ -150,7 +151,9 @@ def sanitize(s, cap):
     control characters second, truncation LAST — so every result is at most
     cap characters and truncated results are exactly cap characters."""
     s = re.sub(r"`{3,}", FENCE, s)
-    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", s)
+    # ASCII control characters except \n (\x0a) and \t (\x09) — CR (\x0d)
+    # included — become a space.
+    s = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", s)
     if len(s) > cap:
         s = s[:cap - MARKER_LEN] + MARKER
     return s
@@ -348,7 +351,8 @@ def _guard_findings(paths):
                                     "degraded input; fall back" % p)
         agent = str(data.get("agent", ""))
         if agent in seen:
-            anomalies.append("duplicate agent %s" % agent)
+            anomalies.append("duplicate agent %s"
+                             % sanitize(agent, CAP_ONE_LINER))
         seen.add(agent)
     return anomalies
 
@@ -394,9 +398,16 @@ def main(argv=None):
         return 1
 
     try:
-        payload = json.dumps(worklist, indent=2, ensure_ascii=False) + "\n"
+        payload = json.dumps(worklist, indent=2, ensure_ascii=False,
+                             allow_nan=False) + "\n"
         with open(a.out, "w", encoding="utf-8") as fh:
             fh.write(payload)
+    except ValueError as e:
+        # NaN/Infinity read out of a corrupt clusters file would otherwise be
+        # written as bare non-standard JSON tokens with exit 0 — soft-fail.
+        _diagnose("cannot serialize worklist: %s" % e)
+        _remove(a.out)
+        return 1
     except OSError as e:
         _diagnose("cannot write %s: %s" % (a.out, e))
         _remove(a.out)

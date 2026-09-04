@@ -54,6 +54,7 @@ QUESTION_DISAGREEMENT = ("Reviewers disagree by >= 2 severity levels at this "
 
 FENCE = "‹fence›"
 MARKER = "...[truncated]"
+CAP_ONE_LINER = 200
 
 
 def load_adjudicator_module():
@@ -295,6 +296,19 @@ class TestAdjudicateCLI(unittest.TestCase):
         self.assertFalse(os.path.exists(out))
         self.assertTrue(proc.stderr.strip())
 
+    def test_nan_clusters_soft_fail_exit1(self):
+        # NaN read out of a corrupt clusters file must never be written as a
+        # bare JSON token with exit 0 — it routes to the soft-fail path.
+        d = tmp_dir(self)
+        c = hand_cluster()
+        c["locus"]["lines"] = [float("nan"), 12]
+        clusters = write_json(d, "clusters.json", [c])
+        out = os.path.join(d, "wl.json")
+        proc = run_adjudicate(clusters, out)
+        self.assertEqual(proc.returncode, 1)
+        self.assertFalse(os.path.exists(out))
+        self.assertIn("omni_adjudicate: ", proc.stderr)
+
     def test_findings_absent_ok(self):
         d = tmp_dir(self)
         clusters = write_json(d, "clusters.json", [hand_cluster()])
@@ -315,6 +329,28 @@ class TestAdjudicateCLI(unittest.TestCase):
         self.assertIn("duplicate agent", p1.stderr)
         self.assertEqual(p1.stderr, p2.stderr)          # (agent, basename) sort
         self.assertEqual(stdout_json(p1)["anomalies"], 1)
+
+    def test_duplicate_agent_anomaly_sanitized(self):
+        # the anomaly string is untrusted-derived too: the agent name rides
+        # into the worklist capped and fence-neutralized
+        d = tmp_dir(self)
+        clusters = write_json(d, "clusters.json", [])
+        hostile = "dup```agent\x01" + "z" * 500
+        a = write_findings(d, "a.findings.json", hostile, [])
+        b = write_findings(d, "b.findings.json", hostile, [])
+        out = os.path.join(d, "wl.json")
+        proc = run_adjudicate(clusters, out, [b, a])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        with open(out, encoding="utf-8") as fh:
+            wl = json.load(fh)
+        self.assertEqual(len(wl["anomalies"]), 1)
+        note = wl["anomalies"][0]
+        self.assertTrue(note.startswith("duplicate agent "))
+        self.assertNotIn("```", note)
+        self.assertIn(FENCE, note)
+        self.assertNotIn("\x01", note)
+        self.assertLessEqual(len(note), len("duplicate agent ") + CAP_ONE_LINER)
+        self.assertTrue(note.endswith(MARKER))   # 500 > 200 -> exactly-cap part
 
     def test_empty_clusters_exit0_empty_rows(self):
         d = tmp_dir(self)
@@ -638,6 +674,28 @@ class TestJudgmentRows(unittest.TestCase):
         self.assertLessEqual(len(tid), 120)
         self.assertEqual(len(tid), 120)
         self.assertTrue(tid.endswith(MARKER))
+
+    def test_sanitize_replaces_carriage_return(self):
+        # CR is an ASCII control character; the ONLY exceptions are \n and \t
+        mod = load_adjudicator_module()
+        self.assertEqual(mod.sanitize("a\rb", 200), "a b")
+        self.assertEqual(mod.sanitize("a\tb\nc", 200), "a\tb\nc")
+        # through to a worklist field: a hostile one_liner comes out
+        # space-replaced and capped
+        d = tmp_dir(self)
+        hostile = "line one\rline two " + "y" * 300
+        clusters = write_json(d, "clusters.json",
+                              [hand_cluster(entries=[hand_entry(one_liner=hostile)])])
+        out = os.path.join(d, "wl.json")
+        proc = run_adjudicate(clusters, out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        with open(out, encoding="utf-8") as fh:
+            wl = json.load(fh)
+        ol = wl["auto_decided"][0]["one_liner"]
+        self.assertNotIn("\r", ol)
+        self.assertTrue(ol.startswith("line one line two"))
+        self.assertEqual(len(ol), 200)          # 318 chars -> exactly cap
+        self.assertTrue(ol.endswith(MARKER))
 
     def test_snippet_fences_neutralized(self):
         d = tmp_dir(self)
