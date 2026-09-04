@@ -21,3 +21,6 @@ python3 skills/omnireview-gitlab/scripts/omni_adjudicate.py \
   --out /tmp/r2b-golden/adjudication_worklist.json
 cp /tmp/r2b-golden/adjudication_worklist.json \
    tests/fixtures/adjudication/expected_adjudication_worklist.json
+
+# expected_post_payloads.json — the deterministic stand-in agent (T3), regen mode:
+OMNIFORGE_REGEN_GOLDENS=1 python3 tests/test_omni_adjudicate_e2e.py TestE2E.test_payloads_golden
