@@ -6,9 +6,19 @@ minus characters) anywhere in SKILL.md or the consolidation guide; Phase 4
 names the validator + consolidator + ONE-pass worklist; every reviewer brief
 carries the one-dispatch rule; and the machine-readable findings-block heading
 is byte-identical across the three brief templates.
+
+Round2-pre-dispatch pins (skill-rewrite): Phase 1's first action is the
+omni_prepare.py run-dir command with the improvised path kept verbatim as a
+fallback subsection (R9), exit 3 uses the neutral auth wording (R10), Phase 3
+injects only the generated brief's Owned files section (R7), and every
+documented omni_prepare.py flag matches the script's argparse parser (drift
+pin).
 """
 
+import argparse
+import importlib.util
 import os
+import re
 import unittest
 
 SKILL_DIR = os.path.join(os.path.dirname(__file__), "..", "skills",
@@ -211,6 +221,125 @@ class SkillContractTests(unittest.TestCase):
         t = read(os.path.join("references", "posting-guide.md"))
         self.assertIn("line_code", t)
         self.assertIn("note entries", t)
+
+    # ── round2-pre-dispatch pins (skill-rewrite) ───────────────────
+
+    def test_phase1_first_action_names_prepare_script(self):
+        # the skill's FIRST Phase-1 action is the omni_prepare.py run-dir
+        # command; the improvised fallback subsection comes after it (R9)
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        self.assertIn("omni_prepare.py", span,
+                      "Phase 1 primary path must name the shipped "
+                      "pre-dispatch script")
+        self.assertIn("/tmp/omni_run_{id}", span,
+                      "Phase 1 must use the /tmp/omni_run_{id} run dir")
+        self.assertIn("### Fallback", span,
+                      "Phase 1 must carry the improvised-path fallback "
+                      "subsection")
+        self.assertLess(span.index("omni_prepare.py"),
+                        span.index("### Fallback"),
+                        "the omni_prepare primary path must precede the "
+                        "fallback subsection")
+
+    def test_phase1_fallback_subsection_with_improvised_literals(self):
+        # the negative instruction: omni_prepare exit 1 or script absent
+        # falls back to TODAY's improvised path, verbatim (R9)
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        self.assertIn("### Fallback: improvised path "
+                      "(omni_prepare exit 1 or script absent)", span)
+        for literal in ("omni_fetch_mr.py", "/tmp/omni_mr{id}_gather.json",
+                        "omni_partition.py", "omni_digest.py",
+                        "glab auth status", "no partial mixing"):
+            self.assertIn(literal, span,
+                          "fallback must keep today's improvised path "
+                          "literals: %r" % literal)
+
+    def test_phase3_dispatch_uses_generated_brief_owned_files_section(self):
+        # {OWNED_FILES} points at the generated brief, and the dispatch
+        # prompt carries ONLY the brief's Owned files section (R7)
+        t = read("SKILL.md")
+        construction = t.index("### Agent Prompt Construction")
+        waiter = t.index("### Wait for Completion")
+        span = t[construction:waiter]
+        self.assertIn("briefs/agent-", span,
+                      "{OWNED_FILES} must point at the generated brief "
+                      "files in the run dir")
+        self.assertIn("inject exactly that section", span,
+                      "dispatch must inject exactly the brief's Owned "
+                      "files section, not the whole brief file")
+
+    def test_phase1_exit3_neutral_auth_wording(self):
+        # exit 3 wording is neutral (R10): a 403 may be a Cloudflare-
+        # managed challenge against a VALID token — never instruct a
+        # token fix
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        self.assertIn("auth failed or access denied", span,
+                      "exit 3 must use the neutral auth wording")
+        self.assertNotIn("fix the token", span,
+                         "Phase 1 must not tell the operator to fix a "
+                         "valid token")
+
+    def test_skill_prepare_command_flags_match_script(self):
+        # drift pin: every omni_prepare.py flag documented in Phase 1's
+        # primary command (the fenced bash block invoking omni_prepare.py
+        # PLUS the bracketed optional-flags sentence) must exist in the
+        # script's argparse parser — a flag rename in either direction
+        # cannot pass silently. The fallback subsection's command blocks
+        # are EXCLUDED: their --mr/--out (omni_fetch_mr.py), --mr-json
+        # (omni_partition.py), and --out-dir/--prior-out (omni_digest.py)
+        # flags are not omni_prepare flags.
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        self.assertIn("### Fallback", span)
+        primary = span[:span.index("### Fallback")]
+        blocks = re.findall(r"```bash\n(.*?)\n```", primary, re.DOTALL)
+        prepare_blocks = [b for b in blocks if "omni_prepare.py" in b]
+        self.assertTrue(
+            prepare_blocks,
+            "Phase 1 primary path must carry a fenced bash block "
+            "invoking omni_prepare.py")
+        bracketed = re.findall(r"\[[^\[\]\n]*--[a-z][a-z-]*[^\[\]\n]*\]",
+                               primary)
+        self.assertTrue(bracketed,
+                        "Phase 1 must document the optional flags in a "
+                        "bracketed sentence")
+        documented = set(re.findall(
+            r"--[a-z][a-z-]*",
+            "\n".join(prepare_blocks) + "\n" + "\n".join(bracketed)))
+        spec = importlib.util.spec_from_file_location(
+            "omni_prepare_contract",
+            os.path.join(SKILL_DIR, "scripts", "omni_prepare.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        captured = {}
+        orig = argparse.ArgumentParser.parse_args
+
+        def capture(self, args=None, namespace=None):
+            captured["options"] = {opt for action in self._actions
+                                   for opt in action.option_strings}
+            return orig(self, args, namespace)
+
+        argparse.ArgumentParser.parse_args = capture
+        try:
+            mod.parse_args(["--project", "p", "--iid", "1",
+                            "--review-id", "r", "--run-dir", "/tmp/x"])
+        finally:
+            argparse.ArgumentParser.parse_args = orig
+        for flag in sorted(documented):
+            self.assertIn(flag, captured["options"],
+                          "SKILL.md documents %s but omni_prepare.py's "
+                          "parser does not accept it" % flag)
 
 
 if __name__ == "__main__":
