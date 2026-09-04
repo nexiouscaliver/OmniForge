@@ -1,0 +1,83 @@
+{
+  "agent": "analyst",
+  "report": "analyst.report.md",
+  "findings": [
+    {
+      "agent": "analyst",
+      "file": "src/store.py",
+      "line_range": [
+        11,
+        13
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 81,
+      "one_liner": "Missing None guard before dict access",
+      "evidence": "store.py:11 cfg.get('x') dereferences without a None check when backend omits key"
+    },
+    {
+      "agent": "analyst",
+      "file": "src/auth.py",
+      "line_range": [
+        31,
+        33
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 79,
+      "one_liner": "Missing None guard before dict access",
+      "evidence": "auth.py:31 cfg.get('x') dereferences without a None check when backend omits key"
+    },
+    {
+      "agent": "analyst",
+      "file": null,
+      "line_range": null,
+      "category": "scope",
+      "severity": "minor",
+      "confidence": 78,
+      "one_liner": "Unrelated changes mixed into one MR",
+      "evidence": "Commit d41b mixes a refactor with the feature it ships"
+    },
+    {
+      "agent": "analyst",
+      "file": "src/prior_res.py",
+      "line_range": [
+        20,
+        22
+      ],
+      "category": "logic",
+      "severity": "important",
+      "confidence": 87,
+      "one_liner": "SQL query built by concatenation",
+      "evidence": "prior_res.py:21 concatenates user input into the query text"
+    },
+    {
+      "agent": "analyst",
+      "file": "src/sub1.py",
+      "line_range": [
+        5,
+        5
+      ],
+      "category": "logic",
+      "severity": "minor",
+      "confidence": 55,
+      "one_liner": "Commit message lacks a why",
+      "evidence": "Commit 1a2b3c4 states what changed with no rationale"
+    },
+    {
+      "agent": "analyst",
+      "file": "src/sub2.py",
+      "line_range": [
+        6,
+        6
+      ],
+      "category": "logic",
+      "severity": "minor",
+      "confidence": 62,
+      "one_liner": "Docs section omits the rollback step",
+      "evidence": "README.md:6 documents the deploy path but never the rollback path"
+    }
+  ],
+  "anomalies": [],
+  "passthrough": false
+}

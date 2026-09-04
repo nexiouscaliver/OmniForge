@@ -1,0 +1,19 @@
+{
+  "prior_findings": [
+    {
+      "thread_id": "T-open",
+      "resolved": false,
+      "file_path": "src/prior_open.py",
+      "line_number": 11,
+      "body": "**Important** — Missing rate limit"
+    },
+    {
+      "thread_id": "T-res",
+      "resolved": true,
+      "file_path": "src/prior_res.py",
+      "line_number": 21,
+      "body": "**Important** — SQL concatenation"
+    }
+  ],
+  "retrospective": true
+}
