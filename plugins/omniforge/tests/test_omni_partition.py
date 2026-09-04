@@ -236,7 +236,9 @@ class TestOmniPartition(unittest.TestCase):
         result = mod.partition(data)
         by_path = {f["path"]: f for f in result["files"]}
         for path in ("docs/AUTHORS.md", "src/tokenizer.py", "src/author.py"):
-            self.assertNotEqual(by_path[path]["owner"], "security", path)
+            # R2-D: owner may legitimately be security via greedy spill (the
+            # revoked no-spill invariant); the substring guard is the REASON
+            # assertion — a false classifier hit would set security-affinity
             self.assertNotEqual(by_path[path]["reason"],
                                 "security-affinity", path)
         # underscore-compound names still hit the token list by segment
