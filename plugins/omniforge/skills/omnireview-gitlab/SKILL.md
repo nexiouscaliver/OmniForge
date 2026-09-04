@@ -61,13 +61,91 @@ digraph omnireview_flow {
 
 Fetch ALL data before dispatching agents. Agents get data injected — they never re-fetch.
 
-**Primary (all runs):** ONE invocation of the shipped gather script produces ONE JSON file
-with everything Phase 1 needs — MR data, diff, diff_line_map, commits, AND every
-discussion thread.
-
 **Precondition:** `GITLAB_TOKEN` must be in the environment. If unset, extract it from the
 authenticated host glab (never printed):
 `export GITLAB_TOKEN=$(glab auth status --hostname <host> -t 2>/dev/null | sed -n 's/^.*- Token: //p')`
+
+**Primary (all runs) — FIRST ACTION:** run the shipped pre-dispatch script. ONE invocation
+performs the single HTTP-pass gather (via `omni_fetch_mr.py`), partitions deep-dive
+ownership (via `omni_partition.py`), and renders the three reviewer briefs into the run dir:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_prepare.py" \
+  --project {project} --iid {id} --review-id {id} --run-dir /tmp/omni_run_{id}
+```
+
+Optional flags: `[--prior-report <path>]` on re-reviews — the prior findings JSON, i.e. the
+digest prior-out artifact `/tmp/omni_mr{id}_prior_findings.json` — and `[--verify-head <prior head>]`
+ONLY when a prior run recorded one (the `head_sha` from that run's `prepare.json`);
+`[--dry-run]` validates the invocation only (see the exit codes below). (If
+`${CLAUDE_PLUGIN_ROOT}` is not set in the current context, construct the script path from
+this skill's own base directory plus `scripts/omni_prepare.py`.)
+
+On exit 0 the run dir `/tmp/omni_run_{id}` carries `gather.json`, `partition.json`,
+`prepare.json`, the three briefs `briefs/agent-1.md`, `agent-2.md`, `agent-3.md`, and the
+`phases.jsonl` journal; stdout is ONE receipt JSON line. **Read
+`/tmp/omni_run_{id}/prepare.json` next** — it records the head SHA, per-agent partitions,
+and the brief paths the rest of this skill consumes.
+
+**Exit codes:** the script's exit codes are the contract:
+- **0** — all outputs written. Read `/tmp/omni_run_{id}/prepare.json`, build the context
+  digest below, then Phase 2.
+- **1** — soft-fail (gather/partition/internal failure). Fall back to the improvised path
+  (last subsection below).
+- **2** — usage error (bad invocation, fatal `--prior-report`, unwritable run dir). Fix the
+  invocation and re-run — NO fallback.
+- **3** — auth failed or access denied. Surface the error and STOP — no fallback. (A 403 may
+  be a Cloudflare-managed challenge against a valid token; do not assume a valid token is
+  the problem.)
+- **4** — head moved since the recorded head. STOP: report the head move — no re-gather, no
+  fallback, no addendum (nothing reviewed yet).
+- `--dry-run` validates the invocation only — one plan JSON line, no network, no writes, no
+  token; useful to probe an install before a real run.
+
+The run dir `/tmp/omni_run_{id}` is this phase's artifact and is disposable: omni_prepare
+wipes its stale artifacts on every run, so it never accumulates; remove the whole dir with
+the other temp artifacts at cleanup.
+
+### Build the context digest
+
+The run dir's gather file already embeds the discussions envelope — run the shipped digest
+on the ONE file (legacy two-file invocations still work; the digest detects both shapes):
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_digest.py" \
+  /tmp/omni_run_{id}/gather.json \
+  --out-dir /tmp/omni_digest_{id} --prior-out /tmp/omni_mr{id}_prior_findings.json
+```
+
+When the digest's stdout line reports `retrospective: true`, the run declares RETROSPECTIVE mode: prior findings are authoritative context, never re-adjudicated. In retrospective runs inject `/tmp/omni_digest_{id}/digest.md` in place of raw `{MR_COMMENTS}` in all three agent prompts, and pass `/tmp/omni_mr{id}_prior_findings.json` to the Phase 3 prompts and the Phase 4 consolidation (`omni_consolidate.py --prior`). Bot-authored artifacts inside the digest are verbatim — the digest only ever truncates human prose and re-carried diff bodies (hunk headers + counts only). The digest degrades quietly (exit 0, `retrospective: false`) when the discussions file is missing or malformed — never block a run on it.
+
+### Large Diff Strategy
+
+When `diff_line_count` in `/tmp/omni_run_{id}/gather.json` is high (>3000 lines) or
+`diff_truncated` is true (run totals also in `/tmp/omni_run_{id}/prepare.json`):
+
+1. **Don't inject the full diff into agent prompts.** Save the diff to a temp file and give agents the file path. They can read sections as needed.
+2. **Provide a diff summary instead.** Use `files_changed` and `diff_line_map` to create a per-file summary table:
+   ```
+   | File | Added Lines | Hunks |
+   |------|-------------|-------|
+   | src/app.py | 42 | 3 |
+   | tests/test_app.py | 28 | 2 |
+   ```
+3. **Agents explore in worktrees.** With the summary + worktree access, agents can read full files and understand context without the raw diff consuming their context window.
+4. **Save diff to temp file pattern:**
+   ```bash
+   # Save diff for agents to read on-demand
+   echo "$DIFF_TEXT" > /tmp/omni_mr{id}_diff.txt
+   # Give agents the path, not the content
+   ```
+5. **Clean up temp files in Phase 7** alongside worktree cleanup.
+
+This approach reduces agent context usage by 50-80% on large MRs while preserving full review quality.
+
+### Fallback: improvised path (omni_prepare exit 1 or script absent)
+
+Reproduce today's Phase 1 with the individual shipped scripts, in this order:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_fetch_mr.py" \
@@ -101,7 +179,7 @@ git fetch origin {source_branch} {target_branch}
 git log --oneline origin/{target_branch}..origin/{source_branch}
 ```
 
-### Load balancing (before Phase 3 dispatch)
+#### Load balancing (before Phase 3 dispatch)
 
 The Phase-1 gather file `/tmp/omni_mr{id}_gather.json` (its embedded data object is the fetch_mr_data envelope) feeds the shipped partitioner; keep partition.json:
 
@@ -112,9 +190,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_partition.p
 
 The partitioner assigns every changed file exactly one deep-dive owner: security-affinity files (auth/token/pipeline/SQL patterns) → Security Reviewer; docs/config files → MR Analyst; the remainder balanced by added lines across Codebase Reviewer / MR Analyst. Inject each agent's ownership table into its Phase 3 prompt via the `{OWNED_FILES}` placeholder: "Deep-dive owner: these files: <list>." + "Cross-cutting: you still sweep ALL changed files at grep depth; full-file reads are your owned files only." Every agent still covers every changed file — only full-file read depth is partitioned.
 
-### Build the context digest
+#### Digest (improvised gather file)
 
-The gather file already embeds the discussions envelope — run the shipped digest on the ONE file (legacy two-file invocations still work; the digest detects both shapes):
+Run the shipped digest on the ONE file (the retrospective rules above apply here too):
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_digest.py" \
@@ -122,30 +200,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_digest.py" 
   --out-dir /tmp/omni_digest_{id} --prior-out /tmp/omni_mr{id}_prior_findings.json
 ```
 
-When the digest's stdout line reports `retrospective: true`, the run declares RETROSPECTIVE mode: prior findings are authoritative context, never re-adjudicated. In retrospective runs inject `/tmp/omni_digest_{id}/digest.md` in place of raw `{MR_COMMENTS}` in all three agent prompts, and pass `/tmp/omni_mr{id}_prior_findings.json` to the Phase 3 prompts and the Phase 4 consolidation (`omni_consolidate.py --prior`). Bot-authored artifacts inside the digest are verbatim — the digest only ever truncates human prose and re-carried diff bodies (hunk headers + counts only). The digest degrades quietly (exit 0, `retrospective: false`) when the discussions file is missing or malformed — never block a run on it.
-
-### Large Diff Strategy
-
-When `diff_line_count` is high (>3000 lines) or `diff_truncated` is true:
-
-1. **Don't inject the full diff into agent prompts.** Save the diff to a temp file and give agents the file path. They can read sections as needed.
-2. **Provide a diff summary instead.** Use `files_changed` and `diff_line_map` to create a per-file summary table:
-   ```
-   | File | Added Lines | Hunks |
-   |------|-------------|-------|
-   | src/app.py | 42 | 3 |
-   | tests/test_app.py | 28 | 2 |
-   ```
-3. **Agents explore in worktrees.** With the summary + worktree access, agents can read full files and understand context without the raw diff consuming their context window.
-4. **Save diff to temp file pattern:**
-   ```bash
-   # Save diff for agents to read on-demand
-   echo "$DIFF_TEXT" > /tmp/omni_mr{id}_diff.txt
-   # Give agents the path, not the content
-   ```
-5. **Clean up temp files in Phase 7** alongside worktree cleanup.
-
-This approach reduces agent context usage by 50-80% on large MRs while preserving full review quality.
+If `omni_prepare.py` exits 1 OR the script is absent (older plugin install), fall back to
+today's improvised path unchanged — no re-run loop, no partial mixing of the two paths.
+Exit 3 → surface the auth error and stop (no fallback). Exit 4 → report the head move and
+stop (no fallback).
 
 ---
 
@@ -232,7 +290,10 @@ Dispatch all 3 agents simultaneously using the **Agent tool** (NOT TaskCreate �
 
 ### Agent Prompt Construction
 
-For each agent, fill the template placeholders:
+For each agent, fill the template placeholders. MR fields (`{MR_JSON_DATA}`, `{MR_DIFF}`,
+`{MR_DESCRIPTION}`, `{MR_COMMENTS}`, `{COMMIT_LIST}`, `{FILES_CHANGED_LIST}`,
+`{SOURCE_BRANCH}`, `{TARGET_BRANCH}`, `{MR_TITLE}`) come from the Phase-1 gather file
+(`/tmp/omni_run_{id}/gather.json`, or `/tmp/omni_mr{id}_gather.json` on the fallback path):
 - `{MR_ID}` — MR number
 - `{MR_TITLE}` — MR title from JSON
 - `{WORKTREE_PATH}` — **Absolute** path to agent's worktree (convert from relative)
@@ -242,7 +303,7 @@ For each agent, fill the template placeholders:
 - `{MR_DIFF}` — Raw diff output
 - `{COMMIT_LIST}` — Commit SHAs and messages
 - `{FILES_CHANGED_LIST}` — List of changed file paths
-- `{OWNED_FILES}` — This agent's deep-dive ownership list from `/tmp/omni_partition_{id}.json` (Phase 1 load balancing): "Deep-dive owner: these files: <list>." Every agent still sweeps ALL changed files at grep depth — full-file reads are its owned files only
+- `{OWNED_FILES}` — the **Owned files** section of this agent's generated brief `/tmp/omni_run_{id}/briefs/agent-N.md` (agent-1 = MR Analyst, agent-2 = Codebase Reviewer, agent-3 = Security Reviewer; written by Phase 1's `omni_prepare.py`): inject exactly that section — the two depth sentences plus the owned list — not the whole brief file. On the fallback path, build the section from `/tmp/omni_partition_{id}.json` as before: "Deep-dive owner: these files: <list>." Every agent still sweeps ALL changed files at grep depth — full-file reads are its owned files only
 - `{SOURCE_BRANCH}` — MR source branch name
 - `{TARGET_BRANCH}` — MR target branch name
 
@@ -302,7 +363,7 @@ After the waiter exits (0 or 2) and BEFORE Phase 4 consolidation, verify the MR 
 not moved since the Phase-1 gather:
 
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_fetch_mr.py" \
-  --project {project} --mr {id} --verify-head <diff_refs.head_sha from /tmp/omni_mr{id}_gather.json>
+  --project {project} --mr {id} --verify-head <head_sha from prepare.json (or gather.json) in /tmp/omni_run_{id}>
 
 Exit 0 → proceed to Phase 4. Exit 4 (head moved) → STOP, deterministically:
 - NO re-partition, NO re-dispatch, NO new gather.
