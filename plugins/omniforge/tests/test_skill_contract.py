@@ -294,6 +294,13 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn('[ -f "$p" ]', phase5)
         self.assertIn("/tmp/omni_wait_out_{id}/${f}.findings.json", phase5)
 
+    def test_phase5_precpass_before_cleanup(self):
+        # holistic review: the pre-pass must outrun any permitted cleanup of
+        # the wait-out dir — the degraded-mode guard reads those files
+        t = read("SKILL.md")
+        phase5 = t[t.index("## Phase 5"):t.index("## Phase 6")]
+        self.assertIn("BEFORE any permitted cleanup", phase5)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -359,6 +359,9 @@ which routes to the fallback below (that reviewer's prose is consolidated exactl
 today). If `${CLAUDE_PLUGIN_ROOT}` is not set in the current context, construct the
 script path from this skill's own base directory plus `scripts/omni_adjudicate.py`.
 
+Run this pre-pass BEFORE any permitted cleanup of `/tmp/omni_wait_out_{id}` — the
+degraded-mode guard reads the validated findings files from that directory.
+
 ```bash
 ADJ_ARGS="--findings"
 for f in codebase security analyst; do
@@ -373,8 +376,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_adjudicate.
   --out /tmp/omni_consolidate_{id}/adjudication_worklist.json
 ```
 
-Exit 0 = worklist written; exit 1 = soft-fail → fallback below; exit 2 = usage → fix
-the command and re-run.
+Exit 0 = worklist written; exit 1 = soft-fail (degraded inputs, missing findings
+files, or unreadable worklist inputs) → fallback below; exit 2 = usage — or the
+script file itself is missing (python3 exits 2 on a missing file) — check the
+command once, then use the fallback below.
 
 ### Work ONLY the judgment rows
 

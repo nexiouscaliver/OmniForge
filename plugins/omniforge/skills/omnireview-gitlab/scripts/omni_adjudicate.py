@@ -26,8 +26,13 @@ CLI:
 
 --findings is ONLY the degraded-mode guard: any listed file with
 "passthrough": true (or unreadable/malformed) makes the run soft-fail so the
-agent falls back to prose consolidation. Duplicate agent names across files
-are tolerated with an anomaly note (deterministic (agent, basename) sort).
+agent falls back to prose consolidation. An EMPTY findings list (no --findings
+or a bare --findings with zero paths) soft-fails too: clusters.json exists
+only if >= 1 findings file existed at consolidation time (the consolidator
+requires findings), so zero files at pre-pass time means the wait-out dir was
+cleaned and the guard cannot run — fall back rather than adjudicate unguarded.
+Duplicate agent names across files are tolerated with an anomaly note
+(deterministic (agent, basename) sort).
 
 Stdout: exactly one JSON line
   {"clusters", "auto_decided", "judgment", "judgment_disagreement",
@@ -37,7 +42,9 @@ Diagnostics on stderr with an "omni_adjudicate: " prefix.
 Exit codes: 0 ok (worklist written; includes an empty clusters array and
 duplicate-agent notes) · 1 soft-fail, NO worklist written (clusters
 unreadable / invalid JSON / not an array / a cluster missing required keys /
-passthrough or malformed --findings / a cluster no rule can classify /
+passthrough or malformed --findings / an EMPTY --findings list — zero files
+means the wait-out dir was cleaned before the pre-pass, so the degraded-mode
+guard cannot run / a cluster no rule can classify /
 NaN/Infinity values from a corrupt clusters file / any
 unexpected exception) · 2 usage only (argparse failures, more than 3
 --findings files, unwritable --out).
@@ -400,6 +407,16 @@ def main(argv=None):
     try:
         payload = json.dumps(worklist, indent=2, ensure_ascii=False,
                              allow_nan=False) + "\n"
+        if not a.findings:
+            # Empty findings list (flag absent or bare --findings with zero
+            # paths): clusters.json exists only if >= 1 findings file existed
+            # at consolidation time (the consolidator requires findings), so
+            # zero files now means the wait-out dir was cleaned before this
+            # pre-pass — the degraded-mode guard cannot run. Soft-fail to the
+            # fallback rather than adjudicate unguarded; nothing was written.
+            _diagnose("no validated findings files found "
+                      "(/tmp/omni_wait_out_{id} cleaned before the pre-pass?)")
+            return 1
         with open(a.out, "w", encoding="utf-8") as fh:
             fh.write(payload)
     except ValueError as e:

@@ -133,8 +133,21 @@ def run_consolidate(out_dir):
     return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
-def run_adjudicate(clusters, out, findings=None):
+_DEFAULT_FINDINGS = ["__default_findings_sentinel__"]
+
+
+def run_adjudicate(clusters, out, findings=_DEFAULT_FINDINGS):
+    """Run the adjudicator as a subprocess.
+
+    Default (no findings argument) passes ONE clean fixture findings file —
+    the real skill flow always passes the validated findings files that exist
+    (zero files is the cleaned-wait-out-dir anomaly, pinned separately in
+    test_findings_absent_soft_fail_exit1). Tests probing the guard's absence
+    semantics pass findings=None (no --findings flag) or [] (bare --findings).
+    """
     args = [sys.executable, ADJUDICATOR, "--clusters", clusters, "--out", out]
+    if findings is _DEFAULT_FINDINGS:
+        findings = [fixture("codebase.findings.json")]
     if findings is not None:
         args += ["--findings", *findings]
     return subprocess.run(args, capture_output=True, text=True, timeout=60)
@@ -309,13 +322,24 @@ class TestAdjudicateCLI(unittest.TestCase):
         self.assertFalse(os.path.exists(out))
         self.assertIn("omni_adjudicate: ", proc.stderr)
 
-    def test_findings_absent_ok(self):
+    def test_findings_absent_soft_fail_exit1(self):
+        # Zero findings files (flag absent OR bare --findings with no paths)
+        # disarms the degraded-mode guard: clusters.json exists only if >= 1
+        # findings file existed at consolidation time (the consolidator
+        # requires findings), so zero files now means the wait-out dir was
+        # cleaned before the pre-pass — soft-fail to the fallback, never
+        # adjudicate unguarded.
         d = tmp_dir(self)
         clusters = write_json(d, "clusters.json", [hand_cluster()])
-        out = os.path.join(d, "wl.json")
-        proc = run_adjudicate(clusters, out)
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertTrue(os.path.exists(out))
+        for findings in (None, []):
+            out = os.path.join(d, "wl.json")
+            proc = run_adjudicate(clusters, out, findings)
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertFalse(os.path.exists(out))
+            self.assertIn("omni_adjudicate: ", proc.stderr)
+            self.assertIn("no validated findings files found "
+                          "(/tmp/omni_wait_out_{id} cleaned before the "
+                          "pre-pass?)", proc.stderr)
 
     def test_duplicate_agent_findings_tie_break(self):
         d = tmp_dir(self)
@@ -356,7 +380,7 @@ class TestAdjudicateCLI(unittest.TestCase):
         d = tmp_dir(self)
         clusters = write_json(d, "clusters.json", [])
         out = os.path.join(d, "wl.json")
-        proc = run_adjudicate(clusters, out, [])
+        proc = run_adjudicate(clusters, out, three_fixture_paths())
         self.assertEqual(proc.returncode, 0, proc.stderr)
         st = stdout_json(proc)
         self.assertEqual([st[k] for k in sorted(STDOUT_KEYS)], [0] * 7)
@@ -365,7 +389,10 @@ class TestAdjudicateCLI(unittest.TestCase):
         self.assertEqual(wl["auto_decided"], [])
         self.assertEqual(wl["judgment"], [])
 
-    def test_findings_order_and_absence_irrelevant(self):
+    def test_findings_order_irrelevant(self):
+        # Findings ORDER never changes the worklist. (Absence is no longer a
+        # variant: zero findings files now soft-fails — pinned separately in
+        # test_findings_absent_soft_fail_exit1.)
         d = tmp_dir(self)
         out_dir = os.path.join(d, "cons")
         proc = run_consolidate(out_dir)
@@ -373,8 +400,7 @@ class TestAdjudicateCLI(unittest.TestCase):
         clusters = os.path.join(out_dir, "clusters.json")
         outs = []
         for findings in (three_fixture_paths(),
-                         list(reversed(three_fixture_paths())),
-                         None):
+                         list(reversed(three_fixture_paths()))):
             out = os.path.join(d, "wl%d.json" % len(outs))
             proc = run_adjudicate(clusters, out, findings)
             self.assertEqual(proc.returncode, 0, proc.stderr)
