@@ -1,0 +1,335 @@
+# OmniForge reviewer brief — MR Analyst (agent-1)
+
+- Review ID: canary-1402
+- Project: 73281071
+- MR: !1402 — synthetic canary canary
+- Branches:  → 
+- Head SHA: h
+- Generated: 2026-09-05T00:00:00+00:00
+
+## Owned files (deep-dive ownership)
+
+Deep-dive owner: these files:
+
+- `tests/test_mod083.py` — 295 added lines — greedy-balance
+- `tests/test_mod022.py` — 290 added lines — greedy-balance
+- `tests/test_mod050.py` — 279 added lines — greedy-balance
+- `tests/test_mod024.py` — 239 added lines — greedy-balance
+- `tests/test_mod023.py` — 227 added lines — greedy-balance
+- `tests/test_mod012.py` — 205 added lines — greedy-balance
+- `tests/test_mod102.py` — 196 added lines — greedy-balance
+- `src/mod067/service067.py` — 195 added lines — greedy-balance
+- `src/mod041/service041.py` — 193 added lines — greedy-balance
+- `src/mod068/service068.py` — 178 added lines — greedy-balance
+- `tests/test_mod038.py` — 168 added lines — greedy-balance
+- `src/mod086/service086.py` — 162 added lines — greedy-balance
+- `src/mod078/service078.py` — 161 added lines — greedy-balance
+- `src/mod035/service035.py` — 158 added lines — greedy-balance
+- `tests/test_mod075.py` — 152 added lines — greedy-balance
+- `tests/test_mod095.py` — 145 added lines — greedy-balance
+- `src/mod074/service074.py` — 134 added lines — greedy-balance
+- `src/mod058/service058.py` — 125 added lines — greedy-balance
+- `src/mod081/service081.py` — 116 added lines — greedy-balance
+- `src/mod024/service024.py` — 106 added lines — greedy-balance
+- `tests/test_mod028.py` — 95 added lines — greedy-balance
+- `src/mod004/service004.py` — 86 added lines — greedy-balance
+- `tests/test_mod005.py` — 82 added lines — greedy-balance
+- `tests/test_mod065.py` — 76 added lines — greedy-balance
+- `src/mod045/service045.py` — 74 added lines — greedy-balance
+- `tests/test_mod066.py` — 70 added lines — greedy-balance
+- `src/mod088/service088.py` — 69 added lines — greedy-balance
+- `tests/test_mod046.py` — 69 added lines — greedy-balance
+- `tests/test_mod106.py` — 67 added lines — greedy-balance
+- `src/mod038/service038.py` — 63 added lines — greedy-balance
+- `src/mod009/service009.py` — 60 added lines — greedy-balance
+- `src/mod046/service046.py` — 60 added lines — greedy-balance
+- `tests/test_mod037.py` — 58 added lines — greedy-balance
+- `src/mod077/service077.py` — 56 added lines — greedy-balance
+- `src/mod021/service021.py` — 51 added lines — greedy-balance
+- `src/mod000/service000.py` — 49 added lines — greedy-balance
+- `tests/test_mod099.py` — 49 added lines — greedy-balance
+- `src/mod030/service030.py` — 47 added lines — greedy-balance
+- `src/mod103/service103.py` — 43 added lines — greedy-balance
+- `tests/test_mod071.py` — 42 added lines — greedy-balance
+- `tests/test_mod101.py` — 38 added lines — greedy-balance
+- `tests/test_mod041.py` — 37 added lines — greedy-balance
+- `tests/test_mod049.py` — 35 added lines — greedy-balance
+- `tests/test_mod033.py` — 33 added lines — greedy-balance
+- `tests/test_mod000.py` — 31 added lines — greedy-balance
+- `src/mod107/service107.py` — 29 added lines — greedy-balance
+- `src/mod018/service018.py` — 27 added lines — greedy-balance
+- `src/mod091/service091.py` — 26 added lines — greedy-balance
+- `src/mod057/service057.py` — 23 added lines — greedy-balance
+- `src/mod093/service093.py` — 22 added lines — greedy-balance
+- `src/mod061/service061.py` — 21 added lines — greedy-balance
+- `tests/test_mod034.py` — 21 added lines — greedy-balance
+- `tests/test_mod056.py` — 19 added lines — greedy-balance
+- `tests/test_mod092.py` — 19 added lines — greedy-balance
+- `src/mod003/service003.py` — 18 added lines — greedy-balance
+- `tests/test_mod031.py` — 18 added lines — greedy-balance
+- `src/mod109/service109.py` — 17 added lines — greedy-balance
+- `tests/test_mod077.py` — 16 added lines — greedy-balance
+- `src/mod097/service097.py` — 15 added lines — greedy-balance
+- `tests/test_mod053.py` — 15 added lines — greedy-balance
+- `src/mod059/service059.py` — 14 added lines — greedy-balance
+- `src/mod006/service006.py` — 13 added lines — greedy-balance
+- `src/mod104/service104.py` — 13 added lines — greedy-balance
+- `tests/test_mod001.py` — 13 added lines — greedy-balance
+- `tests/test_mod008.py` — 13 added lines — greedy-balance
+- `src/mod062/service062.py` — 12 added lines — greedy-balance
+- `tests/test_mod044.py` — 11 added lines — greedy-balance
+- `src/mod012/service012.py` — 10 added lines — greedy-balance
+- `tests/test_mod094.py` — 10 added lines — greedy-balance
+- `src/mod010/service010.py` — 8 added lines — greedy-balance
+- `src/mod039/service039.py` — 8 added lines — greedy-balance
+- `src/mod098/service098.py` — 7 added lines — greedy-balance
+- `src/mod002/service002.py` — 6 added lines — greedy-balance
+- `src/mod089/service089.py` — 6 added lines — greedy-balance
+- `src/mod001/service001.py` — 5 added lines — greedy-balance
+- `src/mod042/service042.py` — 5 added lines — greedy-balance
+
+Cross-cutting: you still sweep ALL changed files at grep depth; full-file reads are your
+owned files only.
+
+## Cross-cutting files (all 228 changed files)
+
+- `tests/test_mod083.py`
+- `tests/test_mod085.py`
+- `tests/test_mod022.py`
+- `tests/test_mod069.py`
+- `tests/test_mod050.py`
+- `tests/test_mod003.py`
+- `tests/test_mod036.py`
+- `tests/test_mod060.py`
+- `tests/test_mod024.py`
+- `tests/test_mod097.py`
+- `tests/test_mod027.py`
+- `tests/test_mod023.py`
+- `tests/test_mod058.py`
+- `tests/test_mod045.py`
+- `tests/test_mod105.py`
+- `tests/test_mod012.py`
+- `src/mod016/service016.py`
+- `tests/test_mod102.py`
+- `src/mod067/service067.py`
+- `src/mod041/service041.py`
+- `tests/test_mod002.py`
+- `tests/test_mod091.py`
+- `tests/test_mod059.py`
+- `src/mod071/service071.py`
+- `src/mod099/service099.py`
+- `src/mod068/service068.py`
+- `src/mod105/service105.py`
+- `tests/test_mod038.py`
+- `tests/test_mod098.py`
+- `src/mod086/service086.py`
+- `src/mod078/service078.py`
+- `src/mod049/service049.py`
+- `tests/test_mod018.py`
+- `src/mod035/service035.py`
+- `src/mod106/service106.py`
+- `tests/test_mod075.py`
+- `tests/test_mod103.py`
+- `tests/test_mod006.py`
+- `tests/test_mod095.py`
+- `tests/test_mod082.py`
+- `src/mod100/service100.py`
+- `src/mod056/service056.py`
+- `tests/test_mod070.py`
+- `src/mod074/service074.py`
+- `src/mod058/service058.py`
+- `src/mod034/service034.py`
+- `src/mod087/service087.py`
+- `tests/test_mod062.py`
+- `tests/test_mod067.py`
+- `src/mod014/service014.py`
+- `src/mod081/service081.py`
+- `tests/test_mod074.py`
+- `src/mod005/service005.py`
+- `tests/test_mod061.py`
+- `src/mod013/service013.py`
+- `src/mod092/service092.py`
+- `src/mod024/service024.py`
+- `tests/test_mod086.py`
+- `tests/test_mod009.py`
+- `tests/test_mod026.py`
+- `tests/test_mod073.py`
+- `tests/test_mod028.py`
+- `tests/test_mod048.py`
+- `src/mod047/service047.py`
+- `src/mod004/service004.py`
+- `tests/test_mod014.py`
+- `tests/test_mod005.py`
+- `tests/test_mod035.py`
+- `tests/test_mod065.py`
+- `src/mod045/service045.py`
+- `tests/test_mod076.py`
+- `src/mod070/service070.py`
+- `src/mod084/service084.py`
+- `src/mod050/service050.py`
+- `tests/test_mod066.py`
+- `tests/test_mod078.py`
+- `src/mod040/service040.py`
+- `src/mod088/service088.py`
+- `tests/test_mod046.py`
+- `tests/test_mod043.py`
+- `tests/test_mod106.py`
+- `tests/test_mod010.py`
+- `src/mod052/service052.py`
+- `src/mod069/service069.py`
+- `src/mod038/service038.py`
+- `tests/test_mod087.py`
+- `src/mod009/service009.py`
+- `src/mod046/service046.py`
+- `src/mod073/service073.py`
+- `tests/test_mod037.py`
+- `tests/test_mod090.py`
+- `src/mod077/service077.py`
+- `tests/test_mod007.py`
+- `src/mod085/service085.py`
+- `tests/test_mod047.py`
+- `src/mod017/service017.py`
+- `tests/test_mod093.py`
+- `src/mod021/service021.py`
+- `src/mod090/service090.py`
+- `tests/test_mod015.py`
+- `src/mod000/service000.py`
+- `tests/test_mod099.py`
+- `src/mod030/service030.py`
+- `tests/test_mod021.py`
+- `src/mod008/service008.py`
+- `src/mod022/service022.py`
+- `src/mod103/service103.py`
+- `src/mod044/service044.py`
+- `tests/test_mod055.py`
+- `tests/test_mod071.py`
+- `src/mod083/service083.py`
+- `src/mod064/service064.py`
+- `tests/test_mod079.py`
+- `tests/test_mod101.py`
+- `tests/test_mod108.py`
+- `tests/test_mod041.py`
+- `tests/test_mod068.py`
+- `src/mod028/service028.py`
+- `tests/test_mod049.py`
+- `tests/test_mod107.py`
+- `src/auth/handler00.py`
+- `src/mod082/service082.py`
+- `tests/test_mod011.py`
+- `tests/test_mod100.py`
+- `tests/test_mod033.py`
+- `src/auth/handler03.py`
+- `tests/test_mod052.py`
+- `src/mod048/service048.py`
+- `tests/test_mod000.py`
+- `tests/test_mod064.py`
+- `src/mod107/service107.py`
+- `tests/test_mod004.py`
+- `tests/test_mod029.py`
+- `src/mod018/service018.py`
+- `tests/test_mod019.py`
+- `tests/test_mod104.py`
+- `src/mod075/service075.py`
+- `src/mod091/service091.py`
+- `tests/test_mod013.py`
+- `src/mod053/service053.py`
+- `tests/test_mod057.py`
+- `src/auth/handler07.py`
+- `src/mod054/service054.py`
+- `tests/test_mod054.py`
+- `src/mod015/service015.py`
+- `src/mod051/service051.py`
+- `src/mod057/service057.py`
+- `src/auth/handler01.py`
+- `src/mod033/service033.py`
+- `src/mod055/service055.py`
+- `src/mod093/service093.py`
+- `tests/test_mod039.py`
+- `src/mod023/service023.py`
+- `src/mod061/service061.py`
+- `tests/test_mod034.py`
+- `tests/test_mod051.py`
+- `src/mod026/service026.py`
+- `src/mod036/service036.py`
+- `tests/test_mod056.py`
+- `tests/test_mod080.py`
+- `tests/test_mod088.py`
+- `tests/test_mod092.py`
+- `src/mod003/service003.py`
+- `src/mod037/service037.py`
+- `src/mod096/service096.py`
+- `tests/test_mod017.py`
+- `tests/test_mod031.py`
+- `tests/test_mod063.py`
+- `src/mod079/service079.py`
+- `src/mod109/service109.py`
+- `tests/test_mod032.py`
+- `src/mod080/service080.py`
+- `src/mod095/service095.py`
+- `src/mod101/service101.py`
+- `tests/test_mod077.py`
+- `tests/test_mod096.py`
+- `src/mod097/service097.py`
+- `tests/test_mod020.py`
+- `tests/test_mod053.py`
+- `src/mod059/service059.py`
+- `tests/test_mod081.py`
+- `src/mod006/service006.py`
+- `src/mod007/service007.py`
+- `src/mod104/service104.py`
+- `tests/test_mod001.py`
+- `tests/test_mod008.py`
+- `tests/test_mod016.py`
+- `tests/test_mod040.py`
+- `src/mod060/service060.py`
+- `src/mod062/service062.py`
+- `tests/test_mod072.py`
+- `tests/test_mod025.py`
+- `tests/test_mod042.py`
+- `tests/test_mod044.py`
+- `tests/test_mod084.py`
+- `tests/test_mod089.py`
+- `src/mod012/service012.py`
+- `src/mod020/service020.py`
+- `src/mod027/service027.py`
+- `tests/test_mod094.py`
+- `src/mod011/service011.py`
+- `src/mod019/service019.py`
+- `src/mod032/service032.py`
+- `src/auth/handler02.py`
+- `src/mod010/service010.py`
+- `src/mod039/service039.py`
+- `src/mod063/service063.py`
+- `src/mod102/service102.py`
+- `tests/test_mod030.py`
+- `src/auth/handler06.py`
+- `src/mod031/service031.py`
+- `src/mod065/service065.py`
+- `src/mod066/service066.py`
+- `src/mod094/service094.py`
+- `src/mod098/service098.py`
+- `src/mod108/service108.py`
+- `src/mod002/service002.py`
+- `src/mod029/service029.py`
+- `src/mod072/service072.py`
+- `src/mod089/service089.py`
+- `src/mod001/service001.py`
+- `src/mod025/service025.py`
+- `src/mod042/service042.py`
+- `src/mod043/service043.py`
+- `src/mod076/service076.py`
+- `src/auth/handler05.py`
+- `src/auth/handler04.py`
+- `src/auth/handler08.py`
+
+## Stats
+
+- Owned: 76 files / 5624 added lines
+- Cross-cutting: 228 files
+- MR total: 228 files / 15798 added lines
+
+## Dispatch note
+
+The orchestrator fills `{OWNED_FILES}` in the reference template with this brief's
+"Owned files" section above (owned list + both depth sentences) — nothing else from this
+file. Worktree path is assigned at dispatch (Phase 2).

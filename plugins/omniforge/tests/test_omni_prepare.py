@@ -1056,5 +1056,106 @@ class PrepareOutputTests(unittest.TestCase):
                                  os.path.join(root, name))
 
 
+class BriefTrimTests(unittest.TestCase):
+    """R2-D SC-2: cross-cutting pointer trim + zero instruction loss
+    (spec sections 6 / 7.2)."""
+
+    AGENTS = ("analyst", "codebase", "security")
+
+    @staticmethod
+    def _canary():
+        with open(os.path.join(FIXTURES, "canary_gather.json"),
+                  encoding="utf-8") as fh:
+            gather = json.load(fh)
+        gather["review_id"] = "canary-1402"
+        return gather, omni_partition.partition(gather["data"])
+
+    def _render_both(self):
+        mod = load_prepare()
+        golden = (golden_gather(), golden_partition())
+        canary = self._canary()
+        for agent in self.AGENTS:
+            yield agent, "golden", mod.render_brief(agent, golden[0],
+                                                    golden[1], None)
+            yield agent, "canary", mod.render_brief(agent, canary[0],
+                                                    canary[1], None)
+
+    def test_brief_trim_zero_instruction_loss(self):
+        mod = load_prepare()
+        for agent, fixture, brief in self._render_both():
+            with self.subTest(agent=agent, fixture=fixture):
+                self.assertIn("## Owned files (deep-dive ownership)", brief)
+                self.assertIn("Deep-dive owner: these files:\n", brief)
+                self.assertIn(mod._DEPTH_SENTENCES, brief)
+                self.assertIn(mod._DISPATCH_NOTE, brief)
+                self.assertIn("{OWNED_FILES}", mod._DISPATCH_NOTE)
+                for meta in ("- Review ID: ", "- Project: ", "- MR: !",
+                             "- Branches: ", "- Head SHA: ",
+                             "- Generated: "):
+                    self.assertIn(meta, brief)
+
+    def test_brief_trim_crosscutting_pointer(self):
+        for agent, fixture, brief in self._render_both():
+            with self.subTest(agent=agent, fixture=fixture):
+                i = brief.index("## Cross-cutting files (all ")
+                j = brief.index("## Stats")
+                section = brief[i:j].strip()
+                n = int(section.split("(all ")[1].split(" ")[0])
+                self.assertEqual(
+                    section,
+                    "## Cross-cutting files (all %d changed files)\n\n"
+                    "Cross-cutting: all %d changed files "
+                    "(see partition.json)" % (n, n))
+                self.assertNotIn("\n- `", section)   # no per-file bullets
+
+    def test_brief_trim_byte_reduction_40pct(self):
+        mod = load_prepare()
+        gather, part = self._canary()
+        trimmed = sum(len(mod.render_brief(a, gather, part, None)
+                          .encode("utf-8")) for a in self.AGENTS)
+        pretrim = 0
+        for n in (1, 2, 3):
+            with open(os.path.join(FIXTURES, "pretrim_agent-%d.md" % n),
+                      "rb") as fh:
+                pretrim += len(fh.read())
+        self.assertLessEqual(
+            trimmed, 0.60 * pretrim,
+            "-40%% AC: trimmed %d B vs pretrim %d B" % (trimmed, pretrim))
+        # 4-file golden delta: >= 0 reduction, percentage printed (PR body).
+        # The stats bullet and the pointer line occur in EACH of the three
+        # briefs, so the removed bytes are 3 * (stats + bullets - pointer)
+        # (sanctioned fix of the plan's frozen text, which counted the
+        # stats bullet and pointer only once).
+        part4 = golden_partition()
+        n4 = len(part4["files"])
+        pointer = len(("Cross-cutting: all %d changed files (see "
+                       "partition.json)\n" % n4).encode("utf-8"))
+        stats = len(("- Cross-cutting: %d files\n" % n4).encode("utf-8"))
+        bullets = sum(len(("- `%s`\n" % f["path"]).encode("utf-8"))
+                      for f in part4["files"])
+        removed = 3 * (stats + bullets - pointer)
+        trimmed4 = sum(len(mod.render_brief(a, golden_gather(), part4, None)
+                           .encode("utf-8")) for a in self.AGENTS)
+        self.assertGreater(removed, 0)
+        print("4-file golden delta: -%d B (%.1f%% of pretrim)"
+              % (removed, 100.0 * removed / (trimmed4 + removed)))
+
+    def test_owned_files_carrier_untouched(self):
+        mod = load_prepare()
+        gather, part = self._canary()
+        for agent, n in (("analyst", 1), ("codebase", 2), ("security", 3)):
+            with self.subTest(agent=agent):
+                with open(os.path.join(FIXTURES,
+                                       "pretrim_agent-%d.md" % n),
+                          encoding="utf-8") as fh:
+                    pre = fh.read()
+                pre_section = pre[pre.index("## Owned files"):
+                                  pre.index("## Cross-cutting files")]
+                brief = mod.render_brief(agent, gather, part, None)
+                self.assertEqual(
+                    brief[brief.index("## Owned files"):
+                          brief.index("## Cross-cutting files")], pre_section)
+
+
 if __name__ == "__main__":
     unittest.main()
