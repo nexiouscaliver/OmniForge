@@ -565,5 +565,75 @@ class PrepareVerifyHeadTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(run_dir, "prepare.json")))
 
 
+class PreparePartitionTests(unittest.TestCase):
+    def test_prepare_partition_json_persisted_shape(self):
+        # the REAL omni_partition.py subprocess runs over the run-dir
+        # gather.json (it reads the gather-file shape natively) and its
+        # partition.json lands in the run dir: files[] + agents{} with the
+        # fixture's deterministic ownership (README.md docs->analyst,
+        # src/app.py+src/net.py generic->codebase, src/auth_check.py
+        # security-affinity->security; canonical order largest-first,
+        # path-ascending ties)
+        base, log = make_http_server(self, default_routes())
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se = run_prepare(
+            ["--project", PROJECT, "--iid", MR, "--review-id", "rev-9",
+             "--run-dir", run_dir], host=base)
+        self.assertEqual(rc, 0, se)
+        partition_path = os.path.join(run_dir, "partition.json")
+        self.assertTrue(os.path.isfile(partition_path), os.listdir(run_dir))
+        with open(partition_path, encoding="utf-8") as fh:
+            part = json.load(fh)
+        self.assertEqual(set(part), {"files", "agents"})
+        self.assertEqual([f["path"] for f in part["files"]],
+                         ["README.md", "src/app.py", "src/auth_check.py",
+                          "src/net.py"])
+        for entry in part["files"]:
+            self.assertEqual(set(entry),
+                             {"path", "added_lines", "owner", "reason"})
+        self.assertEqual(part["agents"]["analyst"]["files"], ["README.md"])
+        self.assertEqual(part["agents"]["analyst"]["added_lines_total"], 3)
+        self.assertEqual(part["agents"]["codebase"]["files"],
+                         ["src/app.py", "src/net.py"])
+        self.assertEqual(part["agents"]["codebase"]["added_lines_total"], 4)
+        self.assertEqual(part["agents"]["security"]["files"],
+                         ["src/auth_check.py"])
+        self.assertEqual(part["agents"]["security"]["added_lines_total"], 2)
+
+    def test_prepare_partition_subprocess_failure_maps_exit_1(self):
+        mod = load_prepare()
+        # (1) the seam itself: the REAL omni_partition.py subprocess on a
+        # planted corrupt gather exits nonzero (diagnostic on its stderr,
+        # stdout empty) and writes nothing
+        d = tmp_dir(self)
+        gather_path = os.path.join(d, "gather.json")
+        with open(gather_path, "w", encoding="utf-8") as fh:
+            fh.write("{corrupt")
+        out_path = os.path.join(d, "partition.json")
+        part_rc, part_stdout = mod.run_partition(gather_path, out_path)
+        self.assertNotEqual(part_rc, 0)
+        self.assertFalse(os.path.exists(out_path))
+        # (2) the mapping: a nonzero partition rc inside a full run maps to
+        # exit 1, stage "partition" (patched seam — the wipe of later slugs
+        # must never be what makes this test pass or fail)
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(d, "run")
+        with mock.patch.object(mod, "run_partition",
+                               return_value=(part_rc, part_stdout)):
+            rc, so, se = run_prepare(
+                ["--project", PROJECT, "--iid", MR, "--review-id", "rev-9",
+                 "--run-dir", run_dir], host=base)
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "prepare_failed")
+        self.assertEqual(st["stage"], "partition")
+        self.assertIn("detail", st)
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        self.assertIn("omni_prepare", diag[0])
+
+
 if __name__ == "__main__":
     unittest.main()
