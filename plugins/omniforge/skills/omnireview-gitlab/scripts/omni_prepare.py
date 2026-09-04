@@ -286,6 +286,15 @@ def main(argv=None):
         gather = load_gather(paths["gather_json"])
     except ValueError as e:
         return _fail_stage("internal", e)
+
+    head_sha = (gather.get("diff_refs") or {}).get("head_sha") or ""
+    if args.verify_head is not None and args.verify_head != head_sha:
+        print(json.dumps({"ok": False, "head_moved": True,
+                          "recorded_head": args.verify_head,
+                          "current_head": head_sha}))
+        print("omni_prepare: head moved: --verify-head %s but gathered "
+              "head is %s" % (args.verify_head, head_sha), file=sys.stderr)
+        return 4
     return 0
 
 
