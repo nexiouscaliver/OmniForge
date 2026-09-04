@@ -1,0 +1,34 @@
+{
+  "schema": "omniforge-prepare/1",
+  "created_at": "<normalized>",
+  "review_id": "rev-1",
+  "project": "73279395",
+  "mr_iid": "21",
+  "head_sha": "head1",
+  "run_dir": "/tmp/omni_run_rev-1",
+  "gather_json": "/tmp/omni_run_rev-1/gather.json",
+  "partition_json": "/tmp/omni_run_rev-1/partition.json",
+  "briefs": {
+    "analyst": "/tmp/omni_run_rev-1/briefs/agent-1.md",
+    "codebase": "/tmp/omni_run_rev-1/briefs/agent-2.md",
+    "security": "/tmp/omni_run_rev-1/briefs/agent-3.md"
+  },
+  "files": 4,
+  "added_lines": 9,
+  "partitions": {
+    "analyst": {
+      "files": 1,
+      "added_lines_total": 3
+    },
+    "codebase": {
+      "files": 2,
+      "added_lines_total": 4
+    },
+    "security": {
+      "files": 1,
+      "added_lines_total": 2
+    }
+  },
+  "prior_report": null,
+  "elapsed_ms": 0
+}

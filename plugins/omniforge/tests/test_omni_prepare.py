@@ -46,9 +46,11 @@ from unittest import mock
 SCRIPTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
     "skills", "omnireview-gitlab", "scripts"))
 PREPARE = os.path.join(SCRIPTS, "omni_prepare.py")
+FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures", "prepare")
 
 sys.path.insert(0, SCRIPTS)
 import omni_glab_api  # noqa: E402  (same module object the script imports)
+import omni_partition  # noqa: E402  (pure partition() over fixture data)
 
 PROJECT = "73279395"
 MR = "21"
@@ -254,6 +256,23 @@ def default_routes():
         ("/notes", 200, RAW_NOTES),
         ("/merge_requests/" + MR, 200, META),
     ]
+
+
+def golden_gather():
+    """Fresh golden gather fixture per call (tests mutate copies). main()
+    injects args.review_id into the gather dict before rendering; the
+    golden briefs pin "rev-1"."""
+    with open(os.path.join(FIXTURES, "gather_input.json"),
+              encoding="utf-8") as fh:
+        gather = json.load(fh)
+    gather["review_id"] = "rev-1"
+    return gather
+
+
+def golden_partition():
+    """The REAL partition of the golden gather (in-process pure function —
+    identical logic to the omni_partition.py subprocess)."""
+    return omni_partition.partition(golden_gather()["data"])
 
 
 class PrepareDryRunTests(unittest.TestCase):
@@ -633,6 +652,189 @@ class PreparePartitionTests(unittest.TestCase):
         diag = [l for l in se.splitlines() if l.strip()]
         self.assertEqual(len(diag), 1, se)
         self.assertIn("omni_prepare", diag[0])
+
+
+class PrepareBriefsGoldenTests(unittest.TestCase):
+    """Renderer-level golden tests. expected_agent-{1,2,3}.md are
+    HAND-AUTHORED from the plan section-2c brief template — they are the
+    independent contract; the renderer is built to match them byte-for-byte
+    and must never be used to generate them."""
+
+    AGENTS = ("analyst", "codebase", "security")
+
+    def _render(self, agent, gather=None, partition=None, prior_count=None):
+        mod = load_prepare()
+        if gather is None:
+            gather = golden_gather()
+        if partition is None:
+            partition = golden_partition()
+        return mod.render_brief(agent, gather, partition, prior_count)
+
+    def test_prepare_golden_agent_briefs_byte_identical(self):
+        for agent, name in (("analyst", "agent-1"), ("codebase", "agent-2"),
+                            ("security", "agent-3")):
+            with self.subTest(agent=agent):
+                with open(os.path.join(
+                        FIXTURES, "expected_%s.md" % name), "rb") as fh:
+                    expected = fh.read()
+                self.assertEqual(self._render(agent).encode("utf-8"),
+                                 expected)
+
+    def test_prepare_agent_number_mapping(self):
+        mod = load_prepare()
+        self.assertEqual(mod.AGENT_FILES, {
+            "analyst": "agent-1.md", "codebase": "agent-2.md",
+            "security": "agent-3.md"})
+        self.assertEqual(mod.AGENT_TITLES, {
+            "analyst": "MR Analyst", "codebase": "Codebase Reviewer",
+            "security": "Security Reviewer"})
+        self.assertEqual(mod.BRIEF_FILE_CAP, 500)
+        for agent, num in (("analyst", 1), ("codebase", 2), ("security", 3)):
+            with self.subTest(agent=agent):
+                self.assertEqual(
+                    self._render(agent).splitlines()[0],
+                    "# OmniForge reviewer brief — %s (agent-%d)"
+                    % (mod.AGENT_TITLES[agent], num))
+
+    def test_prepare_owned_files_sentences_verbatim(self):
+        for agent in self.AGENTS:
+            with self.subTest(agent=agent):
+                brief = self._render(agent)
+                self.assertIn("Deep-dive owner: these files:\n", brief)
+                self.assertIn(
+                    "Cross-cutting: you still sweep ALL changed files at "
+                    "grep depth; full-file reads are your\nowned files only.",
+                    brief)
+
+    def test_prepare_brief_header_fields(self):
+        gather = golden_gather()
+        for agent in self.AGENTS:
+            with self.subTest(agent=agent):
+                lines = self._render(agent, gather=gather).splitlines()
+                self.assertIn("- Review ID: rev-1", lines)
+                self.assertIn("- Project: 73279395", lines)
+                self.assertIn("- MR: !21 — Add widget API", lines)
+                self.assertIn("- Branches: feat/widget → main", lines)
+                self.assertIn("- Head SHA: head1", lines)
+                # the ONLY timestamp in a brief: fetched_at VERBATIM
+                self.assertIn("- Generated: %s" % gather["fetched_at"],
+                              lines)
+
+    def test_prepare_briefs_deterministic_double_render(self):
+        mod = load_prepare()
+        gather = golden_gather()
+        partition = golden_partition()
+        other = json.loads(json.dumps(gather))
+        other["fetched_at"] = "2027-01-01T00:00:00+00:00"
+        for agent in self.AGENTS:
+            with self.subTest(agent=agent):
+                first = mod.render_brief(agent, gather, partition, None)
+                # byte-identical on a second render of the same input
+                self.assertEqual(mod.render_brief(agent, gather, partition,
+                                                  None), first)
+                # a different fetched_at changes ONLY the Generated line
+                second = mod.render_brief(agent, other, partition, None)
+                lf, ls = first.splitlines(), second.splitlines()
+                self.assertEqual(len(lf), len(ls))
+                diffs = [i for i, (a, b) in enumerate(zip(lf, ls)) if a != b]
+                self.assertEqual(len(diffs), 1, diffs)
+                self.assertTrue(lf[diffs[0]].startswith("- Generated:"))
+                self.assertTrue(ls[diffs[0]].startswith("- Generated:"))
+
+    def test_prepare_briefs_500plus_cap(self):
+        mod = load_prepare()
+        n = mod.BRIEF_FILE_CAP + 1       # 501 files -> capped rendering
+        files = []
+        agents_map = {a: {"files": [], "added_lines_total": 0}
+                      for a in self.AGENTS}
+        for i in range(n):
+            path = "src/f%03d.py" % i
+            owner = self.AGENTS[i % 3]
+            files.append({"path": path, "added_lines": i % 7, "owner": owner,
+                          "reason": "greedy-balance"})
+            agents_map[owner]["files"].append(path)
+            agents_map[owner]["added_lines_total"] += i % 7
+        partition = {"files": files, "agents": agents_map}
+        gather = golden_gather()
+        for agent in self.AGENTS:
+            with self.subTest(agent=agent):
+                brief = mod.render_brief(agent, gather, partition, None)
+                first_owned = "src/f%03d.py" % self.AGENTS.index(agent)
+                # owned entries drop the reason...
+                self.assertNotIn(" — greedy-balance", brief)
+                self.assertIn("- `%s` — %d added lines"
+                              % (first_owned,
+                                 self.AGENTS.index(agent) % 7), brief)
+                # ...the cross-cutting body collapses to one line...
+                self.assertIn("## Cross-cutting files (all %d changed "
+                              "files)" % n, brief)
+                self.assertIn("Cross-cutting: all %d changed files (see "
+                              "partition.json)" % n, brief)
+                # ...so per-file bullets vanish for files this agent does
+                # not own (only codebase owns src/f001.py)
+                if agent != "codebase":
+                    self.assertNotIn("`src/f001.py`", brief)
+                # ...and the two depth sentences stay unconditionally
+                self.assertIn("Deep-dive owner: these files:\n", brief)
+                self.assertIn("grep depth", brief)
+
+    def test_prepare_briefs_binary_zero_added_rendered(self):
+        mod = load_prepare()
+        partition = {
+            "files": [
+                {"path": "assets/logo.png", "added_lines": 0,
+                 "owner": "codebase", "reason": "greedy-balance"},
+                {"path": "src/app.py", "added_lines": 3,
+                 "owner": "codebase", "reason": "greedy-balance"},
+                {"path": "README.md", "added_lines": 3,
+                 "owner": "analyst", "reason": "docs-prefer-analyst"},
+                {"path": "src/auth_check.py", "added_lines": 2,
+                 "owner": "security", "reason": "security-affinity"},
+            ],
+            "agents": {
+                "analyst": {"files": ["README.md"],
+                            "added_lines_total": 3},
+                "codebase": {"files": ["assets/logo.png", "src/app.py"],
+                             "added_lines_total": 3},
+                "security": {"files": ["src/auth_check.py"],
+                             "added_lines_total": 2},
+            },
+        }
+        brief = mod.render_brief("codebase", golden_gather(), partition,
+                                 None)
+        # zero-added entries render as normal bullets...
+        self.assertIn("- `assets/logo.png` — 0 added lines — greedy-balance",
+                      brief)
+        # ...are counted in stats...
+        self.assertIn("- Owned: 2 files / 3 added lines", brief)
+        self.assertIn("- MR total: 4 files / 8 added lines", brief)
+        # ...and no per-file diff content is ever rendered (binary-safe)
+        self.assertNotIn("@@", brief)
+
+    def test_prepare_prior_findings_stats_line(self):
+        for prior in (0, 7):
+            with self.subTest(prior=prior):
+                for agent in self.AGENTS:
+                    self.assertIn(
+                        "- Prior review findings: %d — see prior report"
+                        % prior,
+                        self._render(agent, prior_count=prior))
+        # absent when no prior report
+        for agent in self.AGENTS:
+            self.assertNotIn("Prior review findings", self._render(agent))
+
+    def test_prepare_golden_prepare_json_normalized(self):
+        mod = load_prepare()
+        actual = mod.build_prepare_json(
+            review_id="rev-1", project="73279395", mr_iid="21",
+            head_sha="head1", run_dir="/tmp/omni_run_rev-1",
+            partition=golden_partition(), prior_report=None,
+            elapsed_ms=0, created_at="<normalized>")
+        self.assertEqual(len(actual), 15)
+        with open(os.path.join(FIXTURES, "expected_prepare.json"),
+                  encoding="utf-8") as fh:
+            expected = json.load(fh)
+        self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":
