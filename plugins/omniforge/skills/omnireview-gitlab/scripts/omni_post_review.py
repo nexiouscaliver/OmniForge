@@ -24,6 +24,24 @@ Behavior (spec D6, preserved through the W4 transport swap):
   (notes last). A body-only entry that also carries file_path/line_number
   (or old_path/old_line) is an ambiguous-shape usage error — never silently
   skipped.
+- fix brief (R2-P): after any run that posts >=1 new thread-or-note entry
+  (and is not a --reply-to run), the poster appends ONE final general MR
+  note — a self-contained "fix brief" a developer pastes into their coding
+  agent to resolve every flagged finding, rendered in-process by
+  scripts/omni_fixprompt.py from THIS run's in-memory findings array, the
+  note ids captured from this run's POST responses, and the metadata of the
+  (merged) MR GET. Thread and note entries may carry optional rich keys
+  (severity, title, category, problem, recommendation — strings, never
+  validated) that enrich the brief; when absent the renderer derives them
+  from the body. The brief is ALWAYS the last artifact posted (after
+  summary/threads/replies/notes). It is skipped automatically — one stderr
+  line "omni_post_review: fix brief skipped — <reason>", the run still
+  exits 0 — on zero-finding runs, reply-only / --reply-to runs, an MR-meta
+  GET failure on notes-only batches, POST responses that yield no note id,
+  or missing MR meta fields: never a stale brief. A failing brief POST is
+  a posting failure (exit 1, prior artifacts stay). The MR GET runs iff
+  new_threads or (notes and not --reply-to) — one GET serves diff refs AND
+  brief meta; reply-only/--reply-to runs still make zero GETs.
 - retry/backoff and 4xx fail-fast live in omni_glab_api.request: up to
   --attempts (default 3), sleeping --backoff-base * 2^(attempt-1) seconds
   (2 s then 4 s by default); ONLY 5xx / 429 / transient network is retried —
@@ -72,8 +90,12 @@ Exit codes: 0 success; 1 posting failure (retries exhausted or 4xx
 fail-fast); 2 usage (including a missing token on real runs — dry-run works
 without one); 3 duplicate-summary guard refusal.
 Stdout: exactly one JSON line {"posted_summary", "threads", "replies",
-"notes", "failures", "dry_run", "elapsed_ms"} on exits 0/1/3; exit 2 (usage)
-prints no stdout JSON — consumers parse stdout only on non-usage exits.
+"notes", "failures", "dry_run", "fix_brief", "thread_map", "elapsed_ms"}
+on exits 0/1/3; exit 2 (usage) prints no stdout JSON — consumers parse
+stdout only on non-usage exits. fix_brief (bool) says whether the fix brief
+posted; thread_map maps "<findings-array-index>" → that entry's permalink
+<web_url>#note_<id> (the integer note id while web_url is unavailable) —
+after a mid-batch exit 1 it lists exactly the artifacts that succeeded.
 Diagnostics go to stderr (omni_wait.py convention).
 """
 
@@ -87,6 +109,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import omni_glab_api
+import omni_fixprompt
 
 EXIT_OK, EXIT_API, EXIT_USAGE, EXIT_GUARD = 0, 1, 2, 3
 
@@ -95,6 +118,12 @@ SUMMARY_HEADING = "## OmniForge"
 # Dry-run placeholders for the run-time-resolved diff-ref SHAs.
 PLACEHOLDER_REFS = {"base_sha": "<base_sha>", "head_sha": "<head_sha>",
                     "start_sha": "<start_sha>"}
+
+# Dry-run placeholders for the run-time-resolved MR metadata (rendered
+# verbatim by omni_fixprompt's offline mode — trusted poster constants).
+PLACEHOLDER_META = {"title": "<mr-title>", "description": "<mr-intent>",
+                    "source_branch": "<mr-source>",
+                    "target_branch": "<mr-target>", "web_url": "<web_url>"}
 
 TOKEN_FIX = ("export GITLAB_TOKEN=$(glab auth status --hostname <host> -t "
              "2>/dev/null | sed -n 's/^.*- Token: //p')")
@@ -169,20 +198,27 @@ def api(method, path, token, host, form, attempts, backoff_base):
                                  backoff_base=backoff_base)
 
 
-def fetch_diff_refs(project, mr, token, host, attempts, backoff_base):
-    """Fetch diff_refs ONCE per invocation (never per finding)."""
+def fetch_mr(project, mr, token, host, attempts, backoff_base,
+             need_refs=True):
+    """Fetch the MR ONCE per invocation (never per finding) — one GET
+    serving both the anchored-thread diff_refs and the metadata the fix
+    brief renders. diff_refs presence is validated only when need_refs
+    (note-only batches have nothing to anchor)."""
     path = refs_path(project, mr)
     resp = api("GET", path, token, host, None, attempts, backoff_base)
-    meta = resp.get("json")
-    if not isinstance(meta, dict):
+    meta_json = resp.get("json")
+    if not isinstance(meta_json, dict):
         raise PostingError("GET %s: MR metadata response is not JSON" % path)
-    refs = meta.get("diff_refs") or {}
+    meta = {k: meta_json.get(k)
+            for k in ("title", "description", "source_branch", "target_branch",
+                      "web_url", "path_with_namespace")}
+    refs = meta_json.get("diff_refs") or {}
     missing = [k for k in ("base_sha", "head_sha", "start_sha")
                if not refs.get(k)]
-    if missing:
+    if need_refs and missing:
         raise PostingError(
             "GET %s: MR metadata lacks diff_refs.%s" % (path, ", ".join(missing)))
-    return refs
+    return refs, meta
 
 
 def iso_to_epoch(value):
@@ -251,7 +287,11 @@ def parse_args(argv):
                     help="path to the findings array [{file_path, "
                          "line_number, body, [reply_to_thread_id], "
                          "[old_path], [old_line]}]; an entry carrying ONLY "
-                         "body posts as a top-level MR note")
+                         "body posts as a top-level MR note. Thread and "
+                         "note entries may additionally carry optional "
+                         "rich keys (severity, title, category, problem, "
+                         "recommendation — strings, never validated) that "
+                         "enrich the automatic fix brief posted last")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the exact API calls, execute nothing "
                          "(works without a token)")
@@ -297,14 +337,16 @@ def load_summary(path):
 
 def load_findings(path):
     """Validate the findings array and split it into (new_threads, replies,
-    notes).
+    notes, raw).
 
     Entries carrying reply_to_thread_id are routed as replies and EXCLUDED
     from new-thread posting. Entries carrying ONLY body (no file_path, no
     line_number) are routed as note entries — top-level MR notes. Optional
     old_path (default = file_path) and old_line are forwarded when present.
-    Invalid input is a usage error — the script never silently skips a
-    finding.
+    Thread/note dicts carry idx = the entry's 0-based index into raw (the
+    fix brief's thread_map join key; the renderer reads any rich keys
+    straight from raw[idx]). Invalid input is a usage error — the script
+    never silently skips a finding.
     """
     try:
         with open(path, encoding="utf-8") as fh:
@@ -313,6 +355,7 @@ def load_findings(path):
         raise UsageError("cannot read findings JSON %s: %s" % (path, e))
     if not isinstance(data, list):
         raise UsageError("findings JSON %s must be a top-level array" % path)
+    raw = data
     new_threads, replies, notes = [], [], []
     for i, entry in enumerate(data, 1):
         if not isinstance(entry, dict):
@@ -320,6 +363,7 @@ def load_findings(path):
         body = entry.get("body")
         if not isinstance(body, str) or not body.strip():
             raise UsageError("finding %d: body is missing or empty" % i)
+        idx = i - 1
         thread_id = entry.get("reply_to_thread_id")
         if thread_id is not None:
             if not isinstance(thread_id, str) or not thread_id.strip():
@@ -338,7 +382,7 @@ def load_findings(path):
                     "finding %d: ambiguous entry — note entries carry only "
                     "body; thread entries need BOTH file_path and "
                     "line_number" % i)
-            notes.append({"body": body})
+            notes.append({"body": body, "idx": idx})
             continue
         if not isinstance(file_path, str) or not file_path.strip():
             raise UsageError(
@@ -362,8 +406,8 @@ def load_findings(path):
                              % i)
         new_threads.append({"file_path": file_path, "line_number": line_number,
                             "body": body, "old_path": old_path,
-                            "old_line": old_line})
-    return new_threads, replies, notes
+                            "old_line": old_line, "idx": idx})
+    return new_threads, replies, notes, raw
 
 
 # ── dry-run ────────────────────────────────────────────────────────────────
@@ -385,7 +429,7 @@ def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
     try:
         summary = load_summary(args.summary) if args.summary else None
-        new_threads, replies, notes = load_findings(args.findings_json)
+        new_threads, replies, notes, raw = load_findings(args.findings_json)
         if args.reply_to:
             # --reply-to: every finding body becomes a reply on that thread.
             replies = ([{"thread_id": args.reply_to, "body": t["body"]}
@@ -412,10 +456,31 @@ def main(argv=None):
     # resume is --skip-summary --force, which cannot repost the summary.
     guard_applies = not reply_only and not implied_skip and not args.force
 
+    # R2-P fix brief: fires iff this run posts >=1 new thread-or-note entry
+    # and is not a --reply-to run (evaluated after reply routing). The
+    # plumbing below is shared by the dry-run and real paths: thread_map is
+    # {array-index: created note id} captured from THIS run's POST
+    # responses, meta the MR GET's metadata, ids_ok the every-response-
+    # yielded-an-id flag, brief_blocked_reason the pre-render skip reason.
+    brief_will_fire = (bool(new_threads) or bool(notes)) and not args.reply_to
+    thread_map = {}
+    meta = None
+    ids_ok = True
+    brief_blocked_reason = None
+
     counts = {"posted_summary": False, "threads": 0, "replies": 0,
-              "notes": 0, "failures": 0, "dry_run": bool(args.dry_run)}
+              "notes": 0, "failures": 0, "dry_run": bool(args.dry_run),
+              "fix_brief": False, "thread_map": {}}
 
     def emit():
+        # Recomputed from the OUTER thread_map on every exit path (0/1/3)
+        # so the persisted map always lists exactly the artifacts that
+        # succeeded — the manual-reconstruction source after a partial run.
+        web = (meta or {}).get("web_url")
+        counts["thread_map"] = {
+            str(idx): (omni_fixprompt.build_link(web, nid)
+                       if isinstance(web, str) and web else nid)
+            for idx, nid in sorted(thread_map.items())}
         counts["elapsed_ms"] = int(round((time.time() - start) * 1000))
         print(json.dumps(counts))
         return counts
@@ -425,7 +490,7 @@ def main(argv=None):
         # nothing and works without a token.
         if guard_applies:
             dry_line("GET", notes_list_path(args.project, args.mr))
-        if new_threads:
+        if new_threads or (notes and not args.reply_to):
             dry_line("GET", refs_path(args.project, args.mr))
         if will_post_summary:
             dry_line("POST", notes_base_path(args.project, args.mr),
@@ -445,6 +510,25 @@ def main(argv=None):
             dry_line("POST", notes_base_path(args.project, args.mr),
                      [("body", n["body"])])
             counts["notes"] += 1
+        if brief_will_fire:
+            offline_map = {t["idx"]: "<link>" for t in new_threads}
+            offline_map.update({n["idx"]: "<link>" for n in notes})
+            try:
+                brief = omni_fixprompt.render_brief(raw, offline_map,
+                                                    PLACEHOLDER_META,
+                                                    args.mr, args.project,
+                                                    offline=True)
+            except omni_fixprompt.BriefSkip as e:
+                print("omni_post_review: fix brief skipped — %s" % e.reason,
+                      file=sys.stderr)
+            else:
+                # Seed the OUTER map (never counts["thread_map"] directly —
+                # emit() unconditionally recomputes it); meta is None here,
+                # so emit renders each value verbatim ("<link>").
+                thread_map.update(offline_map)
+                dry_line("POST", notes_base_path(args.project, args.mr),
+                         [("body", brief)])
+                counts["fix_brief"] = True
         emit()
         return EXIT_OK
 
@@ -467,30 +551,96 @@ def main(argv=None):
                       file=sys.stderr)
                 emit()
                 return EXIT_GUARD
-        refs = (fetch_diff_refs(args.project, args.mr, token, args.host,
-                                args.attempts, args.backoff_base)
-                if new_threads else None)
+        refs, meta = None, None
+        if new_threads:
+            # Anchored threads need the diff refs — a GET failure propagates
+            # (exit 1, nothing posted), exactly as before.
+            refs, meta = fetch_mr(args.project, args.mr, token, args.host,
+                                  args.attempts, args.backoff_base,
+                                  need_refs=True)
+        elif notes and not args.reply_to:
+            # Brief-eligible notes-only batch: the same GET serves brief
+            # meta. A failure here is a brief SKIP (stderr, exit 0) — the
+            # notes still post (missing brief input is a skip, not a
+            # failure).
+            try:
+                refs, meta = fetch_mr(args.project, args.mr, token, args.host,
+                                      args.attempts, args.backoff_base,
+                                      need_refs=False)
+            except (omni_glab_api.GlabApiError, PostingError) as e:
+                brief_blocked_reason = "MR metadata GET failed: %s" % e
         if will_post_summary:
             api("POST", notes_base_path(args.project, args.mr), token, args.host,
                 [("body", summary)], args.attempts, args.backoff_base)
             counts["posted_summary"] = True
         for t in new_threads:
-            api("POST", discussions_path(args.project, args.mr), token,
-                args.host,
-                thread_form(t["body"], refs, t["file_path"], t["line_number"],
-                            t["old_path"], t["old_line"]),
-                args.attempts, args.backoff_base)
+            resp = api("POST", discussions_path(args.project, args.mr), token,
+                       args.host,
+                       thread_form(t["body"], refs, t["file_path"],
+                                   t["line_number"], t["old_path"],
+                                   t["old_line"]),
+                       args.attempts, args.backoff_base)
             counts["threads"] += 1
+            # Capture the created discussion's first note id — the permalink
+            # target. An id-less 2xx means the brief must be skipped, never
+            # rendered with a missing link (only note ids feed links; the
+            # discussion id is deliberately not retained).
+            j = resp.get("json")
+            note_id = None
+            if isinstance(j, dict):
+                jnotes = j.get("notes")
+                if isinstance(jnotes, list) and jnotes \
+                        and isinstance(jnotes[0], dict) \
+                        and isinstance(jnotes[0].get("id"), int) \
+                        and not isinstance(jnotes[0].get("id"), bool):
+                    note_id = jnotes[0]["id"]
+            if note_id is None:
+                ids_ok = False
+            else:
+                thread_map[t["idx"]] = note_id
         for r in replies:
             api("POST", reply_path(args.project, args.mr, r["thread_id"]),
                 token, args.host, [("body", r["body"])], args.attempts,
                 args.backoff_base)
             counts["replies"] += 1
         for n in notes:
-            api("POST", notes_base_path(args.project, args.mr), token,
-                args.host, [("body", n["body"])], args.attempts,
-                args.backoff_base)
+            resp = api("POST", notes_base_path(args.project, args.mr), token,
+                       args.host, [("body", n["body"])], args.attempts,
+                       args.backoff_base)
             counts["notes"] += 1
+            j = resp.get("json")
+            note_id = None
+            if isinstance(j, dict):
+                nid = j.get("id")
+                if isinstance(nid, int) and not isinstance(nid, bool):
+                    note_id = nid
+            if note_id is None:
+                ids_ok = False
+            else:
+                thread_map[n["idx"]] = note_id
+        # R2-P: the fix brief is the run's LAST artifact (after summary/
+        # threads/replies/notes) — one general MR note, one decision point,
+        # at most one skip line per run. raw is the startup in-memory array;
+        # no file re-reads at brief time.
+        if brief_will_fire:
+            reason = brief_blocked_reason
+            if reason is None and not ids_ok:
+                reason = ("POST responses did not yield note ids — "
+                          "cannot build thread links")
+            if reason is None:
+                try:
+                    brief = omni_fixprompt.render_brief(raw, thread_map, meta,
+                                                        args.mr, args.project)
+                except omni_fixprompt.BriefSkip as e:
+                    reason = e.reason
+            if reason is not None:
+                print("omni_post_review: fix brief skipped — %s" % reason,
+                      file=sys.stderr)
+            else:
+                api("POST", notes_base_path(args.project, args.mr), token,
+                    args.host, [("body", brief)], args.attempts,
+                    args.backoff_base)
+                counts["fix_brief"] = True          # set only AFTER a 2xx
     except (omni_glab_api.GlabApiError, PostingError) as e:
         counts["failures"] += 1
         print("omni_post_review: %s" % e, file=sys.stderr)
