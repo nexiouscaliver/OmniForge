@@ -45,6 +45,10 @@ THREE_FINDINGS = ["codebase.findings.json", "security.findings.json",
 
 SEV_RANK = {"minor": 0, "important": 1, "critical": 2}
 
+# SKILL.md Phase 5: "Only findings with confidence >= 70 enter the final
+# report" — the stand-in gates every included-findings path on it.
+REPORT_FLOOR = 70
+
 
 # ── module-level pure helpers (the README regen procedure invokes these) ────
 
@@ -70,6 +74,14 @@ def _thread_body(severity, one_liner, why, confidence, agents):
                confidence, agents))
 
 
+def _enters_report(confidence):
+    """The Phase 5 final-report gate — "Only findings with confidence >= 70
+    enter the final report" — applied to every included-findings path.
+    Prior-thread replies are carry-forward decisions, not inclusions, and
+    are never gated here."""
+    return isinstance(confidence, int) and confidence >= REPORT_FLOOR
+
+
 def compose_post_payloads(worklist):
     """Deterministic stand-in agent: mirror the Phase 5 emit rules over the
     worklist only. Auto rows in order (include_once/include -> thread on an
@@ -77,8 +89,9 @@ def compose_post_payloads(worklist):
     skip_repost -> nothing); judgment rows per the frozen default decisions
     (disagreement present_both / cross_finding keep_both / validity
     keep_each_perspective -> one thread per finding; validity include_or_drop
-    sub-threshold -> drop). Ordering: severity rank desc, then confidence
-    desc, then stable row order; replies and notes appended after threads."""
+    sub-threshold -> drop). Only findings with confidence >= 70 enter the
+    report. Ordering: severity rank desc, then confidence desc, then stable
+    row order; replies and notes appended after threads."""
     decorated, replies, notes = [], [], []
 
     def thread(severity, confidence, entry):
@@ -88,6 +101,9 @@ def compose_post_payloads(worklist):
         action = row.get("action")
         if action == "skip_repost":
             continue                          # resolved prior: never re-posted
+        if action in ("include_once", "include") and not _enters_report(
+                row.get("confidence")):
+            continue                          # sub-70: never enters the report
         body = _thread_body(row.get("severity"), row.get("one_liner"), None,
                             row.get("confidence"),
                             ", ".join(row.get("corroboration", {})
@@ -112,6 +128,8 @@ def compose_post_payloads(worklist):
         else:
             included = []                     # include_or_drop (sub-threshold)
         for f in included:
+            if not _enters_report(f.get("confidence")):
+                continue                      # sub-70: never enters the report
             body = _thread_body(f.get("severity"), f.get("one_liner"),
                                 f.get("evidence_snippet"), f.get("confidence"),
                                 f.get("agent"))
@@ -354,6 +372,47 @@ class TestE2E(unittest.TestCase):
             got = fh.read()
         with open(GOLDEN_WORKLIST, encoding="utf-8") as fh:
             self.assertEqual(fh.read(), got)
+
+    def test_sub70_findings_never_enter_payloads(self):
+        """Pin the Phase 5 final-report gate: a finding with confidence 60
+        produces NO payload (auto include path and included judgment
+        findings alike) while its >= 70 siblings still post."""
+        worklist = {
+            "auto_decided": [
+                {"action": "include", "confidence": 60,
+                 "severity": "important", "one_liner": "Sub-70 auto finding",
+                 "corroboration": {"agents": ["codebase"]},
+                 "file": "src/gate.py",
+                 "locus": {"file": "src/gate.py", "lines": [3, 4]}},
+                {"action": "include", "confidence": 90,
+                 "severity": "important", "one_liner": "Confident auto sibling",
+                 "corroboration": {"agents": ["codebase"]},
+                 "file": "src/ok.py",
+                 "locus": {"file": "src/ok.py", "lines": [5, 6]}},
+            ],
+            "judgment": [
+                {"kind": "disagreement",
+                 "preset_outcome": "needs_human_judgment_dual_perspective",
+                 "findings": [
+                     {"agent": "codebase", "severity": "critical",
+                      "confidence": 95, "category": "logic",
+                      "file": "src/pair.py", "line_range": [10, 12],
+                      "one_liner": "High-confidence perspective",
+                      "evidence_snippet": "evidence for the 95 side"},
+                     {"agent": "security", "severity": "minor",
+                      "confidence": 60, "category": "logic",
+                      "file": "src/pair.py", "line_range": [10, 12],
+                      "one_liner": "Sub-70 perspective",
+                      "evidence_snippet": "evidence for the 60 side"},
+                 ]},
+            ],
+        }
+        payloads = compose_post_payloads(worklist)
+        self.assertEqual([p["file_path"] for p in payloads],
+                         ["src/pair.py", "src/ok.py"])   # severity rank first
+        dumped = json.dumps(payloads)
+        self.assertNotIn("Sub-70 auto finding", dumped)
+        self.assertNotIn("Sub-70 perspective", dumped)
 
 
 class TestScratchCopy(unittest.TestCase):
