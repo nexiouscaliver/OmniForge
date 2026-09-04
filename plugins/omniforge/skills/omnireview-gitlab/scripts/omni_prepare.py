@@ -14,15 +14,21 @@ CLI:
 
 --iid maps to the fetcher's --mr. --dry-run validates the invocation only:
 ONE plan JSON line, no network, no mkdir, no writes, no token; a bad
---prior-report is REPORTED (exists/valid_json), never fatal.
+--prior-report is REPORTED (exists/valid_json), never fatal. In a REAL run
+a --prior-report that is missing/unreadable/invalid JSON/unrecognized
+shape IS fatal (exit 2); a valid one plumbs its findings_count into
+prepare.json, the briefs' Prior review findings Stats line, and the
+receipt's prior_findings.
 
 Exit codes:
   0   all outputs written; stdout = ONE receipt JSON line (11 keys).
   1   gather/partition/internal failure:
       {"ok":false,"error":"prepare_failed","stage":"gather"|"partition"|
        "internal","detail":<short str>} + one stderr diagnostic line.
-  2   argparse usage (natural); unwritable run-dir or OSError
-      writing/wiping outputs (no stdout JSON).
+  2   argparse usage (natural); --prior-report missing/unreadable/invalid
+      JSON/unrecognized shape (stderr "omni_prepare: --prior-report
+      <reason>"); unwritable run-dir or OSError writing/wiping outputs
+      (no stdout JSON).
   3   token missing at start, or the fetch child exited 1 with integer
       HTTP 401/403 (extracted from its error message, never a substring
       match): {"ok":false,"error":"auth","detail":<short>} + the glab
@@ -260,10 +266,14 @@ def run_partition(gather_path, partition_path):
 
 # ── brief renderer ────────────────────────────────────────────────────────
 
-# Empty-owned marker (T1 scope): files_changed == [] means an EMPTY DIFF.
-# (The deleted-files-only wording variant keys on a non-blank diff and is
-# deliberately NOT implemented at this tip.)
+# Empty-owned markers: files_changed == [] means either a BLANK diff (an
+# empty MR) or a NON-blank diff whose every file is deletion-only (deleted
+# /diffs items synthesize +++ /dev/null and so never enter files_changed).
+# The renderer picks the wording by the gather diff being blank vs
+# non-blank (plan R3a/R3b split).
 _EMPTY_DIFF_MARKER = "(none — this MR has an empty diff)"
+_NO_ADDED_SIDE_MARKER = ("(none — no added-side files — deep-dive "
+                         "partitions are empty)")
 
 _DEPTH_SENTENCES = (
     "Cross-cutting: you still sweep ALL changed files at grep depth; "
@@ -296,7 +306,13 @@ def render_brief(agent, gather, partition, prior_count):
     owned = list(agent_info.get("files") or [])
     owned_added = agent_info.get("added_lines_total") or 0
     added_total = sum(f["added_lines"] for f in files)
-    empty_mr = (data.get("files_changed") or []) == []
+    files_changed = data.get("files_changed") or []
+    empty_mr = files_changed == []
+    if empty_mr:
+        # R3a two-way choice: a non-blank diff with no added-side files is
+        # a deleted-files-only MR, not an empty one — distinct wording.
+        empty_marker = _NO_ADDED_SIDE_MARKER \
+            if (data.get("diff") or "").strip() else _EMPTY_DIFF_MARKER
 
     lines = [
         "# OmniForge reviewer brief — %s (agent-%d)"
@@ -316,7 +332,7 @@ def render_brief(agent, gather, partition, prior_count):
         "",
     ]
     if empty_mr:
-        lines.append(_EMPTY_DIFF_MARKER)
+        lines.append(empty_marker)
     elif owned:
         for path in owned:
             if capped:
@@ -337,7 +353,7 @@ def render_brief(agent, gather, partition, prior_count):
         lines.append("Cross-cutting: all %d changed files (see "
                      "partition.json)" % files_total)
     elif empty_mr:
-        lines.append(_EMPTY_DIFF_MARKER)
+        lines.append(empty_marker)
     else:
         lines.extend("- `%s`" % f["path"] for f in files)
     lines += [
@@ -482,6 +498,19 @@ def main(argv=None):
               file=sys.stderr)
         return 3
 
+    # --prior-report: in a REAL run a bad prior report is FATAL usage
+    # (exit 2) — only --dry-run reports it without judging the caller.
+    # The check sits before the wipe/fetch so it never destroys anything.
+    prior_count = None
+    prior_report_doc = None
+    if args.prior_report is not None:
+        reason, prior_count = load_prior_report(args.prior_report)
+        if reason != "ok":
+            print("omni_prepare: --prior-report %s" % reason, file=sys.stderr)
+            return 2
+        prior_report_doc = {"path": args.prior_report,
+                            "findings_count": prior_count}
+
     # R1 wipe: after preconditions, before the fetch (a failing exit-2/3
     # invocation must not destroy a prior run's artifacts)
     try:
@@ -539,9 +568,10 @@ def main(argv=None):
     prepare_doc = build_prepare_json(
         review_id=args.review_id, project=args.project, mr_iid=args.iid,
         head_sha=head_sha, run_dir=run_dir, partition=partition,
-        prior_report=None, elapsed_ms=elapsed_ms)
+        prior_report=prior_report_doc, elapsed_ms=elapsed_ms)
     outputs = [(os.path.join(run_dir, "briefs", AGENT_FILES[a]),
-                render_brief(a, gather, partition, None)) for a in AGENTS]
+                render_brief(a, gather, partition, prior_count))
+               for a in AGENTS]
     outputs.append((paths["prepare_json"],
                     json.dumps(prepare_doc, indent=2, ensure_ascii=False)
                     + "\n"))
@@ -569,7 +599,7 @@ def main(argv=None):
     print(json.dumps(build_receipt(
         run_dir=run_dir, project=args.project, mr_iid=args.iid,
         review_id=args.review_id, head_sha=head_sha, partition=partition,
-        prior_count=None, duration_s=duration_s), ensure_ascii=False))
+        prior_count=prior_count, duration_s=duration_s), ensure_ascii=False))
     return 0
 
 
