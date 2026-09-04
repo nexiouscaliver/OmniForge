@@ -215,6 +215,36 @@ def _short(text):
     return t.splitlines()[0][:_DETAIL_CAP]
 
 
+# ── gather consumption ───────────────────────────────────────────────────
+
+def load_gather(path):
+    """Load gather.json (the fetch child's omniforge-mr-gather/1 output,
+    consumed as-is). Raises ValueError on an unexpected shape or parse
+    error — main maps that to exit 1, stage "internal"."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            gather = json.load(fh)
+    except OSError as e:
+        raise ValueError("cannot read gather: %s" % e)
+    except ValueError as e:
+        raise ValueError("gather is not valid JSON: %s" % e)
+    if not (isinstance(gather, dict) and isinstance(gather.get("data"), dict)
+            and isinstance(gather.get("fetched_at"), str)):
+        raise ValueError(
+            "unexpected gather shape: expected omniforge-mr-gather/1 with "
+            "fetched_at + data")
+    return gather
+
+
+def _fail_stage(stage, detail):
+    """The exit-1 contract: one stdout JSON line + one stderr line."""
+    print(json.dumps({"ok": False, "error": "prepare_failed",
+                      "stage": stage, "detail": _short(detail)}))
+    print("omni_prepare: %s stage failed: %s"
+          % (stage, _short(detail)), file=sys.stderr)
+    return 1
+
+
 # ── entry point ──────────────────────────────────────────────────────────
 
 def main(argv=None):
@@ -248,11 +278,14 @@ def main(argv=None):
               file=sys.stderr)
         return 3
     if verdict != "ok":
-        detail = _short(_error_from_stdout(proc.stdout) or proc.stderr) \
+        detail = _error_from_stdout(proc.stdout) or proc.stderr \
             or "fetch rc=%d" % proc.returncode
-        print("omni_prepare: gather stage failed: %s" % detail,
-              file=sys.stderr)
-        return 1
+        return _fail_stage("gather", detail)
+
+    try:
+        gather = load_gather(paths["gather_json"])
+    except ValueError as e:
+        return _fail_stage("internal", e)
     return 0
 
 
