@@ -170,6 +170,51 @@ def dry_run_plan(args):
     return plan
 
 
+# ── fetch-child classification ───────────────────────────────────────────
+
+def _error_from_stdout(text):
+    """The fetch child's exit-1 stdout JSON line's error string ("" if the
+    stdout is not a JSON object with a string error)."""
+    for line in (text or "").splitlines():
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("error"), str):
+            return obj["error"]
+    return ""
+
+
+def classify_fetch(rc, stdout_text):
+    """Map the fetch child's (returncode, stdout) to ok | auth | gather_fail.
+
+    rc 0 -> ok. rc 1: parse the stdout JSON error and extract the HTTP
+    status as an INTEGER (re.search(r"failed with HTTP (\\d+)")); 401/403
+    -> auth. Everything else — including rc 2 (non-token preconditions) —
+    is gather_fail. Substring matching is forbidden: the message format
+    puts the true status FIRST, so a 5xx whose detail body contains the
+    literal "HTTP 403" extracts 503 and classifies as gather_fail.
+    """
+    if rc == 0:
+        return "ok"
+    if rc == 1:
+        m = re.search(r"failed with HTTP (\d+)",
+                      _error_from_stdout(stdout_text))
+        if m and int(m.group(1)) in (401, 403):
+            return "auth"
+    return "gather_fail"
+
+
+def _short(text):
+    """One short single-line detail string for stdout/stderr diagnostics."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    return t.splitlines()[0][:_DETAIL_CAP]
+
+
 # ── entry point ──────────────────────────────────────────────────────────
 
 def main(argv=None):
@@ -179,7 +224,35 @@ def main(argv=None):
         print(json.dumps(dry_run_plan(args)))
         return 0
 
-    os.makedirs(os.path.abspath(args.run_dir), exist_ok=True)
+    run_dir = os.path.abspath(args.run_dir)
+    os.makedirs(run_dir, exist_ok=True)
+
+    if not omni_glab_api.resolve_token():
+        print(json.dumps({"ok": False, "error": "auth",
+                          "detail": "GITLAB_TOKEN not set"}))
+        print(omni_fetch_mr.token_fix_line(omni_glab_api.resolve_host(None)),
+              file=sys.stderr)
+        return 3
+
+    paths = output_paths(run_dir)
+    proc = subprocess.run(
+        [sys.executable, os.path.join(SCRIPTS, "omni_fetch_mr.py"),
+         "--project", args.project, "--mr", args.iid,
+         "--out", paths["gather_json"]],
+        capture_output=True, text=True)
+    verdict = classify_fetch(proc.returncode, proc.stdout)
+    if verdict == "auth":
+        detail = _short(_error_from_stdout(proc.stdout)) or "auth failure"
+        print(json.dumps({"ok": False, "error": "auth", "detail": detail}))
+        print(omni_fetch_mr.token_fix_line(omni_glab_api.resolve_host(None)),
+              file=sys.stderr)
+        return 3
+    if verdict != "ok":
+        detail = _short(_error_from_stdout(proc.stdout) or proc.stderr) \
+            or "fetch rc=%d" % proc.returncode
+        print("omni_prepare: gather stage failed: %s" % detail,
+              file=sys.stderr)
+        return 1
     return 0
 
 
