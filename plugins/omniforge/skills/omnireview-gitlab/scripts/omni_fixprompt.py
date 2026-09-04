@@ -25,7 +25,10 @@ Rendering (template v1, FROZEN operator wording — never reword it):
   sanitize() — it can never open a fence, start a heading/quote/list line,
   carry a raw tag across, or exceed its hard cap (title 120, category 60,
   problem/recommendation 500, file_path 200, intent 300, branch 120,
-  project 120).
+  project 120). Fields rendered inside code spans (project, source, target,
+  file_path — including the copy-paste `git diff` command) additionally
+  have $();&| neutralized: those are legal in Git ref names and must never
+  smuggle shell syntax into a command a developer pastes (Amendment 3).
 - The findings list = the eligible mapped indices ordered by severity
   (critical, important, minor; ties keep original array order); more than
   TOP_N eligible findings list the top 25 plus the pinned pointer line
@@ -205,6 +208,16 @@ def build_link(web_url, note_id):
     return web_url.rstrip("/") + "#note_" + str(note_id)
 
 
+def _sanitize_body(value):
+    """The §5.3 pipeline through flatten/strip — everything except the cap."""
+    s = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    s = re.sub(r"`+", " ", s)        # no fence can open
+    s = re.sub(r"~{2,}", " ", s)     # tilde-fence prevention
+    s = re.sub(r"[<>]", " ", s)      # MR author is the adversary (F2)
+    s = re.sub(r"^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+|\d{1,9}[.)]\s+)", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def sanitize(value, cap):
     """Flatten + defang one untrusted field, then hard-cap it.
 
@@ -214,12 +227,29 @@ def sanitize(value, cap):
     spaces (no embedded newlines/tabs/indent-code can survive), and the
     character cut happens last, with no ellipsis.
     """
-    s = str(value).replace("\r\n", "\n").replace("\r", "\n")
-    s = re.sub(r"`+", " ", s)        # no fence can open
-    s = re.sub(r"~{2,}", " ", s)     # tilde-fence prevention
-    s = re.sub(r"[<>]", " ", s)      # MR author is the adversary (F2)
-    s = re.sub(r"^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+|\d{1,9}[.)]\s+)", "", s)
-    s = re.sub(r"\s+", " ", s).strip()
+    s = _sanitize_body(value)
+    if len(s) > cap:
+        s = s[:cap].rstrip()
+    return s
+
+
+def _neutralize_code_span(s):
+    """Shell metacharacters cannot survive into a backticked span.
+
+    project, the branch names and file_path render inside code spans —
+    including the copy-paste `git diff origin/<target>...<source>`
+    command — and $();&| are all legal in Git ref names (Amendment 3:
+    a hostile MR must not smuggle command substitution into the command
+    a developer pastes into their shell).
+    """
+    s = re.sub(r"[$;&()|]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _sanitize_code_span(value, cap):
+    """Code-span field sanitizer (project, source, target, file_path):
+    strip/flatten, then metachar neutralization, then the cap — cap last."""
+    s = _neutralize_code_span(_sanitize_body(value))
     if len(s) > cap:
         s = s[:cap].rstrip()
     return s
@@ -232,8 +262,9 @@ def _verbatim(meta, key):
 
 def _intent_from_description(meta):
     """First non-empty, non-heading-only description paragraph, sanitized
-    and capped; a null/absent/whitespace description falls back to the
-    sanitized MR title."""
+    and capped; a null/absent/whitespace description — or one consisting
+    solely of heading paragraphs — falls back to the sanitized MR title
+    (never an empty intent line)."""
     description = meta.get("description")
     if not isinstance(description, str) or not description.strip():
         return sanitize(meta["title"], CAP_INTENT)
@@ -244,7 +275,7 @@ def _intent_from_description(meta):
         if lines and all(HEADING_LINE_RE.match(ln) for ln in lines):
             continue
         return sanitize(paragraph, CAP_INTENT)
-    return ""
+    return sanitize(meta["title"], CAP_INTENT)
 
 
 def _resolve_finding(entry, note_id, meta, offline):
@@ -254,10 +285,10 @@ def _resolve_finding(entry, note_id, meta, offline):
     body = entry.get("body")
     body = body if isinstance(body, str) else ""
     first_line = next((ln for ln in body.split("\n") if ln.strip()), "")
+    marker = BODY_SEVERITY_RE.match(first_line)     # computed once (F4)
 
     severity = entry.get("severity")
     if severity not in SEVERITIES:
-        marker = BODY_SEVERITY_RE.match(first_line)
         severity = marker.group(1).lower() if marker else "minor"
 
     title = ""
@@ -265,7 +296,6 @@ def _resolve_finding(entry, note_id, meta, offline):
     if isinstance(raw, str):
         title = sanitize(raw, CAP_TITLE)
     if not title:
-        marker = BODY_SEVERITY_RE.match(first_line)
         if marker:
             rest = first_line[marker.end():].strip()
             title = sanitize(re.sub(r"^[-—]\s*", "", rest).strip(), CAP_TITLE)
@@ -289,7 +319,8 @@ def _resolve_finding(entry, note_id, meta, offline):
         category = "general"
 
     if "file_path" in entry:
-        locus = "%s:%d" % (sanitize(entry.get("file_path"), CAP_FILE_PATH),
+        locus = "%s:%d" % (_sanitize_code_span(entry.get("file_path"),
+                                               CAP_FILE_PATH),
                            entry["line_number"])
     else:
         locus = "MR note"
@@ -383,13 +414,13 @@ def render_brief(findings, thread_map, mr_meta, mr_iid, project=None,
         intent = _verbatim(meta, "description")
     else:
         head_title = sanitize(meta["title"], CAP_TITLE)
-        head_source = sanitize(meta["source_branch"], CAP_BRANCH)
-        head_target = sanitize(meta["target_branch"], CAP_BRANCH)
+        head_source = _sanitize_code_span(meta["source_branch"], CAP_BRANCH)
+        head_target = _sanitize_code_span(meta["target_branch"], CAP_BRANCH)
         namespace = meta.get("path_with_namespace")
         if isinstance(namespace, str) and namespace:
-            head_project = sanitize(namespace, CAP_PROJECT)
+            head_project = _sanitize_code_span(namespace, CAP_PROJECT)
         elif isinstance(project, str) and project:
-            head_project = sanitize(project, CAP_PROJECT)
+            head_project = _sanitize_code_span(project, CAP_PROJECT)
         else:
             raise BriefSkip("no project for the fix brief")
         intent = _intent_from_description(meta)
