@@ -449,6 +449,18 @@ git worktree prune
 
 **Temp files (both MCP and fallback paths):** also remove the Phase-1 artifacts in Phase 7 — `/tmp/omni_mr{id}_gather.json`, `/tmp/omni_mr{id}_data.json`, `/tmp/omni_mr{id}_discussions.json`, `/tmp/omni_mr{id}_prior_findings.json`, `/tmp/omni_digest_{id}/` (digest outputs), `/tmp/omni_partition_{id}.json`, and `/tmp/omni_mr{id}_diff.txt` (large-diff runs) — plus the Phase-4 consolidator outputs `/tmp/omni_consolidate_{id}/` (`clusters.json` + `worklist.md`) and Phase 6's `/tmp/omni_review_{id}_summary.md` and `/tmp/omni_review_{id}_findings.json` (posting inputs, if posting ran).
 
+**Automatic fix brief (R2-P):** after any posting run that posts ≥1 new thread or note
+entry, the poster automatically appends ONE final general MR note — a self-contained
+"fix brief" a developer can paste into their coding agent to resolve every flagged
+finding (rendered by `scripts/omni_fixprompt.py`; format and the optional findings rich
+keys are documented in `references/posting-guide.md`).
+
+- No agent action and no new temp files — the renderer runs inside the poster process.
+- The brief is always the LAST artifact posted (after summary/threads/replies/notes).
+- Skipped automatically (one stderr line; the run still exits 0) on zero-finding runs,
+  reply-only / `--reply-to` runs, and whenever its inputs are unavailable — never a
+  stale brief.
+
 ---
 
 ## Error Handling

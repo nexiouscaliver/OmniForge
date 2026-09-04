@@ -38,7 +38,10 @@ Behavior (spec D6, preserved through the W4 transport swap):
   line "omni_post_review: fix brief skipped — <reason>", the run still
   exits 0 — on zero-finding runs, reply-only / --reply-to runs, an MR-meta
   GET failure on notes-only batches, POST responses that yield no note id,
-  or missing MR meta fields: never a stale brief. A failing brief POST is
+  or missing MR meta fields: never a stale brief. A posted fix-brief
+  note matches the duplicate-summary guard's `## OmniForge` prefix, so a
+  subsequent non-forced --skip-summary run is refused (resume path:
+  --skip-summary --force). A failing brief POST is
   a posting failure (exit 1, prior artifacts stay). The MR GET runs iff
   new_threads or (notes and not --reply-to) — one GET serves diff refs AND
   brief meta; reply-only/--reply-to runs still make zero GETs.
@@ -631,7 +634,8 @@ def main(argv=None):
                 try:
                     brief = omni_fixprompt.render_brief(raw, thread_map, meta,
                                                         args.mr, args.project)
-                except omni_fixprompt.BriefSkip as e:
+                # UsageError unreachable: load_findings validation is stronger.
+                except (omni_fixprompt.BriefSkip, omni_fixprompt.UsageError) as e:
                     reason = e.reason
             if reason is not None:
                 print("omni_post_review: fix brief skipped — %s" % reason,
