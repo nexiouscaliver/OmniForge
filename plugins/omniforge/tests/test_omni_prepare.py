@@ -509,5 +509,61 @@ class PrepareGatherTests(unittest.TestCase):
         self.assertEqual(mod.classify_fetch(2, ""), "gather_fail")
 
 
+class PrepareVerifyHeadTests(unittest.TestCase):
+    def _run(self, verify):
+        base, log = make_http_server(self, default_routes())
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        argv = ["--project", PROJECT, "--iid", MR, "--review-id", "rev-9",
+                "--run-dir", run_dir, "--verify-head", verify]
+        rc, so, se = run_prepare(argv, host=base)
+        return rc, so, se, run_dir
+
+    def test_prepare_verify_head_moved_exit_4_exact_stdout(self):
+        rc, so, se, run_dir = self._run("oldsha9")
+        self.assertEqual(rc, 4)
+        self.assertEqual(stdout_json(so), {
+            "ok": False, "head_moved": True,
+            "recorded_head": "oldsha9", "current_head": "head1"})
+        # exactly one stderr line
+        diag = [l for l in se.splitlines() if l.strip()]
+        self.assertEqual(len(diag), 1, se)
+        # gather.json may exist (full gather already ran)...
+        self.assertTrue(os.path.isfile(os.path.join(run_dir, "gather.json")))
+        # ...but nothing downstream is written
+        self.assertFalse(os.path.exists(
+            os.path.join(run_dir, "partition.json")))
+        self.assertFalse(os.path.exists(
+            os.path.join(run_dir, "prepare.json")))
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "briefs")))
+        self.assertFalse(os.path.exists(
+            os.path.join(run_dir, "phases.jsonl")))
+
+    def test_prepare_verify_head_stable_proceeds(self):
+        rc, so, se, run_dir = self._run("head1")
+        self.assertEqual(rc, 0, se)
+        self.assertTrue(os.path.isfile(os.path.join(run_dir, "gather.json")))
+
+    def test_prepare_exit_4_writes_no_outputs_but_gather(self):
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        os.makedirs(run_dir)
+        phases = os.path.join(run_dir, "phases.jsonl")
+        with open(phases, "w", encoding="utf-8") as fh:
+            fh.write('{"phase":"prepare","review_id":"older"}\n')
+        base, log = make_http_server(self, default_routes())
+        rc, so, se = run_prepare(
+            ["--project", PROJECT, "--iid", MR, "--review-id", "rev-9",
+             "--run-dir", run_dir, "--verify-head", "oldsha9"], host=base)
+        self.assertEqual(rc, 4)
+        # STOP before partition/briefs/prepare.json/phases append: the
+        # journal line count is unchanged
+        with open(phases, encoding="utf-8") as fh:
+            lines = [l for l in fh.read().splitlines() if l.strip()]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertEqual(json.loads(lines[0])["review_id"], "older")
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "prepare.json")))
+
+
 if __name__ == "__main__":
     unittest.main()
