@@ -11,6 +11,13 @@ branches, subprocess timeouts (TimeoutExpired -> exit 1) with
 errors="replace" text reads, the ownerless-agent brief marker, and the
 load_gather shape-error message.
 
+Slug `prepare-prior-shape` (R2A fix1): --prior-report must accept the
+digest prior-out artifact's REAL shape — {"retrospective": <bool>,
+"prior_findings": [...]} (what omni_digest.py writes; the alias
+omni_consolidate.py reads) — and a partition.json that parses as JSON but
+lacks files/agents must map to exit 1 stage internal, never an uncaught
+KeyError.
+
 Harness conventions: copied from test_omni_prepare.py (spec section 9 — no
 cross-module test import): stdlib unittest, offline, importlib script
 loading, a silent ThreadingHTTPServer on 127.0.0.1 with daemon threads,
@@ -518,6 +525,98 @@ class PrepareEdgeCasesTests(unittest.TestCase):
         with open(wrong, "w", encoding="utf-8") as fh:
             json.dump({"no_findings": True}, fh)
         self._fatal_run(wrong, "unrecognized shape")
+
+
+class PreparePriorShapeTests(unittest.TestCase):
+    """Slug `prepare-prior-shape` (R2A fix1).
+
+    Genuinely red at this slug's base: load_prior_report accepts only a
+    bare array or {"findings": [...]}, so the digest prior-out artifact
+    ({"retrospective": <bool>, "prior_findings": [...]}) a real re-review
+    passes via --prior-report is rejected as "unrecognized shape" (exit 2);
+    and a partition.json that parses but lacks files/agents crashes
+    downstream with an uncaught KeyError instead of exit 1 stage internal.
+    """
+
+    @staticmethod
+    def _digest_prior(path):
+        """Write exactly what omni_digest.py writes to --prior-out (three
+        prior findings -> retrospective: true)."""
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"retrospective": True,
+                       "prior_findings": [{"thread_id": "t%d" % n}
+                                          for n in (1, 2, 3)]}, fh)
+        return path
+
+    def _run(self, extra=None):
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+        argv = ["--project", PROJECT, "--iid", MR, "--review-id", "shape-1",
+                "--run-dir", run_dir]
+        if extra:
+            argv += extra
+        rc, so, se = run_prepare(argv, host=base)
+        return rc, so, se, run_dir
+
+    # ── F1: the digest-written prior artifact is a valid prior report ──
+
+    def test_prepare_load_prior_report_accepts_digest_prior_out_shape(self):
+        # the alias omni_consolidate.py reads (data["prior_findings"]) must
+        # be recognized here too: ("ok", 3), not "unrecognized shape"
+        mod = load_prepare()
+        prior = self._digest_prior(
+            os.path.join(tmp_dir(self), "prior_findings.json"))
+        self.assertEqual(mod.load_prior_report(prior), ("ok", 3))
+
+    def test_prepare_prior_report_digest_artifact_full_run(self):
+        # mirror of test_prepare_prior_report_valid_summary, with the prior
+        # file being the digest's --prior-out artifact verbatim — the shape
+        # a real re-review passes when Phase 7 has not removed it yet
+        prior = self._digest_prior(
+            os.path.join(tmp_dir(self), "prior_findings.json"))
+        rc, so, se, run_dir = self._run(extra=["--prior-report", prior])
+        self.assertEqual(rc, 0, se)
+        doc = read_json(os.path.join(run_dir, "prepare.json"))
+        self.assertEqual(doc["prior_report"],
+                         {"path": prior, "findings_count": 3})
+        for n in (1, 2, 3):
+            with open(brief_path(run_dir, n), encoding="utf-8") as fh:
+                brief = fh.read()
+            with self.subTest(agent=n):
+                self.assertIn("- Prior review findings: 3 — see prior "
+                              "report", brief)
+        self.assertEqual(stdout_json(so)["prior_findings"], 3)
+
+    # ── F3: partition read-back shape check ─────────────────────────────
+
+    def test_prepare_partition_json_missing_keys_maps_exit_1_internal(self):
+        # partition.json that PARSES as JSON but lacks files/agents is a
+        # stage-internal failure: exit 1 with the pinned ONE-line stdout
+        # JSON, never an uncaught KeyError from the downstream
+        # partition["files"] access. The malformed file is planted by
+        # mocking run_partition to "succeed" (rc 0) with that output.
+        mod = load_prepare()
+        base, log = make_http_server(self, default_routes())
+        run_dir = os.path.join(tmp_dir(self), "run")
+
+        def fake_partition(gather_path, partition_path):
+            with open(partition_path, "w", encoding="utf-8") as fh:
+                json.dump({"no_files_no_agents": True}, fh)
+            return (0, "")
+
+        with mock.patch.object(mod, "run_partition",
+                               side_effect=fake_partition):
+            rc, so, se = run_prepare(
+                ["--project", PROJECT, "--iid", MR, "--review-id", "shape-2",
+                 "--run-dir", run_dir], host=base)
+        self.assertEqual(rc, 1)
+        st = stdout_json(so)   # pins exactly ONE stdout JSON line
+        self.assertIs(st["ok"], False)
+        self.assertEqual(st["error"], "prepare_failed")
+        self.assertEqual(st["stage"], "internal")
+        self.assertIn("partition", st["detail"])
+        self.assertFalse(
+            os.path.exists(os.path.join(run_dir, "prepare.json")))
 
 
 class PrepareHardeningTests(unittest.TestCase):
