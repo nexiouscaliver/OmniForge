@@ -714,5 +714,90 @@ class OmniPostReviewTests(unittest.TestCase):
         self.assertIn("OmniForge", r.stderr)
 
 
+class ProjectPathEncodingTests(unittest.TestCase):
+    """3.3.3: bare full-path --project values are URL-encoded on EVERY
+    request path the poster builds (production canary, session e18dbabb:
+    omni_post_review.py --project regenai-gitlab/regenai-digital/cleo ->
+    guard GET 404 — the fetcher got encode_project in 3.3.2, the poster
+    never did; the run recovered only by switching to the numeric ID).
+    Numeric IDs and already-encoded values pass through unchanged."""
+
+    FULL = "regenai-gitlab/regenai/regenai-base"
+    ENC = "regenai-gitlab%2Fregenai%2Fregenai-base"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
+        self.mod = load_poster_module()
+        self.transport = FakeTransport()
+        patcher = mock.patch.object(omni_glab_api, "request",
+                                    self.transport.request)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _run(self, project, findings):
+        spath = write_file(os.path.join(self.tmp, "summary.md"),
+                           "## OmniForge\n\n**Verdict:** APPROVE\n")
+        fpath = write_file(os.path.join(self.tmp, "findings.json"),
+                           json.dumps(findings))
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, run_env(), clear=True), \
+                redirect_stdout(out), redirect_stderr(err):
+            code = self.mod.main(["--mr", MR, "--project", project,
+                                  "--summary", spath,
+                                  "--findings-json", fpath,
+                                  "--backoff-base", "0"])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_poster_full_path_encoded_on_every_request(self):
+        # every path builder in one batch: guard notes GET + refs GET +
+        # summary POST + thread POST + reply POST + note POST
+        self.transport.gets[refs_path(self.ENC)] = DIFF_REFS
+        self.transport.gets[notes_list_path(self.ENC)] = []
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "body": "THREAD-BODY"},
+            {"body": "REPLY-BODY", "reply_to_thread_id": "T7"},
+            {"body": "NOTE-BODY"},
+        ]
+        code, so, se = self._run(self.FULL, findings)
+        self.assertEqual(code, 0, se)
+        self.assertEqual(len(self.transport.calls), 6, self.transport.calls)
+        for _, path, _ in self.transport.calls:
+            self.assertIn("projects/%s/merge_requests/%s" % (self.ENC, MR),
+                          path)
+            self.assertNotIn(self.FULL, path)     # never the raw slashes
+        out = json.loads([ln for ln in so.splitlines() if ln.strip()][-1])
+        self.assertEqual((out["threads"], out["replies"], out["notes"]),
+                         (1, 1, 1))
+
+    def test_numeric_project_passthrough(self):
+        self.transport.gets[refs_path(PROJECT)] = DIFF_REFS
+        self.transport.gets[notes_list_path(PROJECT)] = []
+        findings = [
+            {"file_path": "src/app.py", "line_number": 42,
+             "body": "THREAD-BODY"},
+            {"body": "NOTE-BODY"},
+        ]
+        code, so, se = self._run(PROJECT, findings)
+        self.assertEqual(code, 0, se)
+        self.assertGreater(len(self.transport.calls), 0)
+        for _, path, _ in self.transport.calls:
+            self.assertNotIn("%", path)
+
+    def test_pre_encoded_project_passthrough(self):
+        pre = "group%2Fsub%2Fproject"
+        self.transport.gets[refs_path(pre)] = DIFF_REFS
+        self.transport.gets[notes_list_path(pre)] = []
+        findings = [{"file_path": "src/app.py", "line_number": 42,
+                     "body": "THREAD-BODY"}]
+        code, so, se = self._run(pre, findings)
+        self.assertEqual(code, 0, se)
+        for _, path, _ in self.transport.calls:
+            self.assertIn("projects/group%2Fsub%2Fproject/merge_requests",
+                          path)
+            self.assertNotIn("%25", path)         # not double-encoded
+
+
 if __name__ == "__main__":
     unittest.main()

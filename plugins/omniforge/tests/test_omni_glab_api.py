@@ -271,5 +271,24 @@ class TransportRequestTests(unittest.TestCase):
         self.assertIn("***", str(cm.exception))
 
 
+class EncodeProjectTests(unittest.TestCase):
+    """3.3.3: the ONE shared project-path encoder (fetcher AND poster).
+    Same semantics the fetcher shipped in 3.3.2: numeric IDs and
+    already-encoded values pass through unchanged; a bare full path
+    quotes with safe="" so every "/" reaches GitLab as %2F."""
+
+    def test_encode_project_semantics(self):
+        eq = self.assertEqual
+        eq(omni_glab_api.encode_project("73279395"), "73279395")
+        eq(omni_glab_api.encode_project(73279395), "73279395")  # coerced
+        eq(omni_glab_api.encode_project("group%2Fsub%2Fproject"),
+           "group%2Fsub%2Fproject")                 # pre-encoded verbatim
+        eq(omni_glab_api.encode_project(
+            "regenai-gitlab/regenai/regenai-base"),
+           "regenai-gitlab%2Fregenai%2Fregenai-base")
+        eq(omni_glab_api.encode_project("group/my proj"),
+           "group%2Fmy%20proj")                     # specials quoted too
+
+
 if __name__ == "__main__":
     unittest.main()
