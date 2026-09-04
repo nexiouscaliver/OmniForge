@@ -152,6 +152,33 @@ class SkillContractTests(unittest.TestCase):
         phase7 = t.index("## Phase 7")
         self.assertIn("--verify-head", t[phase6:phase7])
 
+    # ── 3.3.2 pins ────────────────────────────────────────────────
+
+    def test_posting_guide_documents_note_entries(self):
+        # body-only findings (note entries) post as top-level MR notes via
+        # the shipped script; the raw-glab general-notes path is retired and
+        # its body-drop hazard is named as the reason
+        t = read(os.path.join("references", "posting-guide.md"))
+        self.assertIn("note entries", t)
+        self.assertIn("top-level MR notes", t)
+        self.assertIn("--input -", t)
+
+    def test_phase6_documents_note_entries(self):
+        t = read("SKILL.md")
+        phase6 = t.index("## Phase 6")
+        phase7 = t.index("## Phase 7")
+        self.assertIn("note entries", t[phase6:phase7],
+                      "Phase 6 must document note entries (body-only "
+                      "findings) as the poster's general-notes path")
+
+    def test_phase3_one_sendmessage_resume_line(self):
+        t = read("SKILL.md")
+        phase3 = t.index("## Phase 3")
+        phase4 = t.index("## Phase 4")
+        waiter = t[phase3:phase4]
+        self.assertIn("ONE SendMessage resume", waiter)
+        self.assertIn("never loop", waiter)
+
 
 if __name__ == "__main__":
     unittest.main()
