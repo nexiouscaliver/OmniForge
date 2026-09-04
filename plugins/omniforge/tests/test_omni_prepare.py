@@ -610,7 +610,8 @@ class PreparePartitionTests(unittest.TestCase):
                           "src/net.py"])
         for entry in part["files"]:
             self.assertEqual(set(entry),
-                             {"path", "added_lines", "owner", "reason"})
+                             {"path", "added_lines", "owner", "reason",
+                              "weight"})
         self.assertEqual(part["agents"]["analyst"]["files"], ["README.md"])
         self.assertEqual(part["agents"]["analyst"]["added_lines_total"], 3)
         self.assertEqual(part["agents"]["codebase"]["files"],
