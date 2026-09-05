@@ -369,19 +369,20 @@ def render_brief(agent, gather, partition, prior_count):
     lines += ["", _DEPTH_SENTENCES, "",
               "## Cross-cutting files (all %d changed files)" % files_total,
               ""]
-    if capped:
-        lines.append("Cross-cutting: all %d changed files (see "
-                     "partition.json)" % files_total)
-    elif empty_mr:
+    if empty_mr:
         lines.append(empty_marker)
     else:
-        lines.extend("- `%s`" % f["path"] for f in files)
+        # R2-D: pointer-only at ALL sizes — reviewers get the full changed
+        # file list in-prompt via {FILES_CHANGED_LIST}, and partition.json
+        # (cross_cutting_files, referenced by prepare.json) is the shared
+        # reference; the exact wording is the already-shipped cap-mode line
+        lines.append("Cross-cutting: all %d changed files (see "
+                     "partition.json)" % files_total)
     lines += [
         "",
         "## Stats",
         "",
         "- Owned: %d files / %d added lines" % (len(owned), owned_added),
-        "- Cross-cutting: %d files" % files_total,
         "- MR total: %d files / %d added lines" % (files_total, added_total),
     ]
     if prior_count is not None:

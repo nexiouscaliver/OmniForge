@@ -18,15 +18,11 @@ owned files only.
 
 ## Cross-cutting files (all 4 changed files)
 
-- `README.md`
-- `src/app.py`
-- `src/auth_check.py`
-- `src/net.py`
+Cross-cutting: all 4 changed files (see partition.json)
 
 ## Stats
 
 - Owned: 1 files / 3 added lines
-- Cross-cutting: 4 files
 - MR total: 4 files / 9 added lines
 
 ## Dispatch note

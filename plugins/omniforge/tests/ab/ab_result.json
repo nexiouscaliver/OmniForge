@@ -1,0 +1,228 @@
+{
+  "schema": "omniforge-ab-partition/1",
+  "base": "501bba3",
+  "weight_constants": {
+    "W_LANG_DEFAULT": 100,
+    "W_LANG_SECURITY": 1000,
+    "W_TEST_DEFAULT": 100,
+    "W_TEST_FILE": 50
+  },
+  "corpora": {
+    "real-or-synth": {
+      "source": "local-uncommitted-real",
+      "sha256": "23bf9b121816531535469e8d21d0123730bf495e213f35bae97c8c11ba868e7b",
+      "old": {
+        "total_weight": 338475000,
+        "w_max": 16520000,
+        "agents": {
+          "analyst": {
+            "file_count": 110,
+            "weight_total": 145280000,
+            "weight_permille_of_ideal": 1288,
+            "cap_strict": false,
+            "floor_ok": true
+          },
+          "codebase": {
+            "file_count": 108,
+            "weight_total": 146195000,
+            "weight_permille_of_ideal": 1296,
+            "cap_strict": false,
+            "floor_ok": true
+          },
+          "security": {
+            "file_count": 9,
+            "weight_total": 47000000,
+            "weight_permille_of_ideal": 417,
+            "cap_strict": true,
+            "floor_ok": false
+          }
+        },
+        "security_invariant": true,
+        "oversize_files": [],
+        "cap_pass": true,
+        "floor_pass": true,
+        "pass": true
+      },
+      "new": {
+        "total_weight": 338475000,
+        "w_max": 16520000,
+        "agents": {
+          "analyst": {
+            "file_count": 76,
+            "weight_total": 112825000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          },
+          "codebase": {
+            "file_count": 75,
+            "weight_total": 112825000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          },
+          "security": {
+            "file_count": 76,
+            "weight_total": 112825000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          }
+        },
+        "security_invariant": true,
+        "oversize_files": [],
+        "cap_pass": true,
+        "floor_pass": true,
+        "pass": true
+      },
+      "new_pass": true,
+      "oversize_files": []
+    },
+    "canary-synth": {
+      "source": "canary-synth",
+      "sha256": "ca94a1fa48a89f213f64377a47a7439dcc582ca46d3a0a3abe511c97780c96e5",
+      "old": {
+        "total_weight": 121670000,
+        "w_max": 3400000,
+        "agents": {
+          "analyst": {
+            "file_count": 110,
+            "weight_total": 55200000,
+            "weight_permille_of_ideal": 1361,
+            "cap_strict": false,
+            "floor_ok": true
+          },
+          "codebase": {
+            "file_count": 109,
+            "weight_total": 53270000,
+            "weight_permille_of_ideal": 1313,
+            "cap_strict": false,
+            "floor_ok": true
+          },
+          "security": {
+            "file_count": 9,
+            "weight_total": 13200000,
+            "weight_permille_of_ideal": 325,
+            "cap_strict": true,
+            "floor_ok": false
+          }
+        },
+        "security_invariant": true,
+        "oversize_files": [],
+        "cap_pass": false,
+        "floor_pass": false,
+        "pass": false
+      },
+      "new": {
+        "total_weight": 121670000,
+        "w_max": 3400000,
+        "agents": {
+          "analyst": {
+            "file_count": 76,
+            "weight_total": 40575000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          },
+          "codebase": {
+            "file_count": 75,
+            "weight_total": 40530000,
+            "weight_permille_of_ideal": 999,
+            "cap_strict": true,
+            "floor_ok": true
+          },
+          "security": {
+            "file_count": 77,
+            "weight_total": 40565000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          }
+        },
+        "security_invariant": true,
+        "oversize_files": [],
+        "cap_pass": true,
+        "floor_pass": true,
+        "pass": true
+      },
+      "new_pass": true,
+      "oversize_files": []
+    },
+    "security-light": {
+      "source": "security-light",
+      "sha256": "d304980c12b0f6fa17d63ff1adabdc749827f168ac628ada36fb1c8601cce5f4",
+      "old": {
+        "total_weight": 60115000,
+        "w_max": 1930000,
+        "agents": {
+          "analyst": {
+            "file_count": 60,
+            "weight_total": 31845000,
+            "weight_permille_of_ideal": 1589,
+            "cap_strict": false,
+            "floor_ok": true
+          },
+          "codebase": {
+            "file_count": 60,
+            "weight_total": 27570000,
+            "weight_permille_of_ideal": 1376,
+            "cap_strict": false,
+            "floor_ok": true
+          },
+          "security": {
+            "file_count": 2,
+            "weight_total": 700000,
+            "weight_permille_of_ideal": 35,
+            "cap_strict": true,
+            "floor_ok": false
+          }
+        },
+        "security_invariant": true,
+        "oversize_files": [],
+        "cap_pass": false,
+        "floor_pass": false,
+        "pass": false
+      },
+      "new": {
+        "total_weight": 60115000,
+        "w_max": 1930000,
+        "agents": {
+          "analyst": {
+            "file_count": 40,
+            "weight_total": 20040000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          },
+          "codebase": {
+            "file_count": 40,
+            "weight_total": 20040000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          },
+          "security": {
+            "file_count": 42,
+            "weight_total": 20035000,
+            "weight_permille_of_ideal": 1000,
+            "cap_strict": true,
+            "floor_ok": true
+          }
+        },
+        "security_invariant": true,
+        "oversize_files": [],
+        "cap_pass": true,
+        "floor_pass": true,
+        "pass": true
+      },
+      "new_pass": true,
+      "oversize_files": []
+    }
+  },
+  "overall_pass": true,
+  "notes": [
+    "old-side weights recomputed with the NEW weight function over OLD ownership (same currency)",
+    "PASS = section 8.2 admissibility rules; old side reported as baseline, no pass/fail authority",
+    "weight-space deltas are NOT real-time gains - real-cost validation is R2-E/fleet (D5/D6)"
+  ]
+}

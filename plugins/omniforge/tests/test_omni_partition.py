@@ -97,11 +97,20 @@ class TestOmniPartition(unittest.TestCase):
                      ".gitlab-ci.yml"):
             self.assertEqual(by_path[path]["owner"], "security", path)
             self.assertEqual(by_path[path]["reason"], "security-affinity", path)
-        # security owns ONLY its affinity set — never greedy overflow
-        security_files = result["agents"]["security"]["files"]
-        self.assertEqual(sorted(security_files),
-                         sorted(["src/auth.py", "migrations/001_init.sql",
-                                 ".gitlab-ci.yml"]))
+        # R2-D: security MAY receive cap-governed greedy spill; any
+        # non-affinity file it owns carries reason greedy-balance and the
+        # agent stays inside the indivisibility bound (spec section 4.2)
+        total = sum(result["agents"][a]["weight_total"] for a in AGENTS)
+        wmax = max(mod.weight(f["path"], f["added_lines"])
+                   for f in result["files"])
+        for path in result["agents"]["security"]["files"]:
+            if path not in ("src/auth.py", "migrations/001_init.sql",
+                            ".gitlab-ci.yml"):
+                self.assertEqual(by_path[path]["reason"],
+                                 "greedy-balance", path)
+        self.assertLessEqual(
+            12 * result["agents"]["security"]["weight_total"],
+            5 * total + 12 * wmax)
         for path in ("docs/README.md", "src/big.py"):
             self.assertNotEqual(by_path[path]["owner"], "security", path)
             self.assertNotEqual(by_path[path]["reason"], "security-affinity",
@@ -113,9 +122,10 @@ class TestOmniPartition(unittest.TestCase):
         data = mr({"src/alpha.py": 400, "src/beta.py": 390,
                    "src/gamma.py": 20, "src/delta.py": 10})
         result = mod.partition(data)
-        self.assertEqual(result["agents"]["security"]["files"], [])
+        # R2-D: security is a third greedy bin — totals read over ALL THREE
+        # agents (gamma+delta spill to security; security total = 30)
         totals = {a: result["agents"][a]["added_lines_total"]
-                  for a in ("analyst", "codebase")}
+                  for a in ("analyst", "codebase", "security")}
         largest = 400
         self.assertLessEqual(max(totals.values()) - min(totals.values()),
                              largest,
@@ -123,6 +133,14 @@ class TestOmniPartition(unittest.TestCase):
         self.assertEqual(sum(totals.values()), 820)   # every line counted once
         for f in result["files"]:
             self.assertEqual(f["reason"], "greedy-balance", f)
+        # 3-bin indivisibility bound in weight space (spec section 4.2)
+        wtotal = sum(result["agents"][a]["weight_total"] for a in AGENTS)
+        wmax = max(mod.weight(f["path"], f["added_lines"])
+                   for f in result["files"])
+        for a in AGENTS:
+            self.assertLessEqual(
+                12 * result["agents"][a]["weight_total"],
+                5 * wtotal + 12 * wmax, a)
 
     def test_deterministic_pure_function(self):
         mod = load_partition_module()
@@ -218,7 +236,9 @@ class TestOmniPartition(unittest.TestCase):
         result = mod.partition(data)
         by_path = {f["path"]: f for f in result["files"]}
         for path in ("docs/AUTHORS.md", "src/tokenizer.py", "src/author.py"):
-            self.assertNotEqual(by_path[path]["owner"], "security", path)
+            # R2-D: owner may legitimately be security via greedy spill (the
+            # revoked no-spill invariant); the substring guard is the REASON
+            # assertion — a false classifier hit would set security-affinity
             self.assertNotEqual(by_path[path]["reason"],
                                 "security-affinity", path)
         # underscore-compound names still hit the token list by segment
@@ -389,6 +409,199 @@ class GatherFileInputTests(unittest.TestCase):
         with open(out3, encoding="utf-8") as fh:
             self.assertEqual(fh.read(), expected,
                              "detection requires BOTH data and discussions")
+
+
+def load_ab_gather(name):
+    with open(os.path.join(os.path.dirname(__file__), "ab", name),
+              encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+class WeightModelTests(unittest.TestCase):
+    """R2-D SC-1: the per-file cost model (spec section 4.1)."""
+
+    def test_weight_formula_factors(self):
+        mod = load_partition_module()
+        self.assertEqual((mod.W_LANG_DEFAULT, mod.W_LANG_SECURITY,
+                          mod.W_TEST_DEFAULT, mod.W_TEST_FILE),
+                         (100, 1000, 100, 50))
+        self.assertEqual(mod.weight("src/app.py", 10), 10 * 100 * 100)
+        self.assertEqual(mod.weight("docs/guide.md", 10), 10 * 100 * 100)
+        self.assertEqual(mod.weight("src/auth.py", 10), 10 * 1000 * 100)
+        self.assertEqual(mod.weight("tests/test_app.py", 10), 10 * 100 * 50)
+        self.assertEqual(mod.weight("tests/test_auth.py", 10), 10 * 1000 * 50)
+        self.assertEqual(mod.weight("legacy.py", 0), 1 * 100 * 100)   # floor
+        self.assertEqual(mod.weight("src/auth.py", 0), 1 * 1000 * 100)
+
+    def test_is_test_classifier_segments(self):
+        mod = load_partition_module()
+        for yes in ("tests/test_x.py", "src/__tests__/y.ts", "test_foo.py",
+                    "x_test.py", "x_test.go", "x_test.js", "x_test.rb",
+                    "x.spec.js", "x.spec.ts", "x_spec.rb"):
+            self.assertTrue(mod.is_test(yes), yes)
+        for no in ("latest.py", "contest.py", "attest.py",
+                   "docs/testing.md", "src/contest.js"):
+            self.assertFalse(mod.is_test(no), no)
+
+    def test_weight_integer_no_floats(self):
+        mod = load_partition_module()
+        result = mod.partition(mr({"src/auth.py": 20, "src/big.py": 300,
+                                   "README.md": 40, "tests/test_x.py": 7,
+                                   "legacy.py": 0}))
+        for f in result["files"]:
+            self.assertIsInstance(f["weight"], int, f)
+        for a in AGENTS:
+            self.assertIsInstance(result["agents"][a]["weight_total"], int, a)
+
+        def _no_floats(o):
+            if isinstance(o, float):
+                return False
+            if isinstance(o, dict):
+                return all(_no_floats(v) for v in o.values())
+            if isinstance(o, list):
+                return all(_no_floats(v) for v in o)
+            return True
+        self.assertTrue(_no_floats(result))
+
+
+class WeightBalanceTests(unittest.TestCase):
+    """R2-D cap/floor/spill outcomes (spec section 7.1) on the committed
+    synthetic canary fixture (section 8.1 corpus (ii) — deterministic shape
+    control, always run)."""
+
+    def _canary(self):
+        mod = load_partition_module()
+        gather = load_ab_gather("canary_synth_gather.json")
+        return mod, gather["data"], mod.partition(gather["data"])
+
+    def test_canary_shape_228_cap_and_floor(self):
+        mod, data, result = self._canary()
+        self.assertEqual(len(data["files_changed"]), 228)
+        aff = [p for p in data["files_changed"] if mod.is_security(p)]
+        self.assertEqual(len(aff), 9)
+        total = sum(result["agents"][a]["weight_total"] for a in AGENTS)
+        for a in AGENTS:
+            wt = result["agents"][a]["weight_total"]
+            self.assertLessEqual(12 * wt, 5 * total,      # (a) strict cap
+                                 "%s over cap: %d" % (a, wt))
+            self.assertGreaterEqual(6 * wt, total,        # (b) floor
+                                    "%s starved: %d" % (a, wt))
+        by_path = {f["path"]: f for f in result["files"]}
+        for p in aff:                                     # (c) invariant
+            self.assertEqual(by_path[p]["owner"], "security", p)
+            self.assertEqual(by_path[p]["reason"], "security-affinity", p)
+
+    def test_canary_shape_third_agent_receives_scope(self):
+        mod, data, result = self._canary()
+        aff = [p for p in data["files_changed"] if mod.is_security(p)]
+        total = sum(result["agents"][a]["weight_total"] for a in AGENTS)
+        aff_w = sum(mod.weight(p, mod.added_lines(data, p)) for p in aff)
+        sec_files = result["agents"]["security"]["files"]
+        by_path = {f["path"]: f for f in result["files"]}
+        # security always owns AT LEAST its affinity set (section 3.4
+        # invariant); exact equality with the affinity set holds ONLY at
+        # affinity >= ideal. With affinity under the floor (< 0.5x ideal)
+        # greedy MUST spill to it (asserted strictly below); in [0.5x, 1.0x)
+        # ideal it is above the floor but below ideal, so greedy still
+        # spills filler to it (it is a full greedy bin). The committed
+        # fixture's draws put affinity at ~0.33x ideal — below the floor,
+        # the stronger case.
+        self.assertGreaterEqual(set(sec_files), set(aff))
+        for p in sec_files:
+            if p not in set(aff):
+                self.assertEqual(by_path[p]["reason"],
+                                 "greedy-balance", p)
+        if 6 * aff_w < total:            # affinity alone under the floor
+            self.assertGreater(len(sec_files), len(aff),
+                               "security starved but got no spill")
+        print("canary: affinity weight %d / ideal %d / security owns %d files"
+              % (aff_w, total // 3, len(sec_files)))
+
+    def test_cap_enforcement_excludes_full_bins(self):
+        mod = load_partition_module()
+        result = mod.partition(mr({"a%02d.py" % i: 10 for i in range(6)}))
+        counts = {a: len(result["agents"][a]["files"]) for a in AGENTS}
+        self.assertEqual(sorted(counts.values()), [2, 2, 2])
+        total = sum(result["agents"][a]["weight_total"] for a in AGENTS)
+        for a in AGENTS:
+            self.assertLessEqual(12 * result["agents"][a]["weight_total"],
+                                 5 * total, a)
+        # lopsided: the 400-line bin lands over cap and receives NOTHING more
+        files = {"src/big.py": 400}
+        files.update({"s%02d.py" % i: 10 for i in range(9)})
+        result2 = mod.partition(mr(files))
+        self.assertEqual(result2["agents"]["codebase"]["files"],
+                         ["src/big.py"])
+        total2 = sum(result2["agents"][a]["weight_total"] for a in AGENTS)
+        wmax = max(mod.weight(p, n) for p, n in files.items())
+        for a in AGENTS:
+            self.assertLessEqual(12 * result2["agents"][a]["weight_total"],
+                                 5 * total2 + 12 * wmax, a)  # +W_max bound
+
+    def test_affinity_overload_still_exit0(self):
+        d = tmp_dir(self)
+        src = write_json(d, "mr.json", mr({"src/auth_a.py": 200,
+                                           "src/auth_b.py": 200,
+                                           "src/auth_c.py": 200,
+                                           "src/auth_d.py": 200}))
+        out = os.path.join(d, "p.json")
+        proc = run_script(src, out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        result = load_json(out)
+        for f in result["files"]:        # no redress, no failure (section 4.2)
+            self.assertEqual(f["owner"], "security", f)
+            self.assertEqual(f["reason"], "security-affinity", f)
+            self.assertIn("weight", f)
+        self.assertIn("weight_total", result["agents"]["security"])
+
+    def test_floor_and_cap_remainder_bound(self):
+        mod = load_partition_module()
+        rng = random.Random(20260905)
+        cases = [{"files_changed": [], "diff_line_map": {}},
+                 mr({"only.py": 50}),
+                 mr({"a.py": 10, "b.py": 10}),
+                 mr({"README.md": 40, "NOTES.txt": 10, "LICENSE": 5}),
+                 mr({"src/login_handler.py": 80, "db/schema.sql": 25,
+                     ".env.example": 6})]
+        for _ in range(20):
+            n = rng.randint(1, 30)
+            # random pool: CODE/TEST ONLY — affinity preload (unbounded by
+            # design, covered by test_affinity_overload_still_exit0) and
+            # docs-pass saturation (enumerated docs-only case below) are
+            # excluded so the asserted bound is the PROVABLE remainder-pass
+            # bound. (Note "src/auth%02d.py" was never affinity-classified —
+            # segment splits to auth05 — so keeping it would only imply
+            # false coverage; it is removed.)
+            pool = ["src/mod%02d.py" % rng.randint(0, 40),
+                    "tests/test_mod%02d.py" % rng.randint(0, 40),
+                    "src/service%02d.py" % rng.randint(0, 40)]
+            files = {}
+            for _ in range(n):
+                files[rng.choice(pool)] = rng.choice(
+                    [0, 1, 3, 10, 40, 120, 300])
+            cases.append(mr(files))
+        for i, data in enumerate(cases):
+            with self.subTest(case=i):
+                first = mod.partition(data)
+                self.assertEqual(json.dumps(first),
+                                 json.dumps(mod.partition(data)))
+                owned = [p for a in AGENTS
+                         for p in first["agents"][a]["files"]]
+                self.assertEqual(sorted(owned),
+                                 sorted(data["files_changed"]))
+                total = sum(first["agents"][a]["weight_total"]
+                            for a in AGENTS)
+                if not total:
+                    continue
+                wmax = max(mod.weight(p, mod.added_lines(data, p))
+                           for p in data["files_changed"])
+                for a in AGENTS:
+                    # remainder-pass bound: provable on this pool (no
+                    # affinity preload, no docs saturation); the enumerated
+                    # docs-only and all-security cases are hand-verified
+                    self.assertLessEqual(
+                        12 * first["agents"][a]["weight_total"],
+                        5 * total + 12 * wmax, a)
 
 
 if __name__ == "__main__":
