@@ -5,6 +5,29 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-09-06
+
+Round-2 latency release — deterministic pre-dispatch, judgment-only adjudication, the fix-brief note, and a cost-weighted 3-agent partition. R2-E A/B validation verdict: **GO** (full evidence: `round2-validation.md` in the engine repo's speed-campaign artifacts).
+
+### Added
+- **`omni_prepare.py` deterministic pre-dispatch (R2-A, PR #34)** — ONE stdlib-only invocation runs the entire Phase-1 lead-in (gather file via the fetcher subprocess, partition, digest, per-agent dispatch briefs) and emits `prepare.json`, one-line machine receipts, and `phases.jsonl` `prepare` rows (measured 3.73 s / 4.05 s — O(seconds) at any MR size, replacing the improvised size-dependent gather behind the **827 s fleet-median pre-dispatch → 265 s raw / ~193 s production-equivalent** on the R2-E MR). Exit codes are a soft-fail contract: any nonzero exit falls back to the improvised Phase-1 path immediately — no retry, no STOP (proven end-to-end by the R2-E force-exit-1 probe: fallback invoked 9 s after the failure, run completed engine exit 0 with a full report)
+- **`omni_adjudicate.py` mechanical pre-pass + judgment-only Phase 5 (R2-B, PR #33)** — the worklist's mechanical rows (single-agent autos, near-dup merges, prior matches) are decided script-final without the LLM; only cross-finding and validity rows reach judgment. Phase-5 adjudication on the R2-E real MR: **239 s / 22 turns — best ever measured** (fleet median 461 s / 40 turns; W4 24–31; prior production best 20 turns), with 17 of 26 rows auto-decided and a 9-row judgment core
+- **Fix-brief note (R2-P, PR #32)** — the poster's last artifact is a self-contained "OmniForge fix brief — paste this into your coding agent" general note (template v1): frozen guard clause first, MR-intent line, then one line per new adjudicated finding (`FIXED in <short-sha> —` / `SKIPPED —` / `QUESTION —`) linking its exact `#note_<id>` thread. R2-E gate 5: 20/20 links map 1:1 to posted artifacts (0 dead links, set-equality with the new-adjudicated set); >25-findings cap exemption unit-covered; poster stdout gains `fix_brief: true`
+
+### Changed
+- **Cost-weighted 3-agent partition (R2-D, PR #35)** — `omni_partition.py` balances reviewer assignments by a per-file cost model (not file count) with a 1.25× cap and security spill: real-MR per-agent balance **1288/1296/417‰ → 1000/1000/1000‰** (76/75/76 cost units) — deterministic, ending the 2× reviewer wall skew; dispatch briefs trimmed **−51.4 %** (cross-cutting pointer + stats-bullet trim, with tripwire tests against over-trimming)
+- **SKILL.md Phases 1–3 rewritten script-first** — `omni_prepare.py` is the primary lead-in; `omni_fetch_mr.py` executes only inside prepare and at the two sanctioned `--verify-head` checkpoints (R2-E gate 2: zero double-fetch on the knob-on path)
+- Test suite 560 + 128 subtests (was 383 + 19 at 3.3.3)
+- Version bumped to 3.4.0
+
+### Validation (R2-E A/B — frozen head of MR !21, A = 3.3.3 dry vs B = Round-2 real)
+- **Verdict GO** — every functional, safety, and quality gate passed: prepare-first structure with machine receipts, no double-fetch, script-final auto rows, 8/8 planned threads anchored first-try, poster `failures: 0`, zero sleeps, zero MCP on the data path (MCP remains only for the Phase-2/7 worktree lifecycle), waiter unchanged; findings 21 vs 21 (≥70 % of baseline), every verdict flip attributed to reviewer nondeterminism — 0 attributable to the Round-2 levers
+- **Fallback probe PASS** (gate 6) — stubbed `omni_prepare.py` exiting 1 → improvised-path fallback in 9 s, no retry/STOP; run completed engine exit 0, report 23,806 bytes, harness SUCCESS
+- **Two turn-count target misses disclosed** — pre-dispatch 45 turns vs ≤10, adjudication 22 turns vs ≤12: calibration findings, not lever regressions (harness-only token friction ≈12 turns, retrospective re-render ≈8 turns absent on first reviews, agent inspection verbosity ≈25 turns — no measured arm, including the 3.3.3 baseline at 42 turns, can hit ≤10 under the local harness); **R2-F fleet telemetry is the production confirmation** — watch `phases.jsonl` `prepare` rows and Phase-5 walls
+- 3.4.x backlog (disclosed): `ADJ_ARGS` snippet ↔ argparse first-call hiccup (2-turn self-correcting tax), retrospective prepare double-gather (+4 s), fix-brief >25-cap path awaits its first real >25-findings MR
+
+---
+
 ## [3.3.3] - 2026-09-04
 
 Fix release — resolves the three findings from the 3.3.2 production canary (re-review of MR !1388, pure-deletion +0/−16).
