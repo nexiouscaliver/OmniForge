@@ -19,7 +19,7 @@ SCRIPTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 def _load(name):
     spec = importlib.util.spec_from_file_location(
-        name, os.path.join(SCRIPTS, name))
+        name, os.path.join(SCRIPTS, name + ".py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -83,7 +83,10 @@ class TestDeltaPartition(unittest.TestCase):
             "--- /dev/null\n+++ b/docs/new.md\n"
             "@@ -0,0 +1,5 @@\n"
             "+# New doc\n"
-            "+body\n")
+            "+body\n"
+            "+more\n"
+            "+lines\n"
+            "+here\n")
         findings = [
             p2_finding("f1", "claim path race", "src/auth.py", 41),
             # cross-file fix: concern about claim tokens, anchored elsewhere
@@ -173,10 +176,11 @@ class TestReanchor(unittest.TestCase):
                 "@@ -3,3 +3,3 @@\n"
                 " ctx\n"
                 "-x\n+y\n")
-        out = omni_sweep.reanchor({"file_path": "old_name.py", "line_number": 4},
+        out = omni_sweep.reanchor({"file_path": "old_name.py", "line_number": 3},
                                   diff)
         self.assertEqual(out["status"], "reanchored")
         self.assertEqual(out["file_path"], "new_name.py")
+        self.assertEqual(out["line_number"], 3)
 
     def test_unmentioned_file_passes_through(self):
         out = omni_sweep.reanchor({"file_path": "untouched.py", "line_number": 7},
@@ -266,7 +270,7 @@ class TestRenderersAndSkips(unittest.TestCase):
         self.assertIn("- Fixed since review: 1 finding", crumb)
         self.assertIn("Still open: 1", crumb)
         self.assertIn("Critical", crumb)
-        self.assertIn("New work: 4 files / 180 lines since `111111`", crumb)
+        self.assertIn("New work: 4 files / 180 lines since `11111111`", crumb)
         self.assertIn("delta review queued", crumb)
         self.assertIn("Full verification table: the report above", crumb)
 
@@ -386,11 +390,11 @@ class TestSweepEndToEndOffline(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tmp = pathlib.Path(td)
             path, git = p2_repo(tmp)
-            p2_write(path, "a.py", "x = 1\n")
+            p2_write(path, "a.py", "keep = 0\nx = 1\n")
             p2_commit(git, "base")
             reviewed = subprocess.run(["git", "-C", path, "rev-parse", "HEAD"],
                                       capture_output=True, text=True).stdout.strip()
-            p2_write(path, "a.py", "x = 2\n")
+            p2_write(path, "a.py", "keep = 0\nx = 2\n")
             p2_commit(git, "change")
             head = subprocess.run(["git", "-C", path, "rev-parse", "HEAD"],
                                   capture_output=True, text=True).stdout.strip()
