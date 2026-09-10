@@ -78,11 +78,13 @@ _PROCESS_PHRASES = (
     "one-concern-per-pr", "one concern per pr", "separable concerns",
     "bundled into one mr", "logically distinct", "insertions across",
     "required approvals", "approvals_required", "no reviewer assigned",
-    "reviewer assigned", "approval by the creator",
+    "reviewer assigned", "approval by the creator", "squash",
+    "intermediate state", "git bisect",
 )
 _DECISION_PHRASES = (
     "explicit call", "flagged to the operator", "maintainer decision",
-    "operator decision", "judgment call",
+    "operator decision", "judgment call", "needs a human call",
+    "human call", "maintainer call", "needs a maintainer",
 )
 
 # Consent reply signals, checked in order (first match wins). The decision

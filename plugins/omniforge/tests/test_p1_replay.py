@@ -38,9 +38,9 @@ class ReplayHarnessTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.proc = run_replay()
-        cls.assertEqual(cls.proc.returncode, 0,
-                        "harness failed:\n%s\n%s" % (cls.proc.stdout[-3000:],
-                                                     cls.proc.stderr[-2000:]))
+        assert cls.proc.returncode == 0, (
+            "harness failed:\n%s\n%s" % (cls.proc.stdout[-3000:],
+                                         cls.proc.stderr[-2000:]))
         # the last stdout line is the JSON payload
         cls.table = cls.proc.stdout.rstrip().splitlines()
         json_start = next(i for i, l in enumerate(cls.table) if l.startswith("{"))
@@ -48,11 +48,20 @@ class ReplayHarnessTests(unittest.TestCase):
 
     def test_harness_ran_every_fixture_run(self):
         ran = self.result["runs"]
-        self.assertEqual(len(ran), 17)  # 15 MRs, loop61+cleo1125 multi-run sets included
+        # 15 fixture MRs -> 16 adjudicated runs (cleo !1226 carries two)
+        self.assertEqual(len(ran), 16)
 
     def test_a_no_correct_run_flips_wrong(self):
         wrong = [r for r in self.result["assertions"]["a"]["mismatches"]]
         self.assertEqual(wrong, [], "previously-correct runs flipped: %s" % wrong)
+
+    def test_a_no_correct_run_flips_blocking_class(self):
+        # the release-gate form of (a): no CORRECT run may flip BLOCKED-ness,
+        # even where note-count deltas exist (full-corpus reality: 6 CLEAN<-
+        # >READY_WITH_NOTES note deltas, 0 blocking flips)
+        flips = self.result["assertions"]["a"]["blocking_flips"]
+        self.assertEqual(flips, [], "blocking-class flips on CORRECT runs: %s"
+                         % flips)
 
     def test_b_approve_despite_outstanding_no_longer_clean(self):
         res = self.result["assertions"]["b"]["cases"]
