@@ -42,20 +42,26 @@ _TEST_PATH = omni_verdict._TEST_PATH  # same test-path rule as the model
 _DOCS_PATH = omni_verdict._DOCS_PATH
 
 _HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
-_SYMBOL_CANDIDATE = re.compile(r"`([^`\s]{2,})`|([A-Za-z_][A-Za-z0-9_]{2,})")
+_SYMBOL_CANDIDATE = re.compile(r"`([^`\s]{2,})`|([A-Za-z_][A-Za-z0-9_]{4,})")
 _SYMBOL_STOPLIST = {
     "the", "and", "for", "with", "this", "that", "from", "should", "would",
     "could", "missing", "never", "still", "when", "then", "here", "there",
-    "line", "file", "code", "test", "tests", "docs", "instead", "because",
-    "return", "def", "class", "import", "true", "false", "none", "null",
-    "assert", "where", "which", "while", "these", "those", "your", "their",
-    "into", "onto", "over", "under", "after", "before", "being", "been",
-    "have", "has", "had", "will", "shall", "must", "does", "done", "made",
-    "make", "like", "just", "also", "only", "very", "much", "more", "most",
-    "some", "any", "all", "one", "two", "new", "old", "add", "added",
-    "remove", "removed", "change", "changed", "uses", "using", "used",
-    "about", "above", "below", "what", "whom", "who", "how", "why", "not",
-    "but", "can", "may", "might", "was", "were", "are", "its", "itself",
+    "line", "lines", "file", "files", "code", "test", "tests", "docs",
+    "instead", "because", "return", "class", "import", "true", "false",
+    "none", "null", "assert", "where", "which", "while", "these", "those",
+    "your", "their", "into", "onto", "over", "under", "after", "before",
+    "being", "been", "have", "has", "had", "will", "shall", "must", "does",
+    "done", "made", "make", "like", "just", "also", "only", "very", "much",
+    "more", "most", "some", "any", "all", "one", "two", "new", "old", "add",
+    "added", "remove", "removed", "change", "changed", "uses", "using",
+    "used", "about", "above", "below", "what", "whom", "who", "how", "why",
+    "not", "but", "can", "may", "might", "was", "were", "are", "its",
+    "itself", "json", "yaml", "path", "paths", "temp", "tmp", "dir",
+    "directory", "token", "tokens", "body", "note", "notes", "data",
+    "value", "values", "name", "names", "call", "calls", "multiple",
+    "single", "every", "given", "gives", "corrupt", "races", "agents",
+    "agent", "isolation", "isolate", "consolidate", "writes", "write",
+    "reading", "writes", "improvised", "step", "steps",
 }
 
 
@@ -165,12 +171,22 @@ def _finding_symbols(finding):
     return sorted(symbols)[:24]
 
 
+_HUNK_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
+
+
 def _hunk_touches_finding(hunk, finding):
     if hunk["file"] == finding.get("file_path"):
         return True
     changed = "\n".join(l for l in hunk["lines"]
                         if l.startswith(("+", "-")))
-    return any(sym in changed for sym in _finding_symbols(finding))
+    tokens = set(_HUNK_TOKEN.findall(changed))
+    for sym in _finding_symbols(finding):
+        if sym in tokens:
+            return True
+        if len(sym) >= 4 and any(
+                (sym in t or t in sym) for t in tokens if len(t) >= 4):
+            return True
+    return False
 
 
 def partition_delta(diff_text, findings):
@@ -225,6 +241,10 @@ def reanchor(finding, diff_text):
     hunks = parse_hunks(diff_text)
     path = finding.get("file_path")
     line = finding.get("line_number")
+    if path is None or line is None:
+        # unanchored finding (process/general): nothing to re-anchor
+        return {"status": "reanchored", "file_path": path,
+                "line_number": line, "reason": ""}
 
     # rename resolution: the finding's file may have been renamed
     file_hunks = [h for h in hunks
