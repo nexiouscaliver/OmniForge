@@ -1,0 +1,73 @@
+{
+ "repo": "cleo",
+ "iid": 1306,
+ "title": "fix(security): close unauthenticated API endpoints and disable public API docs by default",
+ "runs": [
+  {
+   "timestamp": "2026-08-26T18:04:54Z",
+   "gate": "REJECTED (label still current on open MR)",
+   "head_at_run": "01a2fb44c65c474a4a36269647a9874278ee5d3b",
+   "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+   "per_thread": [
+    {
+     "thread_id": "b809efd*",
+     "anchor": "PdfViewer.tsx:82",
+     "omnicheck_verdict": "APPLIED (resolved, trusted)",
+     "ground_truth": "URL.revokeObjectURL deferred via setTimeout 60_000 (line 85)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git show at head"
+    },
+    {
+     "thread_id": "9fef474*",
+     "anchor": "PdfViewer.tsx:84",
+     "omnicheck_verdict": "APPLIED (resolved, trusted)",
+     "ground_truth": "failure surfacing present (commit 01a2fb44 'surface /files auth failures')",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "commit title + head file"
+    },
+    {
+     "thread_id": "703b453*",
+     "anchor": "file_serving.py:32",
+     "omnicheck_verdict": "APPLIED (resolved, trusted)",
+     "ground_truth": "residual tracked in docs/engineering/2026-08-26-files-endpoint-auth-residual.md (referenced in file docstring)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git show at head"
+    },
+    {
+     "thread_id": "505bd88*",
+     "anchor": "settings.py:69",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "docs_enabled: bool = False default; default-off in both task defs and deploy jobs; single-flip residual remains and is disclosed by the check itself",
+     "judgment": "CORRECT_APPLY (borderline \u2014 accepted-alternative applied, residual open by agreement)",
+     "hypothesis": null,
+     "evidence": "git show 01a2fb44:SEO/backend/api/settings.py:69; run text"
+    },
+    {
+     "thread_id": "ea76cd2*",
+     "anchor": "file_serving.py:52",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "commit 1 f74b8d8d touches no frontend file (6 files: aws task defs, gitlab-ci, backend routes/settings) \u2014 broken intermediate state on deploying branch; remedy is merge-strategy (squash/rebase)",
+     "judgment": "DEFENSIBLE NH \u2014 state determinable, remedy genuinely a human merge-strategy choice",
+     "hypothesis": "H3",
+     "evidence": "git show --name-only f74b8d8d; PdfViewer/RegeneratePdf only in 5f60233d"
+    },
+    {
+     "thread_id": "7927f60*",
+     "anchor": "referral_routes.py:245",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "EXEMPT_PREFIXES at main.py:1802 contains /api/v1/invitations/ but NOT /api/v1/referral/ or /files/; whether fresh referred signups carry subscription_status in Auth0 app_metadata is runtime behavior, not diff-determinable",
+     "judgment": "WELL-FOUNDED NH \u2014 genuinely requires confirmation against a running backend",
+     "hypothesis": null,
+     "evidence": "git show 01a2fb44:SEO/backend/main.py:1802-1816"
+    }
+   ],
+   "overall": "CORRECT-in-verdicts (0 wrong), but the gate REJECTED an MR with ZERO unaddressed code findings \u2014 the block is purely 2 decision-type threads; MR has sat OPEN with omniforge::check-rejected for 11 days (no maintainer decision, no nudge target)",
+   "root_causes": [
+    "H3 (primary): fail-closed NEEDS_HUMAN on 'needs a decision, not a commit' findings with no escalation path \u2014 author-experience failure mode exactly as hypothesised"
+   ]
+  }
+ ]
+}

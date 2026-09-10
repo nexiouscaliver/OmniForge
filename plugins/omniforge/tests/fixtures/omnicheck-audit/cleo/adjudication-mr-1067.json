@@ -1,0 +1,53 @@
+{
+ "repo": "cleo",
+ "iid": 1067,
+ "title": "feat(geo): add Grok, DeepSeek and Meta AI as swap-only engines (CLEO-138)",
+ "runs": [
+  {
+   "timestamp": "2026-08-08T15:49:10.541Z",
+   "gate": "APPROVED",
+   "head_at_run": "dec0fa51d098",
+   "bot_approval": "2026-08-08T15:48:52.039Z (18s BEFORE summary note)",
+   "fc_counts": {
+    "applied": 0,
+    "silently_applied": 1,
+    "not_applied": 0,
+    "needs_human": 2
+   },
+   "per_thread": [
+    {
+     "thread_id": "e3440273",
+     "anchor": "geo eligibility (general)",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "fix present: ENGINE_COUNTRY_ALLOWLIST + engine_allowed_in_country() + country plumbed into compute_eligible_engine_types; 20+ tests incl test_meta_ai_allowed_only_in_us, test_unknown_country_fails_closed",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff cf1531bd...dec0fa51 grep country lines 104-505; test defs in test_geo_new_engines.py/test_engine_slots.py"
+    },
+    {
+     "thread_id": "49f6ea4a (overview: CI job missing for new tests)",
+     "anchor": "general",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "determinable from diff: no .gitlab-ci.yml job runs test_geo_new_engines.py (only design-doc promise of manual gate) \u2014 could have been NOT_APPLIED; process-level finding, author documented manual gate",
+     "judgment": "MISSED_CALL (quality)",
+     "hypothesis": "H3",
+     "evidence": "diff adds test files but no CI change; design doc line: tests are 'a real gate, not a formality'"
+    },
+    {
+     "thread_id": "740d4237 (staging env-var note)",
+     "anchor": "general",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "note is author-authored ops disclosure, consistent with diff; provisioning outside diff \u2014 NH defensible but non-blocking in substance",
+     "judgment": "DEFENSIBLE",
+     "hypothesis": "H3",
+     "evidence": "note body lists DEEPSEEK_API_KEY/XAI_API_KEY matching diff"
+    }
+   ],
+   "overall": "CORRECT",
+   "overall_note": "The one real code finding was genuinely fixed at head the bot approved. BUT: gate said APPROVED with 2 NEEDS_HUMAN present, contradicting documented fail-closed semantics (NEEDS_HUMAN->REJECTED) \u2014 policy deviation, not a wrong per-thread verdict.",
+   "root_causes": [
+    "OTHER: approve-despite-NEEDS_HUMAN policy deviation (H5-class gate/verdict-line inconsistency)"
+   ]
+  }
+ ]
+}

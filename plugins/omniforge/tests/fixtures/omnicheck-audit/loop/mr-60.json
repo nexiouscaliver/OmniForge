@@ -1,0 +1,1624 @@
+{
+  "meta": {
+    "iid": 60,
+    "title": "feat: cockpit process-session escape (--detach/--stop) — survives background-task daemon sweeps",
+    "state": "merged",
+    "author": "shahilkadia",
+    "created_at": "2026-08-27T19:12:06.271Z",
+    "updated_at": "2026-08-29T12:18:16.918Z",
+    "merged_at": "2026-08-29T12:18:15.957Z",
+    "labels": [
+      "omniforge::check-rejected"
+    ],
+    "source_branch": "loop/cockpit-process-session-escape",
+    "target_branch": "main",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60",
+    "sha": "9e711ee25b3c45d8a9da225893fe9fd1fb044f93",
+    "merge_commit_sha": "c90a419f76c2c53eeebad97259bc29c920819bf8",
+    "diff_refs": {
+      "base_sha": "a3a95f3dd357510ea99269ba7e0e7194a48094f6",
+      "head_sha": "9e711ee25b3c45d8a9da225893fe9fd1fb044f93",
+      "start_sha": "a3a95f3dd357510ea99269ba7e0e7194a48094f6"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success",
+    "head_pipeline": {
+      "id": 2801918739,
+      "iid": 228,
+      "project_id": 83930487,
+      "sha": "9e711ee25b3c45d8a9da225893fe9fd1fb044f93",
+      "ref": "loop/cockpit-process-session-escape",
+      "status": "success",
+      "source": "push",
+      "created_at": "2026-08-29T11:59:29.286Z",
+      "updated_at": "2026-08-29T12:09:39.572Z",
+      "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/loop-plugin/-/pipelines/2801918739",
+      "before_sha": "bba85faaf245468bdbdc2021704cef30bf45a18d",
+      "tag": false,
+      "yaml_errors": null,
+      "user": {
+        "id": 29651405,
+        "username": "shahilkadia",
+        "public_email": null,
+        "name": "Shahil Kadia",
+        "state": "active",
+        "locked": false,
+        "avatar_url": "https://secure.gravatar.com/avatar/3bf51697c0d308d3fb60da2dc503e1cef26f00236f5b746e975f9538b9c06cd1?s=80&d=identicon",
+        "web_url": "https://gitlab.com/shahilkadia"
+      },
+      "started_at": "2026-08-29T11:59:30.259Z",
+      "finished_at": "2026-08-29T12:09:39.556Z",
+      "committed_at": null,
+      "duration": 608,
+      "queued_duration": null,
+      "coverage": null,
+      "detailed_status": {
+        "icon": "status_success",
+        "text": "Passed",
+        "label": "passed",
+        "group": "success",
+        "tooltip": "passed",
+        "has_details": true,
+        "details_path": "/regenai-gitlab/regenai-digital/loop-plugin/-/pipelines/2801918739",
+        "illustration": null,
+        "favicon": "/assets/ci_favicons/favicon_status_success-8451333011eee8ce9f2ab25dc487fe24a8758c694827a582f17f42b0a90446a2.png"
+      },
+      "archived": false
+    }
+  },
+  "notes": [
+    {
+      "id": 3748391044,
+      "body": "assigned to @shahilkadia",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-27T19:12:06.387Z"
+    },
+    {
+      "id": 3748391517,
+      "body": "restored source branch `loop/cockpit-process-session-escape`",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-27T19:12:07.555Z"
+    },
+    {
+      "id": 3748750082,
+      "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis is a well-engineered 2,635-line change whose headline security claim genuinely holds — the SC-3 stdout-retention token leak was independently reproduced on the pre-fix code and confirmed closed at head, and the token never reaches disk or any process argv. The blocking problem is that **the MR's own CI gate is red and hung**: pipeline 2797637769 recorded 3 test failures in the new `tests/test_cockpit_detach.py` and then stopped emitting output at 61% over 24h ago, so `Suite: 3721 pass` describes only the local xdist gate. Beyond CI, the process layer is thin (one-sentence description, 720-char commit subjects with empty bodies, four unsquashed fixups, no independent reviewer, a cited spec that is not in the repository).\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 11 |\n| Minor | 10 |\n\n### Strengths\n\n- **SC-3 fix verified, not just claimed** — two agents independently reproduced the leak on 3.12 and confirmed `sys.stdout`-only rebind still leaks while the both-names rebind at `server.py:189-194` does not.\n- **No broken intermediate commit** — all 11 commits were built and their tests run: green and monotonically growing (136 → 181 passed).\n- **`--stop` polarity is fail-closed on every dangerous axis** — relative/wrong repo, unreadable `ps`, valueless trailing `--repo`, and pid 0/negative all refuse to signal.\n- **Docs and code kept in lockstep** by static AST pins on the command template, `docs/cockpit.md`, and both knowledge cards.\n\n### Key Concerns\n\n- **Head pipeline is red and hung** — 3 failures in `test_cockpit_detach.py`, then no trace output after test 2303/3724 (see thread).\n- **`/regenloop-ui --stop` can never work** — the template hardcodes `--detach`, which is mutually exclusive with `--stop` (see thread).\n- **`server.log` opened without `O_NOFOLLOW`** and invisible to the write-guard invariant that governs exactly this (see thread).\n- **No independent human review** on a token-handling change; both \"review rounds\" were self-reviews, and the first missed a BLOCKER against the MR's own headline invariant.\n\n### Security\n\nPosture is **maintained** on the headline claim — token handling (CSPRNG, sha256-at-rest, `compare_digest`, loopback-only, absent from argv) is intact and the token-on-disk class this MR set out to close is genuinely closed and regressively pinned. One defence-in-depth regression at the single place the change touches the filesystem raw (`server.log` `os.open` without `O_NOFOLLOW`/WriteGuard) should be fixed before merge. All 8 security findings are local-only; no remote attack path.\n\n---\n\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 21 findings above threshold*",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:52.723Z"
+    },
+    {
+      "id": 3748750175,
+      "body": "**Important** — Head pipeline is red (3 failures) and has hung for >24h\n\n**What:** Pipeline 2797637769 (head `8166a6b`) is not green. Its `pytest` job recorded three failures (trace shows `FF.F` at 16%), then stopped emitting output at 61% — test 2303 of 3724 — at 2026-08-27T19:17:05Z. It has been `running` for over 24 hours with `duration` frozen at ~315s, so `detailed_merge_status` remains `ci_still_running`.\n\nThe three failures, by trace position against the deterministic `pytest tests/ -o addopts=\"\"` collection order:\n\n- `tests/test_cockpit_detach.py::test_stop_live_detached_instance_full_teardown` (position 609)\n- `tests/test_cockpit_detach.py::test_stop_foreground_launched_without_repo_arg` (position 610)\n- `tests/test_cockpit_detach.py::test_stop_wrong_repo_root_refused` (position 612)\n\n**Why it matters:** The description states \"Full-tier gate green … Suite: 3721 pass\", but that describes the local xdist run. The MR's own gate is red. All three failing tests pass locally and in isolation (verified by replaying CI's serial ordering in a clean worktree), so they are timing/isolation-sensitive on a contended runner — exactly the failure class `.gitlab-ci.yml`'s sequential-run comment was written to avoid.\n\n**Recommendation:** Re-run the pipeline and fix the three failures. The hang is in an unrelated pre-existing test (`test_gate_runner.py::TestCowClone::test_symlink_to_directory_is_not_followed`), so a re-run may clear it — but the three failures are in this MR's own new file and need a real cause. Consider adding `--timeout` to the CI pytest invocation: with `-o addopts=\"\"` there is no per-test ceiling, so one hang blocks the pipeline indefinitely.\n\nConfidence: 95/100 | Found by: MR Analyst + trace verification",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:53.591Z"
+    },
+    {
+      "id": 3748750262,
+      "body": "**Important** — `/regenloop-ui --stop` can never work\n\n**What:** The template hardcodes `--detach` ahead of `${ARGUMENTS:-}`, and `--detach`/`--stop` sit in an `add_mutually_exclusive_group()`. Meanwhile the frontmatter `description:` — the field read to decide invocation — ends with \"Use --stop to stop the instance recorded for the repo.\"\n\n**Why it matters:** `regenloop_ui.py --detach --stop` exits 2 with a usage error (pinned by this MR's own `test_detach_and_stop_are_mutually_exclusive`). So the advertised stop flow through the command hits a bare usage error. It fails safe (nothing is signalled), but an agent following the description reaches a dead end and may fall back to an unverified `kill`.\n\n**Recommendation:**\n```bash\n# Make the template conditional, or drop --stop from the description:\n\"$PY\" \"$UI\" --detach ${ARGUMENTS:-}     # only when $ARGUMENTS has no lifecycle flag\n\"$PY\" \"$UI\" --stop [--repo <path>]      # reachable today only by reading the body\n```\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:54.652Z"
+    },
+    {
+      "id": 3748750416,
+      "body": "**Important** — `server.log` opened without `O_NOFOLLOW`, and invisible to the write-guard invariant\n\n**What:** The new log-flip path opens by raw path with `os.O_WRONLY|os.O_CREAT` (+`O_APPEND`/`O_TRUNC`), with no `O_NOFOLLOW` and no WriteGuard routing. It also `stat()`s the path before opening (TOCTOU). Every other leaf open in the cockpit write surface passes `O_NOFOLLOW` explicitly (`write_guard.py:74/104/126`). Compounding it, the INV-7 AST scanner only models `open(..., mode=)`, `Path.write_*`, `os.replace/unlink` and `shutil.*` — it never scans `os.open(...)`, so this site cannot appear in `_DOCUMENTED_WRITE_EXCEPTIONS` and cannot be caught stale.\n\n**Why it matters:** This is the one place the change touches the filesystem raw, and it silently bypasses an invariant the whole audit tooling is built around — while being invisible to the gate that enforces it. Two agents converged on this site independently.\n\n**Attack scenario:** A compromised same-user cockpit session plants a symlink at `<repo>/regenloop/local/cockpit/server.log` → `~/.bashrc`. The operator's next `--detach` appends the server's stdout+stderr to the target, and `os.chmod(log_path, 0o600)` rewrites the target's permissions; if the target exceeds 5 MiB the `O_TRUNC` arm truncates it instead. Both behaviours were confirmed by direct execution (append and truncate).\n\n**Recommendation:**\n```python\nflags |= os.O_NOFOLLOW                      # fail loudly on ELOOP rather than continuing un-flipped\n# or route through WriteGuard.append, which already carries O_NOFOLLOW + the 0600 pin\n# and add an os.open( arm to _find_writes_outside_write_guard so the next fd-level\n# exception cannot land unlisted\n```\n\nConfidence: 90/100 | Found by: Security Reviewer + Codebase Reviewer (independent convergence)",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:55.969Z"
+    },
+    {
+      "id": 3748750687,
+      "body": "**Important** — No independent human review\n\n**What:** `user_notes_count: 0`, no review threads, no reviewers, author is also assignee, and `blocking_discussions_resolved: true` is only vacuously satisfied. Both \"review rounds\" the commits describe (`6a1ddcf` \"holistic review round\", `bde92c4`/`8166a6b` \"audit-round\") are self-reviews — and the first self-review missed a BLOCKER against the MR's own headline invariant.\n\n**Why it matters:** This change touches token handling and process-lifetime signalling for a local authenticated server. That is the highest-value review surface in the repo, and it currently has zero independent eyes on it.\n\n**Recommendation:** Assign at least one reviewer before merge; given the token-handling surface, two is warranted.\n\nConfidence: 96/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:57.221Z"
+    },
+    {
+      "id": 3748750870,
+      "body": "**Important** — Every commit is a 207-720 char subject with an empty body\n\n**What:** All eleven commits pack their entire rationale into the subject line. Measured subject/body chars: `43338d2`=288/1, `c9d3aad`=343/1, `7ea373b`=397/1, `bde92c4`=720/1, `8166a6b`=598/1. `git log -1 --format=%b` returns nothing for any of them.\n\n**Why it matters:** This defeats `--oneline`, GitLab's commit list, and any tooling that parses subjects. The detail is genuinely good — it is in the wrong field.\n\n**Recommendation:** Move everything past ~72 chars into the commit body. No content needs to change, only where it lives.\n\nConfidence: 97/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:58.342Z"
+    },
+    {
+      "id": 3748751020,
+      "body": "**Important** — Four of eleven commits are fixups of earlier commits in this same MR\n\n**What:** `ef08043` explicitly carries tests `b9bf1df` (T6) failed to stage; `bde92c4` patches a defect introduced by `43338d2` (T1); `8166a6b` closes an asymmetry `ef08043` (T7) left and repairs a bug in T5's `_early_already_running`; `6a1ddcf` corrects AC-4 letters that `ef08043` wrote wrongly. The branch was never rebased before push.\n\n**Why it matters:** Each of these is a defect introduced and repaired inside the same review window. Squashing preserves the audit disclosure in the body while removing the noise from the history.\n\n**Recommendation:** Squash `ef08043` into `b9bf1df`, `bde92c4` into `43338d2`, the `8166a6b` MCP-finish hunk into `c064a85`/`0f0dd28` and its `_early_already_running` hunk into `7ea373b`, and `6a1ddcf` across its targets. Keep the audit-round disclosure as body text.\n\nConfidence: 96/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:53:59.251Z"
+    },
+    {
+      "id": 3748751157,
+      "body": "**Important** — 2,635 added lines across 12 files spans four concerns\n\n**What:** +2,635 / −76: 869 lines of production source (`regenloop_ui.py` +657, `server.py` +168, `mcp_server.py` +44), ~1,660 lines of tests, ~106 lines of docs. Well past the 500-line non-generated threshold, and at least the fourth concern the MR spans: process lifecycle, signal handling, log/stdio redirection, HTTP error lanes, and operator docs.\n\n**Why it matters:** Review quality degrades sharply at this size, and the MR's own history shows it — the first self-review pass missed a blocker.\n\n**Recommendation:** Split the client-reset error-lane work into its own MR (~74 source + ~175 test lines, only narratively coupled to the incident). Given the branch is already pushed, a documented-dependency follow-up split is acceptable.\n\nConfidence: 93/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:00.126Z"
+    },
+    {
+      "id": 3748751252,
+      "body": "**Important** — One-sentence description for a 2,635-line MR\n\n**What:** The description is a single sentence with no test plan, no breaking-changes section, no screenshots, no linked issue, and no rollback note. For an MR that changes the operator's default launch posture, that sentence is the entire review brief.\n\n**Recommendation:** Add What/Why/Approach, a manual test recipe (`--detach` launch, `--stop`, the dead-parent case), an explicit \"Behaviour changes\" list, and a link to the incident and the spec.\n\nConfidence: 92/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:00.993Z"
+    },
+    {
+      "id": 3748751440,
+      "body": "**Important** — No secret scanner runs on this diff, for an MR whose headline claim is \"token never on disk\"\n\n**What:** The workflow rules set `SAST_DISABLED: 'true'` and `SECRET_DETECTION_DISABLED: 'true'` on every non-default-branch pipeline, and the pinned `uvx ruff@0.16.2` lint gate is not a GitLab CI job at all. This branch's pipeline runs exactly two jobs: `pytest` and `validate`.\n\n**Why it matters:** The \"ruff clean\" claim in `bde92c4` is only locally attested, and no scanner corroborates the token-on-disk claim before merge. The `.gitlab-ci.yml` comment documents a `RUN_SECURITY_SCANS=true` escape hatch for exactly this case.\n\n**Recommendation:** Trigger the escape hatch for this one MR (it is what the hatch exists for), or run secret-detection on the diff locally and paste the result into the description.\n\nConfidence: 90/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:01.942Z"
+    },
+    {
+      "id": 3748751608,
+      "body": "**Important** — 55 added lines cite a numbered spec that is not in the repository\n\n**What:** Added lines cite `spec 2.1`/`2.2`, `AC-4`/`AC-8`/`AC-9`, `OQ-1`/`3`/`4`/`5`, `SC-3`/`7`/`9`, `INV-9`, `binding residual 3`/`5`, and `review finding 1`/`2`. None resolve anywhere in the tree, despite the repo's established `claudedocs/YYYY-MM-DD-<feature>-spec.md` convention.\n\n**Why it matters:** A reviewer cannot check the implementation against its acceptance criteria. The `AC-4 (c)` labels that `6a1ddcf` had to correct suggest the criteria were being handled from memory.\n\n**Recommendation:** Commit the spec (and the audit-round findings) as `claudedocs/2026-08-2X-cockpit-process-session-escape-spec.md` in this MR, or replace the numeric citations with inline statements of the requirement.\n\nConfidence: 88/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:03.150Z"
+    },
+    {
+      "id": 3748751754,
+      "body": "**Important** — Two operator-visible behaviour changes are not disclosed as behaviour changes\n\n**What:** (a) `/regenloop-ui` flips from a blocking foreground launch to detached-and-returns — `${ARGUMENTS:-}` becomes `--detach ${ARGUMENTS:-}`. (b) A foreground second launch now fails fast *before* composition instead of failing inside `serve()` — the code itself calls this \"a deliberate deviation from SC-7's byte-identical wording\" (`regenloop_ui.py:1392-1396`). Neither appears in the description, which has no behaviour-change section.\n\n**Recommendation:** State both under a \"Behaviour changes\" heading in the description.\n\nConfidence: 84/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:04.213Z"
+    },
+    {
+      "id": 3748751930,
+      "body": "**Minor** — `--stop` identity branch (ii) can signal an unrelated process, and the docs call this path fail-closed\n\n**What:** When the scanned cmdline contains no `--repo` token, identity collapses to \"the cmdline names `regenloop_ui.py` somewhere\" + \"`server.json`'s own `repo_root` equals the target\" — and `server.json` is *this repo's* file, so that second arm is effectively always true. The script-name scan accepts any whitespace-delimited token that merely *ends in* `/regenloop_ui.py`. The docstring claims the dash-prefix skip means a flag value \"can never stand in for the script\", but that only holds for the glued `--flag=value` spelling; the two-token form matches. `commands/regenloop-ui.md:43` groups this case under \"**fail-closed ceilings**\" and closes with \"Both resolve the same way: `kill <pid>`\" — it is fail-*open*.\n\n**Why it matters:** This undercuts the description's \"identity-verified --stop\" claim. Three reviewers converged on this site independently.\n\n**Attack scenario:** Not adversarial — probabilistic. A detached cockpit is SIGKILLed by a daemon sweep without annotating `server.json`; the OS recycles its pid to an unrelated same-user process whose argv mentions a path ending in `/regenloop_ui.py`. Confirmed matching: `python3 -m pytest --cov scripts/regenloop_ui.py -q`, `tail -f /var/log/regenloop_ui.py`, `vim /home/me/src/regenloop_ui.py`, `python3 /x/regenloop_ui.py`. A subsequent `--stop --repo <that repo>` SIGTERMs the innocent process. Constrained to same-user, single-pid, SIGTERM-only, and full-pid-counter-wrap likelihood.\n\n**Recommendation:**\n```python\n# Drop branch (ii) for kills — require an absolute --repo match (the detach parent\n# already guarantees its child argv carries it); or bind the pid to the record with\n# a per-launch random cookie the target holds an flock on.\n# Also require the script token to be in argv[0] position (first non-flag token).\n```\nAnd relabel doc case (b) as a documented fail-open residual; soften \"identity-verified\" to \"identity-checked with disclosed residuals\".\n\nConfidence: 100/100 | Found by: Security Reviewer + Codebase Reviewer + MR Analyst (3-way convergence)",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:05.180Z"
+    },
+    {
+      "id": 3748752216,
+      "body": "**Minor** — A log-flip failure kills the child silently after the parent has already reported success\n\n**What:** `on_ready(launch_url)` runs *before* `serve()`'s `try:` block, so any exception from the detach flip (`_open_server_log` → `os.open`/`os.chmod`/`mkdir` on a read-only checkout, ENOSPC, ELOOP) escapes uncaught: `httpd.server_close()` and the `stopped_at` annotation are skipped, and the traceback goes to stderr — which is the ready pipe whose only reader (the parent) has already exited.\n\n**Why it matters:** The feature's primary action reports success while the server is gone, with zero diagnosability — the log that would have held the traceback is the thing that failed to open. Both reviewers reproduced this end-to-end against the real script (parent → rc=0 + a valid-looking URL; child → dead; `server.json` → no `stopped_at`; follow-up `--stop` → exit 0 \"nothing to stop\"). Self-heals on relaunch, which makes it easy to miss.\n\n**Recommendation:**\n```python\n# Move the on_ready call inside the existing try: so the finally annotation and\n# server_close() always run. Then record flip failure durably — the child still\n# holds the flock, so writing a \"flip_error\" field into server.json (or a\n# .flip-error breadcrumb beside it) is cheap and visible to --stop and the operator.\n```\n\nConfidence: 95/100 | Found by: Security Reviewer + Codebase Reviewer (independently reproduced)",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:06.689Z"
+    },
+    {
+      "id": 3748752500,
+      "body": "**Minor** — `test_serve_url_print_survives_broken_pipe_stdout` permanently rebinds `sys.__stdout__` in the test process\n\n**What:** The test drives the real `BrokenPipeError` branch of `_print_stdout_guarded`, which reassigns both `sys.stdout` and `sys.__stdout__`. `monkeypatch` restores only `sys.stdout` (the name it patched), never `sys.__stdout__`. Verified by identity probe: after an equivalent test runs, `sys.__stdout__ is not ORIG[\"dunder\"]` → `True`, and it is a fresh fd-1 `TextIOWrapper` for the remainder of that pytest worker.\n\n**Why it matters:** Production code reassigning `sys.__stdout__` is correct and intentional; the gap is that no test contains it. This leaves permanent, order-dependent global state — any later test that reads, asserts on, or writes `sys.__stdout__` sees a real fd-1 wrapper instead of the original object, bypassing capture. Silent and worker-dependent.\n\n**Recommendation:**\n```python\nmonkeypatch.setattr(sys, \"__stdout__\", saved_dunder)   # snapshot before the call\n# or wrap the call in try/finally that reasserts both names\n```\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:08.041Z"
+    },
+    {
+      "id": 3748752661,
+      "body": "**Minor** — Conventional-commit scope is the branch name, not a module\n\n**What:** All eleven commits use `feat(loop/cockpit-process-session-escape)`. Repo convention on `main` uses module scopes (`fix(cockpit)`, `docs(knowledge)`, `fix(ui)`). `6a1ddcf` is also typed `feat:` for what is a review-fix/refactor round, and `ef08043` says \"killpg teardown hardening\" while its only changed file is a test file — the production `killpg` sites (`session.py:1433`, `control_probe.py:531`) are untouched.\n\n**Recommendation:** Use `feat(cockpit)` / `feat(ui-launcher)`; type `6a1ddcf` as `refactor`/`fix`; clarify T7's subject as tests-only.\n\nConfidence: 85/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:09.186Z"
+    },
+    {
+      "id": 3748752835,
+      "body": "**Minor** — Write-guard line-number pins re-pinned in four separate commits inside this one MR\n\n**What:** The line-number exception pins were re-pinned in `43338d2`, `c9d3aad`, `7ea373b` and `bde92c4`: `server.py` mkdir 156 → 220 → 238, and `regenloop_ui.py` unlink 309/325 → 317/333 → 329/345 → 336/352. Every insertion above those lines in this MR broke the pins again.\n\n**Why it matters:** That churn is generated by the pin design, not by real drift — it will tax every future MR that touches these files.\n\n**Recommendation:** Pin by a stable anchor (nearest `def`/class name, or an AST lookup) instead of absolute line numbers.\n\nConfidence: 82/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:10.103Z"
+    },
+    {
+      "id": 3748753008,
+      "body": "**Minor** — The client-reset error-lane work is independently mergeable\n\n**What:** The RST/`OSError` error-lane work (T2/T3 and half of `8166a6b`) touches only `mcp_server.py` handle/finish/handle_error and `server.py` `finish()` — ~74 source lines plus ~175 test lines. Its only coupling to the detach incident is narrative. `c064a85` and `0f0dd28` do not touch `regenloop_ui.py` at all.\n\n**Recommendation:** Split before merge, or note the dependency explicitly in the description.\n\nConfidence: 80/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:11.275Z"
+    },
+    {
+      "id": 3748753188,
+      "body": "**Minor** — The motivating incident is cited nine times but has no record in the repository\n\n**What:** The 2026-08-26 incident is this MR's reason to exist and is cited nine times, but there is no postmortem in `docs/` or `claudedocs/` and no linked issue. Two of the citations are load-bearing operator instructions — this line asserts a specific mechanism (\"machine-wide process-group SIGKILL sweeps\") and a specific timing (\"killed a cockpit and an unrelated watcher in another session, 13 s apart\") with nothing to verify against.\n\n**Recommendation:** Link the incident record from the description, or commit a short postmortem alongside the spec.\n\nConfidence: 78/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:12.325Z"
+    },
+    {
+      "id": 3748753403,
+      "body": "**Minor** — \"Suite: 3721 pass\" is not reproducible as stated\n\n**What:** In a clean POSIX/Python 3.12 environment with the CI dependency set, the full suite at head yields **3712 passed, 13 skipped, 859 subtests passed** — 9 short of the claimed 3721. The gap is plausibly environment-dependent skips, so this is not evidence of a false claim, but the number is unverifiable as written. \"Full-tier gate green\" is likewise self-attested: no gate-runner report is attached and no CI job runs the gate runner.\n\n**Recommendation:** Attach the gate report JSON, or state the count with its skips (\"3712 pass / 13 skipped\") so it is checkable.\n\nConfidence: 72/100 | Found by: MR Analyst",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:13.536Z"
+    },
+    {
+      "id": 3748753620,
+      "body": "**Minor** — The parent's URL print is not BrokenPipe-guarded, unlike the child's\n\n**What:** The `--detach` parent echoes the tokenised URL and relays child lines with bare `print(...)` / `print(file=sys.stderr)`. The child's equivalent write is BrokenPipe-guarded (`_print_stdout_guarded`); the parent's is not, even though the parent's stdout is precisely the tool-captured pipe most likely to lose its reader.\n\n**Why it matters:** Asymmetric with this MR's own SC-3 thesis. The child keeps serving (no orphan), but the operator loses the one URL print and gets a traceback instead of silence.\n\n**Recommendation:**\n```python\n# Route the parent's URL print through _print_stdout_guarded (move it, or a small\n# wrapper, into server.py), and swallow BrokenPipeError on the relay path.\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:14.496Z"
+    },
+    {
+      "id": 3748753897,
+      "body": "**Minor** — Three new detach paths have no test\n\n**What:** Coverage is genuinely strong (19 real-subprocess tests), but three paths are untested: (a) the parent→child forwarding of `--heartbeat-interval` — only the argparse→`serve()` hop is unit-tested, and the `str()` round-trip in the child argv is unpinned; (b) the non-numeric / non-positive `REGENLOOP_DETACH_READY_TIMEOUT` `_fail` branch; (c) `--stop`'s 30 s cap exit-1 path — the message is documented but never exercised.\n\n**Why it matters:** (a) is the only place the parent and child contracts meet and is currently guarded by nothing but inspection.\n\n**Recommendation:** Add a cheap assertion to an existing detach test — read `--heartbeat-interval` out of `/proc/<pid>/cmdline`, or assert the observed mtime cadence after a `--detach --heartbeat-interval 0.2` launch.\n\nConfidence: 70/100 | Found by: Codebase Reviewer",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-27T19:54:15.776Z"
+    },
+    {
+      "id": 3750643818,
+      "body": "mentioned in commit 2c4a2b1b2ebe83a7e4e5936a6bae79c21d20381b",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T06:11:52.793Z"
+    },
+    {
+      "id": 3750643879,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17#b8cd6b109f8220bcfc4a809a7a44a18f1766a7da_31_31)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T06:11:53.804Z"
+    },
+    {
+      "id": 3750643903,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17#1f21286386b15cdda1268c7e3aed2d5fdd476c63_1028_1028)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T06:11:54.274Z"
+    },
+    {
+      "id": 3750643926,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17#9c093fca95d238ec6cb793c7a42102cb05afd909_1080_1093)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T06:11:54.671Z"
+    },
+    {
+      "id": 3750643947,
+      "body": "added 2 commits\n\n<ul><li>2c4a2b1b - fix(loop/cockpit-process-session-escape): MR !60 omnireview round — CI red...</li><li>bba85faa - fix(loop/cockpit-process-session-escape): verifier polish round —...</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T06:11:54.990Z"
+    },
+    {
+      "id": 3750647705,
+      "body": "changed the description",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T06:12:52.406Z"
+    },
+    {
+      "id": 3750651334,
+      "body": "**Verdict RESPONSE_CHANGES addressed:** every actionable finding is fixed in 2c4a2b1 (+ polish bba85fa), pushed with green pre-push gates (3 gates, 0 skipped, 14 files vs base). Code/security/process findings: see the individual thread replies. History-shape findings (long subjects, fixup commits, scope naming, MR size): acknowledged with reasoning on their threads — this branch is pushed and the no-force-push policy holds, so no history rewrite. The MR description now carries the behaviour-changes, test-plan and residuals sections; docs/cockpit-process-session-escape.md records the incident, the identifier legend, and the residual list.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:16.658Z"
+    },
+    {
+      "id": 3750651364,
+      "body": "**Fixed in 2c4a2b1.** Root cause of the three red tests: the runner image (python:3.12-slim) ships without procps — `ps` does not exist, so every identity check failed closed as 'no command line readable'. `_cmdline_for_pid` now reads `/proc/<pid>/cmdline` first (NUL-split, whitespace-joined; unit-pinned with a missing-ps simulation) and keeps `ps` as the macOS/BSD fallback — zero behavior change locally. The hang is a pre-existing unrelated test (`test_gate_runner.py::TestCowClone::test_symlink_to_directory_is_not_followed`); no pytest-timeout dependency exists in the CI set and adding one is out of this MR's scope — noted as a CI-hardening follow-up for the maintainers.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:17.404Z"
+    },
+    {
+      "id": 3750651408,
+      "body": "**Fixed in 2c4a2b1 + bba85fa.** The template now routes on a word-boundary glob — `case \" ${ARGUMENTS:-} \" in *\" --stop \"*) exec \"$PY\" \"$UI\" ${ARGUMENTS:-} ;; *) exec \"$PY\" \"$UI\" --detach ${ARGUMENTS:-} ;; esac` — so a token merely *containing* `--stop` cannot misroute a launch into the foreground, `/regenloop-ui --stop` reaches the real stop path, and `--detach` remains the default launch posture.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:18.110Z"
+    },
+    {
+      "id": 3750651469,
+      "body": "**Fixed in 2c4a2b1.** (1) `os.O_NOFOLLOW` added to the server.log open — the symlink-plant append/chmod/truncate scenario now fails loudly with ELOOP, which lands in serve()'s new `flip_error` annotation instead of writing anywhere unexpected. (2) The scanner gap is closed structurally: `_find_writes_outside_write_guard` gained an `os.open(` arm, and both in-scope sites (server.py:239 flock bootstrap, regenloop_ui.py:864 log flip) are now rows in `_DOCUMENTED_WRITE_EXCEPTIONS` — the set-equality test enforces both directions (undocumented AND stale). (3) The stat-then-open TOCTOU is bounded by O_NOFOLLOW: the only swappable fact is trunc-vs-append, never the target.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:18.816Z"
+    },
+    {
+      "id": 3750651501,
+      "body": "**Acknowledged.** Human review is the operator's call — the MR is now in the shape intended for it (findings fixed, description complete, residuals documented). Assigning reviewers is out of scope for an automated round.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:19.592Z"
+    },
+    {
+      "id": 3750651517,
+      "body": "**Acknowledged, not rewriting.** The subjects are deliberately self-contained (this repo's gate receipts cite commits by subject), but the body-vs-subject split is a fair ask — future MRs on this repo will use short subjects with rationale bodies. Rewriting these eleven pushed commits requires a force-push, which this workflow never does.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:20.221Z"
+    },
+    {
+      "id": 3750651543,
+      "body": "**Acknowledged, kept.** `ef08043` and the audit/review-round commits each carry an honest combined message naming exactly what rides along. Squashing them means rewriting pushed history (force-push) — declined by policy; the per-commit gate receipts in the subjects are the audit trail.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:20.895Z"
+    },
+    {
+      "id": 3750651577,
+      "body": "**Acknowledged.** The four concerns (detach lifecycle, stop/identity, error lanes, docs/cards) were one goal's task graph; splitting them now requires the same history rewrite declined above. The error-lane subset being independently mergeable is noted as the template for future decomposition.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:21.797Z"
+    },
+    {
+      "id": 3750651616,
+      "body": "**Fixed.** Description rewritten with explicit sections — What / Behaviour changes / Security / Test plan / Residuals / thread disposition — behaviour changes are now a dedicated section (see also the next thread), the test plan states per-mode counts, and residuals link docs/cockpit-process-session-escape.md.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:22.571Z"
+    },
+    {
+      "id": 3750651636,
+      "body": "**Answered, not changed here.** SAST/SECRET_DETECTION are disabled by this repo's own CI workflow rules — re-enabling instance-level scanners is an infra decision for the maintainers, not a property of this diff. What this MR does enforce, in-suite: the whole-tree `rglob` byte-scan asserting the live token appears in NO file under the repo, including the buffered-stdout retention regression that was empirically leaking into server.log before the audit round.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:23.249Z"
+    },
+    {
+      "id": 3750651659,
+      "body": "**Fixed in 2c4a2b1.** docs/cockpit-process-session-escape.md is now in the repo: the SC/AC/OQ/INV legend the 55 cited lines reference, the incident record, the audit/review-round history, and the residuals — linked from docs/cockpit.md §9.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:23.859Z"
+    },
+    {
+      "id": 3750651687,
+      "body": "**Fixed.** The description's new 'Behaviour changes (operator-visible)' section discloses both: (1) `/regenloop-ui` flips from blocking-foreground to detached-and-returns (foreground still available via the script directly); (2) `--stop` becomes a routed first-class invocation. Also covered in docs/cockpit-process-session-escape.md.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:24.524Z"
+    },
+    {
+      "id": 3750651717,
+      "body": "**Fixed in 2c4a2b1.** Identity is now POSITIONAL: the script token must be the first non-flag token, or the second behind a `python*` interpreter — so `pytest --cov scripts/regenloop_ui.py` (the old two-token ceiling, now closed and pinned), `tail -f /var/log/regenloop_ui.py`, and `vim …/regenloop_ui.py` are all refused; wrapper launches (sudo, uv run) fail closed. What remains in branch (ii) is relabeled honestly: the docs now separate fail-closed ceilings from the fail-open residual (recycled pid into an argv that *starts* like a launch — same-user, SIGTERM-only, pid-counter-wrap likelihood), and 'identity-verified' claims were softened to 'identity-checked' with the residual disclosed.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:25.217Z"
+    },
+    {
+      "id": 3750651754,
+      "body": "**Fixed in 2c4a2b1.** `on_ready(launch_url)` now runs INSIDE serve()'s try: an OSError from the flip (read-only checkout, ENOSPC, ELOOP off the new O_NOFOLLOW) sets `stop_reason: flip_error:<ExceptionTypeName>` into server.json (written through the still-held flock fd), then re-raises — server_close() and the annotation always run, the child exits non-zero instead of silently, and the next launch's pre-check ignores the annotated file. Pinned by test_serve_flip_failure_annotates_and_closes (asserts stopped_at + stop_reason == 'flip_error:OSError' + server_close ran).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:26.154Z"
+    },
+    {
+      "id": 3750651804,
+      "body": "**Fixed in 2c4a2b1.** The test now snapshots `sys.__stdout__` before the call and re-asserts it in a finally (with an `is` check after), so the rebinding is contained to the test regardless of the assertion outcome.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:26.891Z"
+    },
+    {
+      "id": 3750651841,
+      "body": "**Acknowledged, not rewriting.** The branch-slug scope was this goal's commit convention. Future commits will use a module scope (`feat(cockpit): …`). Changing pushed subjects requires force-push — declined.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:27.835Z"
+    },
+    {
+      "id": 3750651863,
+      "body": "**Acknowledged as the design working.** Each commit in a branch must leave the table exact — re-pinning per commit is what keeps every intermediate SHA suite-green (the table's own comment documents the convention). The alternative (one final re-pin commit) would leave intermediate commits red against their own invariants.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:28.565Z"
+    },
+    {
+      "id": 3750651897,
+      "body": "**Acknowledged for future decomposition.** Same history-rewrite constraint as the MR-size thread; the error-lane subset is the named candidate for extraction next time.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:29.444Z"
+    },
+    {
+      "id": 3750651916,
+      "body": "**Fixed in 2c4a2b1.** The incident now has an in-repo record: docs/cockpit-process-session-escape.md — the forensic trail (daemon process-group sweeps, cross-session 13 s correlation, kernel-kill exclusions, traceback-as-symptom) and why process-session escape is the structural fix.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:30.125Z"
+    },
+    {
+      "id": 3750651976,
+      "body": "**Fixed in 2c4a2b1 + description.** The description now states per-mode counts: 3727 passed / 4 skipped / 859 subtests locally (xdist) and 21/21 for the detach file in CI's exact serial mode, and explains the pass-count delta as environment-dependent skips rather than claiming a single environment-free number. The gate-report JSONs live under regenloop/local/regression/… (gitignored orchestrator state) — the description cites their verdicts and SHAs instead of attaching them.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:31.159Z"
+    },
+    {
+      "id": 3750652011,
+      "body": "**Fixed in 2c4a2b1.** The parent's URL echo, the child-line relay, and the timeout message are each BrokenPipe-guarded now (the asymmetry with the child's `_print_stdout_guarded`). The child keeps serving and the browser still opens when the tool-captured pipe loses its reader; return codes are unchanged and the echo remains exactly-once.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:32.105Z"
+    },
+    {
+      "id": 3750652033,
+      "body": "**Fixed in 2c4a2b1 — all three paths pinned.** (a) test_detach_forwards_heartbeat_interval_to_child asserts the observed server.json mtime cadence after `--detach --heartbeat-interval 0.2`; (b) test_detach_non_numeric_ready_timeout_fails_named pins the named _fail branch; (c) test_stop_cap_exit1_message exercises the cap exit-1 path via module-constant bounds shrunk to 0.3 s/0.6 s (the constants are now the test seam).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:14:32.838Z"
+    },
+    {
+      "id": 3756216030,
+      "body": "/omnicheck",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T10:43:18.893Z"
+    },
+    {
+      "id": 3756295208,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe MR still has no assigned reviewers (`reviewers: []`) with the author as sole assignee, and nothing in the changes adds an independent review of the token-handling and process-signalling surface; the reply defers reviewer assignment to the operator.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:34.502Z"
+    },
+    {
+      "id": 3756295675,
+      "body": "This concern appears unaddressed in the latest changes.\n\nAll 13 commits on the branch still carry 204-1578-character subjects with empty bodies (`git log --format=%b` returns nothing for every one), including the two pushed after this review; the reply declines the split because it would require a force-push.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:51.942Z"
+    },
+    {
+      "id": 3756295693,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe cited fixup commits (`ef08043`, `bde92c4`, `8166a6b`, `6a1ddcf`) remain unsquashed and the response round added two further stacked commits (`2c4a2b1`, `bba85fa`) rather than folding them in; the reply declines the rewrite because it would require a force-push.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:52.728Z"
+    },
+    {
+      "id": 3756295706,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe branch still spans all four concerns in one MR, now 3,011 insertions across 14 files, and the client-reset error-lane work has not been extracted into its own change; the reply defers the decomposition to a future MR.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:53.268Z"
+    },
+    {
+      "id": 3756295721,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`.gitlab-ci.yml` is unchanged and the current pipeline still runs only `validate` and `pytest`, so no SAST or secret-detection job covers this diff and no local scan result is recorded; the in-suite token byte-scan is a test assertion rather than the scanner run this asked for.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:53.800Z"
+    },
+    {
+      "id": 3756295731,
+      "body": "This concern appears unaddressed in the latest changes.\n\nEvery commit, including the two added after this review, still uses the branch-slug scope rather than a module scope, and `ef08043`'s subject is unchanged; the reply declines the rewrite because it would require a force-push.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:54.359Z"
+    },
+    {
+      "id": 3756295738,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`_DOCUMENTED_WRITE_EXCEPTIONS` still pins absolute line numbers, and the response round re-pinned them again instead of switching to a stable anchor such as the nearest `def` or class name; the reply accepts the churn as the pin design working as intended.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:54.943Z"
+    },
+    {
+      "id": 3756295746,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe error-lane hunks (`mcp_server.py` `handle`/`finish`/`handle_error` and `server.py` `finish()`) and their tests are still part of this MR; no split has landed and no dependency note for that specific extraction was added.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:12:55.627Z"
+    },
+    {
+      "id": 3756298363,
+      "body": "## Follow-up Check — MR !60\n\nRe-checked every review thread against the branch at `bba85fa` (the current head) and against the MR description and CI state.\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 14 |\n| ✗ Not Applied | 8 |\n| ? Needs Human | 0 |\n\nAll 14 verified findings were open threads whose substance is now in the branch, though none were marked resolved. Confirmed at head: the `--stop` word-boundary route in `commands/regenloop-ui.md:35-37`; `os.O_NOFOLLOW` on the `server.log` flip (`scripts/regenloop_ui.py:859`) plus the new `os.open(...)` scanner arm and both `_DOCUMENTED_WRITE_EXCEPTIONS` rows; the positional `--stop` identity check with the fail-open residual relabelled; `on_ready` inside `serve()`'s `try` with the `flip_error:<type>` annotation; the `/proc/<pid>/cmdline` primary in `_cmdline_for_pid`; the parent-side `BrokenPipeError` guards on the URL echo, relay and timeout message; the `sys.__stdout__` snapshot/restore containment; the three previously untested paths (`test_detach_forwards_heartbeat_interval_to_child`, `test_detach_non_numeric_ready_timeout_fails_named`, `test_stop_cap_exit1_message`); and the in-repo spec legend and 2026-08-26 incident record in `docs/cockpit-process-session-escape.md`, linked from `docs/cockpit.md`. The red-and-hung CI gate is cleared: pipeline 2798781090 at this head is green (`pytest` 573s, `validate` clean). The description now carries the behaviour-changes, test-plan and residuals sections.\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #3835455 | general | No independent human reviewer on a token-handling and process-signalling change |\n| #8865ded | general | Every commit carries 204-1578 chars of rationale in the subject with an empty body |\n| #faa753d | general | Four commits are fixups of earlier commits in this same MR and were never squashed |\n| #333e097 | general | 3,011 added lines across 14 files span four concerns; the error-lane work was not split out |\n| #12566c4 | general | No secret scanner runs on this diff - SAST and SECRET_DETECTION stay disabled in CI |\n| #b8ae625 | general | Conventional-commit scope is the branch name rather than a module |\n| #a3408e8 | tests/test_cockpit_invariants.py:576 | Write-guard exception pins use absolute line numbers re-pinned per commit |\n| #b30c804 | general | The client-reset error-lane work is independently mergeable and remains in this MR |\n\nEach of these now has an individual reply on its own thread. They are the items this MR's author explicitly declined or deferred rather than omitted silently: the history-shape asks (commit subjects, fixup squashes, commit scopes) would need a force-push on a pushed branch, and reviewer assignment plus instance-level scanner enablement sit with the maintainers. They still need a maintainer's judgement before merge - the reviewer thread and the absent secret scan are the two with real risk attached, given the change's headline claim is about token handling.\n\nNote: the thread containing only the `/omnicheck` command is the trigger for this check, not a review finding, and is excluded from the table above.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T11:14:23.526Z"
+    },
+    {
+      "id": 3756366402,
+      "body": "mentioned in commit 9e711ee25b3c45d8a9da225893fe9fd1fb044f93",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T11:59:28.499Z"
+    },
+    {
+      "id": 3756366419,
+      "body": "added 22 commits\n\n<ul><li>bba85faa...a3a95f3d - 21 commits from branch <code>main</code></li><li>9e711ee2 - merge: origin/main into loop/cockpit-process-session-escape (resolve MR !60 conflicts)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1992091802&start_sha=bba85faaf245468bdbdc2021704cef30bf45a18d)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T11:59:30.122Z"
+    },
+    {
+      "id": 3756397374,
+      "body": "mentioned in commit c90a419f76c2c53eeebad97259bc29c920819bf8",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T12:18:16.327Z"
+    },
+    {
+      "id": 3770297560,
+      "body": "mentioned in commit e10b2ae42782b516f15c5ec99225430ff14a5293",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-09-01T15:16:50.278Z"
+    },
+    {
+      "id": 3770299490,
+      "body": "mentioned in merge request !63",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-09-01T15:17:13.025Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "68e906f5fe4674833a8911f9a9aa42da1f5d5199",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3748391044,
+          "body": "assigned to @shahilkadia",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-27T19:12:06.387Z"
+        }
+      ]
+    },
+    {
+      "id": "944252b911d0b61fd479674a57330b556ae3c788",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3748391517,
+          "body": "restored source branch `loop/cockpit-process-session-escape`",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-27T19:12:07.555Z"
+        }
+      ]
+    },
+    {
+      "id": "be8f47f6b45bd50995df841152f7e10f7b646e5d",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748750082,
+          "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis is a well-engineered 2,635-line change whose headline security claim genuinely holds — the SC-3 stdout-retention token leak was independently reproduced on the pre-fix code and confirmed closed at head, and the token never reaches disk or any process argv. The blocking problem is that **the MR's own CI gate is red and hung**: pipeline 2797637769 recorded 3 test failures in the new `tests/test_cockpit_detach.py` and then stopped emitting output at 61% over 24h ago, so `Suite: 3721 pass` describes only the local xdist gate. Beyond CI, the process layer is thin (one-sentence description, 720-char commit subjects with empty bodies, four unsquashed fixups, no independent reviewer, a cited spec that is not in the repository).\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 11 |\n| Minor | 10 |\n\n### Strengths\n\n- **SC-3 fix verified, not just claimed** — two agents independently reproduced the leak on 3.12 and confirmed `sys.stdout`-only rebind still leaks while the both-names rebind at `server.py:189-194` does not.\n- **No broken intermediate commit** — all 11 commits were built and their tests run: green and monotonically growing (136 → 181 passed).\n- **`--stop` polarity is fail-closed on every dangerous axis** — relative/wrong repo, unreadable `ps`, valueless trailing `--repo`, and pid 0/negative all refuse to signal.\n- **Docs and code kept in lockstep** by static AST pins on the command template, `docs/cockpit.md`, and both knowledge cards.\n\n### Key Concerns\n\n- **Head pipeline is red and hung** — 3 failures in `test_cockpit_detach.py`, then no trace output after test 2303/3724 (see thread).\n- **`/regenloop-ui --stop` can never work** — the template hardcodes `--detach`, which is mutually exclusive with `--stop` (see thread).\n- **`server.log` opened without `O_NOFOLLOW`** and invisible to the write-guard invariant that governs exactly this (see thread).\n- **No independent human review** on a token-handling change; both \"review rounds\" were self-reviews, and the first missed a BLOCKER against the MR's own headline invariant.\n\n### Security\n\nPosture is **maintained** on the headline claim — token handling (CSPRNG, sha256-at-rest, `compare_digest`, loopback-only, absent from argv) is intact and the token-on-disk class this MR set out to close is genuinely closed and regressively pinned. One defence-in-depth regression at the single place the change touches the filesystem raw (`server.log` `os.open` without `O_NOFOLLOW`/WriteGuard) should be fixed before merge. All 8 security findings are local-only; no remote attack path.\n\n---\n\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 21 findings above threshold*",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:52.723Z"
+        },
+        {
+          "id": 3750651334,
+          "body": "**Verdict RESPONSE_CHANGES addressed:** every actionable finding is fixed in 2c4a2b1 (+ polish bba85fa), pushed with green pre-push gates (3 gates, 0 skipped, 14 files vs base). Code/security/process findings: see the individual thread replies. History-shape findings (long subjects, fixup commits, scope naming, MR size): acknowledged with reasoning on their threads — this branch is pushed and the no-force-push policy holds, so no history rewrite. The MR description now carries the behaviour-changes, test-plan and residuals sections; docs/cockpit-process-session-escape.md records the incident, the identifier legend, and the residual list.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:16.658Z"
+        }
+      ]
+    },
+    {
+      "id": "96a796ec523cb5c54a9c86e0dc9ee230f43cd0b7",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748750175,
+          "body": "**Important** — Head pipeline is red (3 failures) and has hung for >24h\n\n**What:** Pipeline 2797637769 (head `8166a6b`) is not green. Its `pytest` job recorded three failures (trace shows `FF.F` at 16%), then stopped emitting output at 61% — test 2303 of 3724 — at 2026-08-27T19:17:05Z. It has been `running` for over 24 hours with `duration` frozen at ~315s, so `detailed_merge_status` remains `ci_still_running`.\n\nThe three failures, by trace position against the deterministic `pytest tests/ -o addopts=\"\"` collection order:\n\n- `tests/test_cockpit_detach.py::test_stop_live_detached_instance_full_teardown` (position 609)\n- `tests/test_cockpit_detach.py::test_stop_foreground_launched_without_repo_arg` (position 610)\n- `tests/test_cockpit_detach.py::test_stop_wrong_repo_root_refused` (position 612)\n\n**Why it matters:** The description states \"Full-tier gate green … Suite: 3721 pass\", but that describes the local xdist run. The MR's own gate is red. All three failing tests pass locally and in isolation (verified by replaying CI's serial ordering in a clean worktree), so they are timing/isolation-sensitive on a contended runner — exactly the failure class `.gitlab-ci.yml`'s sequential-run comment was written to avoid.\n\n**Recommendation:** Re-run the pipeline and fix the three failures. The hang is in an unrelated pre-existing test (`test_gate_runner.py::TestCowClone::test_symlink_to_directory_is_not_followed`), so a re-run may clear it — but the three failures are in this MR's own new file and need a real cause. Consider adding `--timeout` to the CI pytest invocation: with `-o addopts=\"\"` there is no per-test ceiling, so one hang blocks the pipeline indefinitely.\n\nConfidence: 95/100 | Found by: MR Analyst + trace verification",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:53.591Z"
+        },
+        {
+          "id": 3750651364,
+          "body": "**Fixed in 2c4a2b1.** Root cause of the three red tests: the runner image (python:3.12-slim) ships without procps — `ps` does not exist, so every identity check failed closed as 'no command line readable'. `_cmdline_for_pid` now reads `/proc/<pid>/cmdline` first (NUL-split, whitespace-joined; unit-pinned with a missing-ps simulation) and keeps `ps` as the macOS/BSD fallback — zero behavior change locally. The hang is a pre-existing unrelated test (`test_gate_runner.py::TestCowClone::test_symlink_to_directory_is_not_followed`); no pytest-timeout dependency exists in the CI set and adding one is out of this MR's scope — noted as a CI-hardening follow-up for the maintainers.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:17.404Z"
+        }
+      ]
+    },
+    {
+      "id": "b6bd669edb1dd1c1f17920d48105b185fdb1cdb0",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748750262,
+          "body": "**Important** — `/regenloop-ui --stop` can never work\n\n**What:** The template hardcodes `--detach` ahead of `${ARGUMENTS:-}`, and `--detach`/`--stop` sit in an `add_mutually_exclusive_group()`. Meanwhile the frontmatter `description:` — the field read to decide invocation — ends with \"Use --stop to stop the instance recorded for the repo.\"\n\n**Why it matters:** `regenloop_ui.py --detach --stop` exits 2 with a usage error (pinned by this MR's own `test_detach_and_stop_are_mutually_exclusive`). So the advertised stop flow through the command hits a bare usage error. It fails safe (nothing is signalled), but an agent following the description reaches a dead end and may fall back to an unverified `kill`.\n\n**Recommendation:**\n```bash\n# Make the template conditional, or drop --stop from the description:\n\"$PY\" \"$UI\" --detach ${ARGUMENTS:-}     # only when $ARGUMENTS has no lifecycle flag\n\"$PY\" \"$UI\" --stop [--repo <path>]      # reachable today only by reading the body\n```\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:54.652Z"
+        },
+        {
+          "id": 3750643879,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17#b8cd6b109f8220bcfc4a809a7a44a18f1766a7da_31_31)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T06:11:53.804Z"
+        },
+        {
+          "id": 3750651408,
+          "body": "**Fixed in 2c4a2b1 + bba85fa.** The template now routes on a word-boundary glob — `case \" ${ARGUMENTS:-} \" in *\" --stop \"*) exec \"$PY\" \"$UI\" ${ARGUMENTS:-} ;; *) exec \"$PY\" \"$UI\" --detach ${ARGUMENTS:-} ;; esac` — so a token merely *containing* `--stop` cannot misroute a launch into the foreground, `/regenloop-ui --stop` reaches the real stop path, and `--detach` remains the default launch posture.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:18.110Z"
+        }
+      ]
+    },
+    {
+      "id": "acf7952ef4207885e6f95c216d6bf38ab4900cf5",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748750416,
+          "body": "**Important** — `server.log` opened without `O_NOFOLLOW`, and invisible to the write-guard invariant\n\n**What:** The new log-flip path opens by raw path with `os.O_WRONLY|os.O_CREAT` (+`O_APPEND`/`O_TRUNC`), with no `O_NOFOLLOW` and no WriteGuard routing. It also `stat()`s the path before opening (TOCTOU). Every other leaf open in the cockpit write surface passes `O_NOFOLLOW` explicitly (`write_guard.py:74/104/126`). Compounding it, the INV-7 AST scanner only models `open(..., mode=)`, `Path.write_*`, `os.replace/unlink` and `shutil.*` — it never scans `os.open(...)`, so this site cannot appear in `_DOCUMENTED_WRITE_EXCEPTIONS` and cannot be caught stale.\n\n**Why it matters:** This is the one place the change touches the filesystem raw, and it silently bypasses an invariant the whole audit tooling is built around — while being invisible to the gate that enforces it. Two agents converged on this site independently.\n\n**Attack scenario:** A compromised same-user cockpit session plants a symlink at `<repo>/regenloop/local/cockpit/server.log` → `~/.bashrc`. The operator's next `--detach` appends the server's stdout+stderr to the target, and `os.chmod(log_path, 0o600)` rewrites the target's permissions; if the target exceeds 5 MiB the `O_TRUNC` arm truncates it instead. Both behaviours were confirmed by direct execution (append and truncate).\n\n**Recommendation:**\n```python\nflags |= os.O_NOFOLLOW                      # fail loudly on ELOOP rather than continuing un-flipped\n# or route through WriteGuard.append, which already carries O_NOFOLLOW + the 0600 pin\n# and add an os.open( arm to _find_writes_outside_write_guard so the next fd-level\n# exception cannot land unlisted\n```\n\nConfidence: 90/100 | Found by: Security Reviewer + Codebase Reviewer (independent convergence)",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:55.969Z"
+        },
+        {
+          "id": 3750651469,
+          "body": "**Fixed in 2c4a2b1.** (1) `os.O_NOFOLLOW` added to the server.log open — the symlink-plant append/chmod/truncate scenario now fails loudly with ELOOP, which lands in serve()'s new `flip_error` annotation instead of writing anywhere unexpected. (2) The scanner gap is closed structurally: `_find_writes_outside_write_guard` gained an `os.open(` arm, and both in-scope sites (server.py:239 flock bootstrap, regenloop_ui.py:864 log flip) are now rows in `_DOCUMENTED_WRITE_EXCEPTIONS` — the set-equality test enforces both directions (undocumented AND stale). (3) The stat-then-open TOCTOU is bounded by O_NOFOLLOW: the only swappable fact is trunc-vs-append, never the target.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:18.816Z"
+        }
+      ]
+    },
+    {
+      "id": "38354552049ec22986eeaefa15345675ceba8c6a",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748750687,
+          "body": "**Important** — No independent human review\n\n**What:** `user_notes_count: 0`, no review threads, no reviewers, author is also assignee, and `blocking_discussions_resolved: true` is only vacuously satisfied. Both \"review rounds\" the commits describe (`6a1ddcf` \"holistic review round\", `bde92c4`/`8166a6b` \"audit-round\") are self-reviews — and the first self-review missed a BLOCKER against the MR's own headline invariant.\n\n**Why it matters:** This change touches token handling and process-lifetime signalling for a local authenticated server. That is the highest-value review surface in the repo, and it currently has zero independent eyes on it.\n\n**Recommendation:** Assign at least one reviewer before merge; given the token-handling surface, two is warranted.\n\nConfidence: 96/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:57.221Z"
+        },
+        {
+          "id": 3750651501,
+          "body": "**Acknowledged.** Human review is the operator's call — the MR is now in the shape intended for it (findings fixed, description complete, residuals documented). Assigning reviewers is out of scope for an automated round.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:19.592Z"
+        },
+        {
+          "id": 3756295208,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe MR still has no assigned reviewers (`reviewers: []`) with the author as sole assignee, and nothing in the changes adds an independent review of the token-handling and process-signalling surface; the reply defers reviewer assignment to the operator.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:34.502Z"
+        }
+      ]
+    },
+    {
+      "id": "8865ded9a64af47499fdad3599ec829444597150",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748750870,
+          "body": "**Important** — Every commit is a 207-720 char subject with an empty body\n\n**What:** All eleven commits pack their entire rationale into the subject line. Measured subject/body chars: `43338d2`=288/1, `c9d3aad`=343/1, `7ea373b`=397/1, `bde92c4`=720/1, `8166a6b`=598/1. `git log -1 --format=%b` returns nothing for any of them.\n\n**Why it matters:** This defeats `--oneline`, GitLab's commit list, and any tooling that parses subjects. The detail is genuinely good — it is in the wrong field.\n\n**Recommendation:** Move everything past ~72 chars into the commit body. No content needs to change, only where it lives.\n\nConfidence: 97/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:58.342Z"
+        },
+        {
+          "id": 3750651517,
+          "body": "**Acknowledged, not rewriting.** The subjects are deliberately self-contained (this repo's gate receipts cite commits by subject), but the body-vs-subject split is a fair ask — future MRs on this repo will use short subjects with rationale bodies. Rewriting these eleven pushed commits requires a force-push, which this workflow never does.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:20.221Z"
+        },
+        {
+          "id": 3756295675,
+          "body": "This concern appears unaddressed in the latest changes.\n\nAll 13 commits on the branch still carry 204-1578-character subjects with empty bodies (`git log --format=%b` returns nothing for every one), including the two pushed after this review; the reply declines the split because it would require a force-push.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:51.942Z"
+        }
+      ]
+    },
+    {
+      "id": "faa753d6906f946d55ca8948bba9340cd89973e7",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751020,
+          "body": "**Important** — Four of eleven commits are fixups of earlier commits in this same MR\n\n**What:** `ef08043` explicitly carries tests `b9bf1df` (T6) failed to stage; `bde92c4` patches a defect introduced by `43338d2` (T1); `8166a6b` closes an asymmetry `ef08043` (T7) left and repairs a bug in T5's `_early_already_running`; `6a1ddcf` corrects AC-4 letters that `ef08043` wrote wrongly. The branch was never rebased before push.\n\n**Why it matters:** Each of these is a defect introduced and repaired inside the same review window. Squashing preserves the audit disclosure in the body while removing the noise from the history.\n\n**Recommendation:** Squash `ef08043` into `b9bf1df`, `bde92c4` into `43338d2`, the `8166a6b` MCP-finish hunk into `c064a85`/`0f0dd28` and its `_early_already_running` hunk into `7ea373b`, and `6a1ddcf` across its targets. Keep the audit-round disclosure as body text.\n\nConfidence: 96/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:53:59.251Z"
+        },
+        {
+          "id": 3750651543,
+          "body": "**Acknowledged, kept.** `ef08043` and the audit/review-round commits each carry an honest combined message naming exactly what rides along. Squashing them means rewriting pushed history (force-push) — declined by policy; the per-commit gate receipts in the subjects are the audit trail.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:20.895Z"
+        },
+        {
+          "id": 3756295693,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe cited fixup commits (`ef08043`, `bde92c4`, `8166a6b`, `6a1ddcf`) remain unsquashed and the response round added two further stacked commits (`2c4a2b1`, `bba85fa`) rather than folding them in; the reply declines the rewrite because it would require a force-push.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:52.728Z"
+        }
+      ]
+    },
+    {
+      "id": "333e0979981a6aa287bea8cd846d265d7b28c18c",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751157,
+          "body": "**Important** — 2,635 added lines across 12 files spans four concerns\n\n**What:** +2,635 / −76: 869 lines of production source (`regenloop_ui.py` +657, `server.py` +168, `mcp_server.py` +44), ~1,660 lines of tests, ~106 lines of docs. Well past the 500-line non-generated threshold, and at least the fourth concern the MR spans: process lifecycle, signal handling, log/stdio redirection, HTTP error lanes, and operator docs.\n\n**Why it matters:** Review quality degrades sharply at this size, and the MR's own history shows it — the first self-review pass missed a blocker.\n\n**Recommendation:** Split the client-reset error-lane work into its own MR (~74 source + ~175 test lines, only narratively coupled to the incident). Given the branch is already pushed, a documented-dependency follow-up split is acceptable.\n\nConfidence: 93/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:00.126Z"
+        },
+        {
+          "id": 3750651577,
+          "body": "**Acknowledged.** The four concerns (detach lifecycle, stop/identity, error lanes, docs/cards) were one goal's task graph; splitting them now requires the same history rewrite declined above. The error-lane subset being independently mergeable is noted as the template for future decomposition.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:21.797Z"
+        },
+        {
+          "id": 3756295706,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe branch still spans all four concerns in one MR, now 3,011 insertions across 14 files, and the client-reset error-lane work has not been extracted into its own change; the reply defers the decomposition to a future MR.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:53.268Z"
+        }
+      ]
+    },
+    {
+      "id": "8b059a2cb8c09e84a3707e97600126ac298bdf0c",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751252,
+          "body": "**Important** — One-sentence description for a 2,635-line MR\n\n**What:** The description is a single sentence with no test plan, no breaking-changes section, no screenshots, no linked issue, and no rollback note. For an MR that changes the operator's default launch posture, that sentence is the entire review brief.\n\n**Recommendation:** Add What/Why/Approach, a manual test recipe (`--detach` launch, `--stop`, the dead-parent case), an explicit \"Behaviour changes\" list, and a link to the incident and the spec.\n\nConfidence: 92/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:00.993Z"
+        },
+        {
+          "id": 3750651616,
+          "body": "**Fixed.** Description rewritten with explicit sections — What / Behaviour changes / Security / Test plan / Residuals / thread disposition — behaviour changes are now a dedicated section (see also the next thread), the test plan states per-mode counts, and residuals link docs/cockpit-process-session-escape.md.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:22.571Z"
+        }
+      ]
+    },
+    {
+      "id": "12566c4ed84ed9d92e9723b5bd7fc7c2d8423249",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751440,
+          "body": "**Important** — No secret scanner runs on this diff, for an MR whose headline claim is \"token never on disk\"\n\n**What:** The workflow rules set `SAST_DISABLED: 'true'` and `SECRET_DETECTION_DISABLED: 'true'` on every non-default-branch pipeline, and the pinned `uvx ruff@0.16.2` lint gate is not a GitLab CI job at all. This branch's pipeline runs exactly two jobs: `pytest` and `validate`.\n\n**Why it matters:** The \"ruff clean\" claim in `bde92c4` is only locally attested, and no scanner corroborates the token-on-disk claim before merge. The `.gitlab-ci.yml` comment documents a `RUN_SECURITY_SCANS=true` escape hatch for exactly this case.\n\n**Recommendation:** Trigger the escape hatch for this one MR (it is what the hatch exists for), or run secret-detection on the diff locally and paste the result into the description.\n\nConfidence: 90/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:01.942Z"
+        },
+        {
+          "id": 3750651636,
+          "body": "**Answered, not changed here.** SAST/SECRET_DETECTION are disabled by this repo's own CI workflow rules — re-enabling instance-level scanners is an infra decision for the maintainers, not a property of this diff. What this MR does enforce, in-suite: the whole-tree `rglob` byte-scan asserting the live token appears in NO file under the repo, including the buffered-stdout retention regression that was empirically leaking into server.log before the audit round.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:23.249Z"
+        },
+        {
+          "id": 3756295721,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`.gitlab-ci.yml` is unchanged and the current pipeline still runs only `validate` and `pytest`, so no SAST or secret-detection job covers this diff and no local scan result is recorded; the in-suite token byte-scan is a test assertion rather than the scanner run this asked for.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:53.800Z"
+        }
+      ]
+    },
+    {
+      "id": "7ae29ad242e00e5f1c7b61526b297614b31c44e7",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751608,
+          "body": "**Important** — 55 added lines cite a numbered spec that is not in the repository\n\n**What:** Added lines cite `spec 2.1`/`2.2`, `AC-4`/`AC-8`/`AC-9`, `OQ-1`/`3`/`4`/`5`, `SC-3`/`7`/`9`, `INV-9`, `binding residual 3`/`5`, and `review finding 1`/`2`. None resolve anywhere in the tree, despite the repo's established `claudedocs/YYYY-MM-DD-<feature>-spec.md` convention.\n\n**Why it matters:** A reviewer cannot check the implementation against its acceptance criteria. The `AC-4 (c)` labels that `6a1ddcf` had to correct suggest the criteria were being handled from memory.\n\n**Recommendation:** Commit the spec (and the audit-round findings) as `claudedocs/2026-08-2X-cockpit-process-session-escape-spec.md` in this MR, or replace the numeric citations with inline statements of the requirement.\n\nConfidence: 88/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:03.150Z"
+        },
+        {
+          "id": 3750651659,
+          "body": "**Fixed in 2c4a2b1.** docs/cockpit-process-session-escape.md is now in the repo: the SC/AC/OQ/INV legend the 55 cited lines reference, the incident record, the audit/review-round history, and the residuals — linked from docs/cockpit.md §9.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:23.859Z"
+        }
+      ]
+    },
+    {
+      "id": "cbcad068da6403aaacb5574aed00d821f8ff46b5",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751754,
+          "body": "**Important** — Two operator-visible behaviour changes are not disclosed as behaviour changes\n\n**What:** (a) `/regenloop-ui` flips from a blocking foreground launch to detached-and-returns — `${ARGUMENTS:-}` becomes `--detach ${ARGUMENTS:-}`. (b) A foreground second launch now fails fast *before* composition instead of failing inside `serve()` — the code itself calls this \"a deliberate deviation from SC-7's byte-identical wording\" (`regenloop_ui.py:1392-1396`). Neither appears in the description, which has no behaviour-change section.\n\n**Recommendation:** State both under a \"Behaviour changes\" heading in the description.\n\nConfidence: 84/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:04.213Z"
+        },
+        {
+          "id": 3750651687,
+          "body": "**Fixed.** The description's new 'Behaviour changes (operator-visible)' section discloses both: (1) `/regenloop-ui` flips from blocking-foreground to detached-and-returns (foreground still available via the script directly); (2) `--stop` becomes a routed first-class invocation. Also covered in docs/cockpit-process-session-escape.md.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:24.524Z"
+        }
+      ]
+    },
+    {
+      "id": "b4d35bc4d7639996df6fdc483415e0b88a1f5ee1",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748751930,
+          "body": "**Minor** — `--stop` identity branch (ii) can signal an unrelated process, and the docs call this path fail-closed\n\n**What:** When the scanned cmdline contains no `--repo` token, identity collapses to \"the cmdline names `regenloop_ui.py` somewhere\" + \"`server.json`'s own `repo_root` equals the target\" — and `server.json` is *this repo's* file, so that second arm is effectively always true. The script-name scan accepts any whitespace-delimited token that merely *ends in* `/regenloop_ui.py`. The docstring claims the dash-prefix skip means a flag value \"can never stand in for the script\", but that only holds for the glued `--flag=value` spelling; the two-token form matches. `commands/regenloop-ui.md:43` groups this case under \"**fail-closed ceilings**\" and closes with \"Both resolve the same way: `kill <pid>`\" — it is fail-*open*.\n\n**Why it matters:** This undercuts the description's \"identity-verified --stop\" claim. Three reviewers converged on this site independently.\n\n**Attack scenario:** Not adversarial — probabilistic. A detached cockpit is SIGKILLed by a daemon sweep without annotating `server.json`; the OS recycles its pid to an unrelated same-user process whose argv mentions a path ending in `/regenloop_ui.py`. Confirmed matching: `python3 -m pytest --cov scripts/regenloop_ui.py -q`, `tail -f /var/log/regenloop_ui.py`, `vim /home/me/src/regenloop_ui.py`, `python3 /x/regenloop_ui.py`. A subsequent `--stop --repo <that repo>` SIGTERMs the innocent process. Constrained to same-user, single-pid, SIGTERM-only, and full-pid-counter-wrap likelihood.\n\n**Recommendation:**\n```python\n# Drop branch (ii) for kills — require an absolute --repo match (the detach parent\n# already guarantees its child argv carries it); or bind the pid to the record with\n# a per-launch random cookie the target holds an flock on.\n# Also require the script token to be in argv[0] position (first non-flag token).\n```\nAnd relabel doc case (b) as a documented fail-open residual; soften \"identity-verified\" to \"identity-checked with disclosed residuals\".\n\nConfidence: 100/100 | Found by: Security Reviewer + Codebase Reviewer + MR Analyst (3-way convergence)",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:05.180Z"
+        },
+        {
+          "id": 3750651717,
+          "body": "**Fixed in 2c4a2b1.** Identity is now POSITIONAL: the script token must be the first non-flag token, or the second behind a `python*` interpreter — so `pytest --cov scripts/regenloop_ui.py` (the old two-token ceiling, now closed and pinned), `tail -f /var/log/regenloop_ui.py`, and `vim …/regenloop_ui.py` are all refused; wrapper launches (sudo, uv run) fail closed. What remains in branch (ii) is relabeled honestly: the docs now separate fail-closed ceilings from the fail-open residual (recycled pid into an argv that *starts* like a launch — same-user, SIGTERM-only, pid-counter-wrap likelihood), and 'identity-verified' claims were softened to 'identity-checked' with the residual disclosed.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:25.217Z"
+        }
+      ]
+    },
+    {
+      "id": "e7b5b3cee9e7cf312dd63ab1004e94f39b940304",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748752216,
+          "body": "**Minor** — A log-flip failure kills the child silently after the parent has already reported success\n\n**What:** `on_ready(launch_url)` runs *before* `serve()`'s `try:` block, so any exception from the detach flip (`_open_server_log` → `os.open`/`os.chmod`/`mkdir` on a read-only checkout, ENOSPC, ELOOP) escapes uncaught: `httpd.server_close()` and the `stopped_at` annotation are skipped, and the traceback goes to stderr — which is the ready pipe whose only reader (the parent) has already exited.\n\n**Why it matters:** The feature's primary action reports success while the server is gone, with zero diagnosability — the log that would have held the traceback is the thing that failed to open. Both reviewers reproduced this end-to-end against the real script (parent → rc=0 + a valid-looking URL; child → dead; `server.json` → no `stopped_at`; follow-up `--stop` → exit 0 \"nothing to stop\"). Self-heals on relaunch, which makes it easy to miss.\n\n**Recommendation:**\n```python\n# Move the on_ready call inside the existing try: so the finally annotation and\n# server_close() always run. Then record flip failure durably — the child still\n# holds the flock, so writing a \"flip_error\" field into server.json (or a\n# .flip-error breadcrumb beside it) is cheap and visible to --stop and the operator.\n```\n\nConfidence: 95/100 | Found by: Security Reviewer + Codebase Reviewer (independently reproduced)",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:06.689Z"
+        },
+        {
+          "id": 3750643903,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17#1f21286386b15cdda1268c7e3aed2d5fdd476c63_1028_1028)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T06:11:54.274Z"
+        },
+        {
+          "id": 3750651754,
+          "body": "**Fixed in 2c4a2b1.** `on_ready(launch_url)` now runs INSIDE serve()'s try: an OSError from the flip (read-only checkout, ENOSPC, ELOOP off the new O_NOFOLLOW) sets `stop_reason: flip_error:<ExceptionTypeName>` into server.json (written through the still-held flock fd), then re-raises — server_close() and the annotation always run, the child exits non-zero instead of silently, and the next launch's pre-check ignores the annotated file. Pinned by test_serve_flip_failure_annotates_and_closes (asserts stopped_at + stop_reason == 'flip_error:OSError' + server_close ran).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:26.154Z"
+        }
+      ]
+    },
+    {
+      "id": "0efa0935325e6ada0794c8127cd04b42752fd81f",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748752500,
+          "body": "**Minor** — `test_serve_url_print_survives_broken_pipe_stdout` permanently rebinds `sys.__stdout__` in the test process\n\n**What:** The test drives the real `BrokenPipeError` branch of `_print_stdout_guarded`, which reassigns both `sys.stdout` and `sys.__stdout__`. `monkeypatch` restores only `sys.stdout` (the name it patched), never `sys.__stdout__`. Verified by identity probe: after an equivalent test runs, `sys.__stdout__ is not ORIG[\"dunder\"]` → `True`, and it is a fresh fd-1 `TextIOWrapper` for the remainder of that pytest worker.\n\n**Why it matters:** Production code reassigning `sys.__stdout__` is correct and intentional; the gap is that no test contains it. This leaves permanent, order-dependent global state — any later test that reads, asserts on, or writes `sys.__stdout__` sees a real fd-1 wrapper instead of the original object, bypassing capture. Silent and worker-dependent.\n\n**Recommendation:**\n```python\nmonkeypatch.setattr(sys, \"__stdout__\", saved_dunder)   # snapshot before the call\n# or wrap the call in try/finally that reasserts both names\n```\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:08.041Z"
+        },
+        {
+          "id": 3750651804,
+          "body": "**Fixed in 2c4a2b1.** The test now snapshots `sys.__stdout__` before the call and re-asserts it in a finally (with an `is` check after), so the rebinding is contained to the test regardless of the assertion outcome.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:26.891Z"
+        }
+      ]
+    },
+    {
+      "id": "b8ae6257c314a15d35c7723ecc210e0507011665",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748752661,
+          "body": "**Minor** — Conventional-commit scope is the branch name, not a module\n\n**What:** All eleven commits use `feat(loop/cockpit-process-session-escape)`. Repo convention on `main` uses module scopes (`fix(cockpit)`, `docs(knowledge)`, `fix(ui)`). `6a1ddcf` is also typed `feat:` for what is a review-fix/refactor round, and `ef08043` says \"killpg teardown hardening\" while its only changed file is a test file — the production `killpg` sites (`session.py:1433`, `control_probe.py:531`) are untouched.\n\n**Recommendation:** Use `feat(cockpit)` / `feat(ui-launcher)`; type `6a1ddcf` as `refactor`/`fix`; clarify T7's subject as tests-only.\n\nConfidence: 85/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:09.186Z"
+        },
+        {
+          "id": 3750651841,
+          "body": "**Acknowledged, not rewriting.** The branch-slug scope was this goal's commit convention. Future commits will use a module scope (`feat(cockpit): …`). Changing pushed subjects requires force-push — declined.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:27.835Z"
+        },
+        {
+          "id": 3756295731,
+          "body": "This concern appears unaddressed in the latest changes.\n\nEvery commit, including the two added after this review, still uses the branch-slug scope rather than a module scope, and `ef08043`'s subject is unchanged; the reply declines the rewrite because it would require a force-push.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:54.359Z"
+        }
+      ]
+    },
+    {
+      "id": "a3408e814137027b016017693a045f500dc6b573",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748752835,
+          "body": "**Minor** — Write-guard line-number pins re-pinned in four separate commits inside this one MR\n\n**What:** The line-number exception pins were re-pinned in `43338d2`, `c9d3aad`, `7ea373b` and `bde92c4`: `server.py` mkdir 156 → 220 → 238, and `regenloop_ui.py` unlink 309/325 → 317/333 → 329/345 → 336/352. Every insertion above those lines in this MR broke the pins again.\n\n**Why it matters:** That churn is generated by the pin design, not by real drift — it will tax every future MR that touches these files.\n\n**Recommendation:** Pin by a stable anchor (nearest `def`/class name, or an AST lookup) instead of absolute line numbers.\n\nConfidence: 82/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:10.103Z"
+        },
+        {
+          "id": 3750651863,
+          "body": "**Acknowledged as the design working.** Each commit in a branch must leave the table exact — re-pinning per commit is what keeps every intermediate SHA suite-green (the table's own comment documents the convention). The alternative (one final re-pin commit) would leave intermediate commits red against their own invariants.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:28.565Z"
+        },
+        {
+          "id": 3756295738,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`_DOCUMENTED_WRITE_EXCEPTIONS` still pins absolute line numbers, and the response round re-pinned them again instead of switching to a stable anchor such as the nearest `def` or class name; the reply accepts the churn as the pin design working as intended.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:54.943Z"
+        }
+      ]
+    },
+    {
+      "id": "b30c804a7b77fb10838a7f7cfcf069f4cb2cb4bf",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748753008,
+          "body": "**Minor** — The client-reset error-lane work is independently mergeable\n\n**What:** The RST/`OSError` error-lane work (T2/T3 and half of `8166a6b`) touches only `mcp_server.py` handle/finish/handle_error and `server.py` `finish()` — ~74 source lines plus ~175 test lines. Its only coupling to the detach incident is narrative. `c064a85` and `0f0dd28` do not touch `regenloop_ui.py` at all.\n\n**Recommendation:** Split before merge, or note the dependency explicitly in the description.\n\nConfidence: 80/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:11.275Z"
+        },
+        {
+          "id": 3750651897,
+          "body": "**Acknowledged for future decomposition.** Same history-rewrite constraint as the MR-size thread; the error-lane subset is the named candidate for extraction next time.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:29.444Z"
+        },
+        {
+          "id": 3756295746,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe error-lane hunks (`mcp_server.py` `handle`/`finish`/`handle_error` and `server.py` `finish()`) and their tests are still part of this MR; no split has landed and no dependency note for that specific extraction was added.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:12:55.627Z"
+        }
+      ]
+    },
+    {
+      "id": "9af0407af5c33489f4e1876c06ae125a00704048",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748753188,
+          "body": "**Minor** — The motivating incident is cited nine times but has no record in the repository\n\n**What:** The 2026-08-26 incident is this MR's reason to exist and is cited nine times, but there is no postmortem in `docs/` or `claudedocs/` and no linked issue. Two of the citations are load-bearing operator instructions — this line asserts a specific mechanism (\"machine-wide process-group SIGKILL sweeps\") and a specific timing (\"killed a cockpit and an unrelated watcher in another session, 13 s apart\") with nothing to verify against.\n\n**Recommendation:** Link the incident record from the description, or commit a short postmortem alongside the spec.\n\nConfidence: 78/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:12.325Z"
+        },
+        {
+          "id": 3750651916,
+          "body": "**Fixed in 2c4a2b1.** The incident now has an in-repo record: docs/cockpit-process-session-escape.md — the forensic trail (daemon process-group sweeps, cross-session 13 s correlation, kernel-kill exclusions, traceback-as-symptom) and why process-session escape is the structural fix.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:30.125Z"
+        }
+      ]
+    },
+    {
+      "id": "cb7a40be8caa46d2748ac80c82ab4a68dc1ce761",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748753403,
+          "body": "**Minor** — \"Suite: 3721 pass\" is not reproducible as stated\n\n**What:** In a clean POSIX/Python 3.12 environment with the CI dependency set, the full suite at head yields **3712 passed, 13 skipped, 859 subtests passed** — 9 short of the claimed 3721. The gap is plausibly environment-dependent skips, so this is not evidence of a false claim, but the number is unverifiable as written. \"Full-tier gate green\" is likewise self-attested: no gate-runner report is attached and no CI job runs the gate runner.\n\n**Recommendation:** Attach the gate report JSON, or state the count with its skips (\"3712 pass / 13 skipped\") so it is checkable.\n\nConfidence: 72/100 | Found by: MR Analyst",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:13.536Z"
+        },
+        {
+          "id": 3750651976,
+          "body": "**Fixed in 2c4a2b1 + description.** The description now states per-mode counts: 3727 passed / 4 skipped / 859 subtests locally (xdist) and 21/21 for the detach file in CI's exact serial mode, and explains the pass-count delta as environment-dependent skips rather than claiming a single environment-free number. The gate-report JSONs live under regenloop/local/regression/… (gitignored orchestrator state) — the description cites their verdicts and SHAs instead of attaching them.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:31.159Z"
+        }
+      ]
+    },
+    {
+      "id": "defd2d7a3e895ca51d8e17ff7d4187fc77162850",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748753620,
+          "body": "**Minor** — The parent's URL print is not BrokenPipe-guarded, unlike the child's\n\n**What:** The `--detach` parent echoes the tokenised URL and relays child lines with bare `print(...)` / `print(file=sys.stderr)`. The child's equivalent write is BrokenPipe-guarded (`_print_stdout_guarded`); the parent's is not, even though the parent's stdout is precisely the tool-captured pipe most likely to lose its reader.\n\n**Why it matters:** Asymmetric with this MR's own SC-3 thesis. The child keeps serving (no orphan), but the operator loses the one URL print and gets a traceback instead of silence.\n\n**Recommendation:**\n```python\n# Route the parent's URL print through _print_stdout_guarded (move it, or a small\n# wrapper, into server.py), and swallow BrokenPipeError on the relay path.\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:14.496Z"
+        },
+        {
+          "id": 3750643926,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17#9c093fca95d238ec6cb793c7a42102cb05afd909_1080_1093)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T06:11:54.671Z"
+        },
+        {
+          "id": 3750652011,
+          "body": "**Fixed in 2c4a2b1.** The parent's URL echo, the child-line relay, and the timeout message are each BrokenPipe-guarded now (the asymmetry with the child's `_print_stdout_guarded`). The child keeps serving and the browser still opens when the tool-captured pipe loses its reader; return codes are unchanged and the echo remains exactly-once.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:32.105Z"
+        }
+      ]
+    },
+    {
+      "id": "7e3bd5f39dda4cf12323dc557bdccfa2b5d43ba2",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3748753897,
+          "body": "**Minor** — Three new detach paths have no test\n\n**What:** Coverage is genuinely strong (19 real-subprocess tests), but three paths are untested: (a) the parent→child forwarding of `--heartbeat-interval` — only the argparse→`serve()` hop is unit-tested, and the `str()` round-trip in the child argv is unpinned; (b) the non-numeric / non-positive `REGENLOOP_DETACH_READY_TIMEOUT` `_fail` branch; (c) `--stop`'s 30 s cap exit-1 path — the message is documented but never exercised.\n\n**Why it matters:** (a) is the only place the parent and child contracts meet and is currently guarded by nothing but inspection.\n\n**Recommendation:** Add a cheap assertion to an existing detach test — read `--heartbeat-interval` out of `/proc/<pid>/cmdline`, or assert the observed mtime cadence after a `--detach --heartbeat-interval 0.2` launch.\n\nConfidence: 70/100 | Found by: Codebase Reviewer",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-27T19:54:15.776Z"
+        },
+        {
+          "id": 3750652033,
+          "body": "**Fixed in 2c4a2b1 — all three paths pinned.** (a) test_detach_forwards_heartbeat_interval_to_child asserts the observed server.json mtime cadence after `--detach --heartbeat-interval 0.2`; (b) test_detach_non_numeric_ready_timeout_fails_named pins the named _fail branch; (c) test_stop_cap_exit1_message exercises the cap exit-1 path via module-constant bounds shrunk to 0.3 s/0.6 s (the constants are now the test seam).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:14:32.838Z"
+        }
+      ]
+    },
+    {
+      "id": "76e208145bc1e250aed4d845d0b2b918c721eaea",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3750643818,
+          "body": "mentioned in commit 2c4a2b1b2ebe83a7e4e5936a6bae79c21d20381b",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T06:11:52.793Z"
+        }
+      ]
+    },
+    {
+      "id": "86ad734fd593cba6f40665338a7f41527314ef6c",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3750643947,
+          "body": "added 2 commits\n\n<ul><li>2c4a2b1b - fix(loop/cockpit-process-session-escape): MR !60 omnireview round — CI red...</li><li>bba85faa - fix(loop/cockpit-process-session-escape): verifier polish round —...</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1989814047&start_sha=8166a6bb9bb23b816901ce5493474142f6e29a17)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T06:11:54.990Z"
+        }
+      ]
+    },
+    {
+      "id": "cc3236035cef6bde2bea51e876042e6130da9ad1",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3750647705,
+          "body": "changed the description",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T06:12:52.406Z"
+        }
+      ]
+    },
+    {
+      "id": "3c2b49bb6ff243418920ab3b6e10ff843f5d01e7",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756216030,
+          "body": "/omnicheck",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T10:43:18.893Z"
+        }
+      ]
+    },
+    {
+      "id": "51ea130a45a25c8d763f6bcbfe7266aa1b5316bf",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756298363,
+          "body": "## Follow-up Check — MR !60\n\nRe-checked every review thread against the branch at `bba85fa` (the current head) and against the MR description and CI state.\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 14 |\n| ✗ Not Applied | 8 |\n| ? Needs Human | 0 |\n\nAll 14 verified findings were open threads whose substance is now in the branch, though none were marked resolved. Confirmed at head: the `--stop` word-boundary route in `commands/regenloop-ui.md:35-37`; `os.O_NOFOLLOW` on the `server.log` flip (`scripts/regenloop_ui.py:859`) plus the new `os.open(...)` scanner arm and both `_DOCUMENTED_WRITE_EXCEPTIONS` rows; the positional `--stop` identity check with the fail-open residual relabelled; `on_ready` inside `serve()`'s `try` with the `flip_error:<type>` annotation; the `/proc/<pid>/cmdline` primary in `_cmdline_for_pid`; the parent-side `BrokenPipeError` guards on the URL echo, relay and timeout message; the `sys.__stdout__` snapshot/restore containment; the three previously untested paths (`test_detach_forwards_heartbeat_interval_to_child`, `test_detach_non_numeric_ready_timeout_fails_named`, `test_stop_cap_exit1_message`); and the in-repo spec legend and 2026-08-26 incident record in `docs/cockpit-process-session-escape.md`, linked from `docs/cockpit.md`. The red-and-hung CI gate is cleared: pipeline 2798781090 at this head is green (`pytest` 573s, `validate` clean). The description now carries the behaviour-changes, test-plan and residuals sections.\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #3835455 | general | No independent human reviewer on a token-handling and process-signalling change |\n| #8865ded | general | Every commit carries 204-1578 chars of rationale in the subject with an empty body |\n| #faa753d | general | Four commits are fixups of earlier commits in this same MR and were never squashed |\n| #333e097 | general | 3,011 added lines across 14 files span four concerns; the error-lane work was not split out |\n| #12566c4 | general | No secret scanner runs on this diff - SAST and SECRET_DETECTION stay disabled in CI |\n| #b8ae625 | general | Conventional-commit scope is the branch name rather than a module |\n| #a3408e8 | tests/test_cockpit_invariants.py:576 | Write-guard exception pins use absolute line numbers re-pinned per commit |\n| #b30c804 | general | The client-reset error-lane work is independently mergeable and remains in this MR |\n\nEach of these now has an individual reply on its own thread. They are the items this MR's author explicitly declined or deferred rather than omitted silently: the history-shape asks (commit subjects, fixup squashes, commit scopes) would need a force-push on a pushed branch, and reviewer assignment plus instance-level scanner enablement sit with the maintainers. They still need a maintainer's judgement before merge - the reviewer thread and the absent secret scan are the two with real risk attached, given the change's headline claim is about token handling.\n\nNote: the thread containing only the `/omnicheck` command is the trigger for this check, not a review finding, and is excluded from the table above.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T11:14:23.526Z"
+        }
+      ]
+    },
+    {
+      "id": "6cab5b21f2f1dc1275c14b9ebcbe0369ff908e30",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756366402,
+          "body": "mentioned in commit 9e711ee25b3c45d8a9da225893fe9fd1fb044f93",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T11:59:28.499Z"
+        }
+      ]
+    },
+    {
+      "id": "aa94724e92c10aca1d9ca23a8cd95805b76c3000",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756366419,
+          "body": "added 22 commits\n\n<ul><li>bba85faa...a3a95f3d - 21 commits from branch <code>main</code></li><li>9e711ee2 - merge: origin/main into loop/cockpit-process-session-escape (resolve MR !60 conflicts)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/60/diffs?diff_id=1992091802&start_sha=bba85faaf245468bdbdc2021704cef30bf45a18d)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T11:59:30.122Z"
+        }
+      ]
+    },
+    {
+      "id": "b8425ed73a1f9a6456a9b582d33d99d117a481ab",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756397374,
+          "body": "mentioned in commit c90a419f76c2c53eeebad97259bc29c920819bf8",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T12:18:16.327Z"
+        }
+      ]
+    },
+    {
+      "id": "8d8c33f1f587a337e51ffbd0f44337116c2f84e0",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3770297560,
+          "body": "mentioned in commit e10b2ae42782b516f15c5ec99225430ff14a5293",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-09-01T15:16:50.278Z"
+        }
+      ]
+    },
+    {
+      "id": "02733014c98741217c33781c1fbee846cb2f2384",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3770299490,
+          "body": "mentioned in merge request !63",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-09-01T15:17:13.025Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "9e711ee25b3c45d8a9da225893fe9fd1fb044f93",
+      "short_id": "9e711ee2",
+      "title": "merge: origin/main into loop/cockpit-process-session-escape (resolve MR !60 conflicts)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-29T17:10:30.000+05:30"
+    },
+    {
+      "id": "bba85faaf245468bdbdc2021704cef30bf45a18d",
+      "short_id": "bba85faa",
+      "title": "fix(loop/cockpit-process-session-escape): verifier polish round — word-boundary glob in the --stop route (*\" --stop \"* so a token merely containing --stop cannot misroute a launch into the foreground), /proc-primary + positional wording in docs/cockpit.md §1 --stop bullet (stale 'ps-command-line match'), and first/second-NON-FLAG-token precision in the template + cockpit card (the enforced rule, not the argv-index approximation)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-28T11:32:45.000+05:30"
+    },
+    {
+      "id": "2c4a2b1b2ebe83a7e4e5936a6bae79c21d20381b",
+      "short_id": "2c4a2b1b",
+      "title": "fix(loop/cockpit-process-session-escape): MR !60 omnireview round — CI red root cause: /proc/<pid>/cmdline primary for --stop identity (CI's python:3.12-slim ships without procps; the three pipeline-red tests all failed as 'no command line readable'), ps stays the macOS/BSD fallback; /regenloop-ui template ROUTES --stop invocations (unconditional --detach prepend dead-ended the advertised stop flow against the mutually-exclusive argparse group); _open_server_log gains O_NOFOLLOW (symlink-plant defense; ELOOP now lands as serve()'s flip_error annotation) and the write-guard scanner gains an os.open( arm with both fd-level sites documented; --stop identity is POSITIONAL (script = argv[0] or argv[1] behind a python* interpreter — --cov/tail/vim tokens can never stand in; wrappers fail closed) with the docs relabeled to honest fail-closed ceilings + fail-open residual; serve() runs on_ready INSIDE the try with a durable stop_reason=flip_error:<type> breadcrumb (parent-already-succeeded silent child death now diagnosable); sys.__stdout__ rebind contained in the broken-pipe test; parent echo/relay/timeout prints BrokenPipe-guarded; NEW tests: /proc+ps fallback, positional matrix, --stop cap exit-1 (constants seam), heartbeat-interval forwarding, non-numeric ready-timeout, flip-failure annotation+close; docs/cockpit-process-session-escape.md records the 2026-08-26 incident + SC/AC/OQ/INV legend + residuals (closes the 'spec not in repo' and 'incident unrecorded' findings); cards + INDEX bumped — serial CI-parity detach run 21 pass, suite 3727 pass, ruff clean",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-28T11:21:15.000+05:30"
+    },
+    {
+      "id": "8166a6bb9bb23b816901ce5493474142f6e29a17",
+      "short_id": "8166a6bb",
+      "title": "fix(loop/cockpit-process-session-escape): audit-round minors — MCP plane finish() OSError wrap at the connection boundary (mirror of the cockpit plane's OQ-1 wrap: socketserver runs finish outside handle, so the macOS ECONNABORTED/ENOTCONN siblings bypassed handle()'s wrap and handle_error delegates them — the traceback asymmetry T7 left) + _early_already_running treats an annotated (stopped_at) server.json as never-blocking (the stop path's annotation write refreshes mtime, which alone armed the fresh-heartbeat arm against a recycled pid for up to 90 s); both pinned by regression tests",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-28T00:27:28.000+05:30"
+    },
+    {
+      "id": "bde92c48e1a18269e0734369adaa7c8160eda2f9",
+      "short_id": "bde92c48",
+      "title": "fix(loop/cockpit-process-session-escape): audit-round BLOCKER — discard retained stdout bytes on BrokenPipeError (SC-3 token-on-disk leak): rebind BOTH sys.stdout and sys.__stdout__ to a fresh empty fd-1 wrapper (single-name rebind still leaked: __stdout__ aliases the poisoned wrapper and its teardown flush lands post-flip in server.log — empirically reproduced on 3.12.11 via the dead-ready-pipe child path, red on pre-fix code); regression test runs BUFFERED (no -u / PYTHONUNBUFFERED — an unbuffered stdout has nothing to retain, which is why the earlier sweep could not see it); write-guard table gains the fd-level discard-rebind entry, mkdir pin follows the docstring shift — suite 3721 pass, ruff clean",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-28T00:27:16.000+05:30"
+    },
+    {
+      "id": "6a1ddcf2a7189c2270643f1047eae647484f4b2b",
+      "short_id": "6a1ddcf2",
+      "title": "feat(loop/cockpit-process-session-escape): holistic review round — read-purity (_do_stop uses cockpit_dir_existing, no dir materialization), pre-check conjunction docstring, airtight timeout comment, AC-4 letter corrections, _port_refused dedup, card paren fix — gates: python-test+validate+lint pass",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T06:02:17.000+05:30"
+    },
+    {
+      "id": "e6fe1d7d756c7a2d70b7bf3b854c11c534b504f4",
+      "short_id": "e6fe1d7d",
+      "title": "feat(loop/cockpit-process-session-escape): T8 operator docs — regenloop-ui command template rewrite (foreground --detach, run_in_background prohibition, tool-parity stop story, fail-closed ceilings), docs/cockpit.md lifecycle, knowledge cards, AC-8 statics — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T05:36:07.000+05:30"
+    },
+    {
+      "id": "ef080436cf3a4c3ed2b073f06f67177e66c33e9e",
+      "short_id": "ef080436",
+      "title": "feat(loop/cockpit-process-session-escape): T7 RST-storm reproduction on both planes of a live detached server + killpg teardown hardening — carries T6's AC-4 matrix tests missed from b9bf1df's staging list — gates: python-test+validate+lint pass (green-only pin, non-vacuity triangulated)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T05:00:47.000+05:30"
+    },
+    {
+      "id": "b9bf1df82fee5f6a5eea18395131201924fbe5e8",
+      "short_id": "b9bf1df8",
+      "title": "feat(loop/cockpit-process-session-escape): T6 --stop — ps cmdline identity (all argparse-legal --repo spellings, last-wins, flag-value-excluded script scan), SIGTERM to the one verified pid, progress poll with tolerant re-read, kill-race handlers — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T04:32:08.000+05:30"
+    },
+    {
+      "id": "7ea373bce5a648c732a261a23820a584c26cabcb",
+      "short_id": "7ea373bc",
+      "title": "feat(loop/cockpit-process-session-escape): T5 --detach parent handshake — start_new_session spawn with pipe/EOF discipline (raw-read line reassembly), 15s bounded ready wait never-SIGKILL, absolute-repo argv injection, advisory AlreadyRunning pre-check with heartbeat/port corroboration, killpg + port-fallback regression pins — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T03:41:17.000+05:30"
+    },
+    {
+      "id": "c9d3aad6b5e4d25ca2997b177517ba0f33edc960",
+      "short_id": "c9d3aad6",
+      "title": "feat(loop/cockpit-process-session-escape): T4 child-mode bootstrap — --_ready-fd dup2-before-parse (both spellings), --heartbeat-interval, lazy 0600/5MiB server.log flip via on_ready, latching stop-signal handler, detach test scaffolding (zombie-safe waits, pipe-EOF sync) — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:51:06.000+05:30"
+    },
+    {
+      "id": "0f0dd2803f981f80020ac7e7c9fd0a1318ddb909",
+      "short_id": "0f0dd280",
+      "title": "feat(loop/cockpit-process-session-escape): T3 cockpit-plane finish() OSError wrap with log_error breadcrumb + OQ-1 widening-delegation pin — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:17:54.000+05:30"
+    },
+    {
+      "id": "c064a85cc4b73232f13ceff3c3dab60581bdef38",
+      "short_id": "c064a85c",
+      "title": "feat(loop/cockpit-process-session-escape): T2 MCP plane error lanes — handle() OSError-family wrap + type-narrowed handle_error on _McpHTTPServer, RST reproduction + narrowing-boundary pins — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T01:46:03.000+05:30"
+    },
+    {
+      "id": "43338d22d745350bdb7d04bc4185a04df3d3d07e",
+      "short_id": "43338d22",
+      "title": "feat(loop/cockpit-process-session-escape): T1 serve() mechanics — SingleInstance.release, on_ready/heartbeat_interval kwargs, cockpit-heartbeat thread, BrokenPipe-guarded stdout helper, stop annotation via STOP_REASON — gates: python-test+validate+lint pass (TDD red->green verified)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T01:05:59.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [],
+    "approved": true,
+    "approvals_required": 0,
+    "approved_by_raw": [],
+    "error": null
+  }
+}

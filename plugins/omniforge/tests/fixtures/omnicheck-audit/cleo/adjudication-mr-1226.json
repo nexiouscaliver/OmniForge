@@ -1,0 +1,94 @@
+{
+ "repo": "cleo",
+ "iid": 1226,
+ "title": "UI: perception + local page restyle (Local_UI)",
+ "runs": [
+  {
+   "timestamp": "2026-08-22T09:38:43.672Z",
+   "gate": "APPROVED",
+   "head_at_run": "25140d37b425",
+   "bot_approval": "2026-08-22T09:41:59.556Z (3.3 min AFTER FC note listing NA=2)",
+   "fc_counts": {
+    "applied": 0,
+    "silently_applied": 12,
+    "not_applied": 2,
+    "needs_human": 0
+   },
+   "per_thread": [
+    {
+     "thread_id": "c16dc55f Critical non-functional pagination",
+     "anchor": "ReviewsDirectories.tsx",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "fix present: onViewReviews(platform.id) wired to button onClick",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git grep onViewReviews 25140d37:204"
+    },
+    {
+     "thread_id": "4d37c5bf Critical ChatGPT mislabel",
+     "anchor": "citation pills",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "fix present: unknown engine renders its own name, tests assert never ChatGPT logo",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff lines 1039-1066"
+    },
+    {
+     "thread_id": "de322ddd font-weight override",
+     "anchor": "designSystem",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "override softened (semibold->regular diffs present)",
+     "judgment": "CORRECT_APPLY (spot)",
+     "hypothesis": null,
+     "evidence": "diff fontWeight hunks"
+    },
+    {
+     "thread_id": "a515c05f/#39b8087 description misrepresents",
+     "anchor": "MR description",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: no description correction ever posted; behavioural removals still undisclosed at run",
+     "judgment": "CORRECT (disclosure finding real, unfixed)",
+     "hypothesis": null,
+     "evidence": "no description-edit system notes"
+    },
+    {
+     "thread_id": "570d8043/#2103151 dead ternary",
+     "anchor": "designSystem",
+     "omnicheck_verdict": "NOT_APPLIED('could not be located in current diff')",
+     "ground_truth": "WRONG: hexToRgba(c.accent.gold, isDark ? 0.1 : 0.1) does NOT exist at run head \u2014 already fixed/removed (only legit isDark ? 0.04 : 0.02 at 2111)",
+     "judgment": "FALSE_NOT_APPLIED",
+     "hypothesis": "H1 (anchor drift after staging merges; check defaulted to NA when it couldn't find the code)",
+     "evidence": "git grep isDark ? 0.1 / hexToRgba gold at 25140d37"
+    }
+   ],
+   "overall": "PARTIAL",
+   "overall_note": "12 SA verdicts correct (both Criticals genuinely fixed); 1 NA correct (disclosure), 1 NA wrong (fix already present, H1). Gate APPROVED despite NA=2 (H5-class); the only genuinely-open item was a description-accuracy concern, not code.",
+   "root_causes": [
+    "H1: anchor drift -> false NOT_APPLIED on dead-ternary thread",
+    "H5-class: approve with NA=2"
+   ]
+  },
+  {
+   "timestamp": "2026-08-23T07:59:52 (no FC note)",
+   "gate": "APPROVED (re-approval)",
+   "head_at_run": "03cf31d70611",
+   "bot_approval": "2026-08-23T07:59:52.198Z",
+   "fc_counts": null,
+   "per_thread": [
+    {
+     "thread_id": "(no published run)",
+     "anchor": "-",
+     "omnicheck_verdict": "none",
+     "ground_truth": "approval reset by push 07:14:55 then bot re-approved 45 min later with NO new Follow-up Check note in evidence \u2014 verification not published",
+     "judgment": "UNVERIFIED RUN (CI-only commit, low risk)",
+     "hypothesis": "OTHER",
+     "evidence": "notes: last FC 2026-08-22 09:38; approval event 2026-08-23 07:59:52"
+    }
+   ],
+   "overall": "UNDETERMINABLE (approve without published check run; commit is CI-config only so substantively low risk)",
+   "root_causes": [
+    "OTHER: re-approval without a posted check summary"
+   ]
+  }
+ ]
+}

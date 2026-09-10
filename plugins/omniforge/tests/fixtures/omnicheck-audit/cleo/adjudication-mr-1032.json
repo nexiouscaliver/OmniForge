@@ -1,0 +1,49 @@
+{
+  "repo": "cleo",
+  "iid": 1032,
+  "title": "Responsive/mobile UI fixes across SEO & GEO app",
+  "runs": [
+    {
+      "timestamp": "2026-07-30T19:03:08.288Z",
+      "nudge_timestamps": ["2026-07-30T19:02:48Z", "2026-07-30T19:02:50Z", "2026-07-30T19:02:53Z", "2026-07-30T19:02:56Z"],
+      "summary_note_id": 3625225358,
+      "gate": "REJECTED",
+      "head_at_run": "4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3",
+      "base_sha": "8de2c15bb6e4e661f8cea62fca2c7954ce3137c1",
+      "table": {"applied": 0, "silently_applied": 0, "not_applied": 4, "needs_human": 0},
+      "per_thread": [
+        {
+          "thread_id": "nudge-3625224265",
+          "anchor": "CitationsView.tsx:1791 — PRESENCE BY ENGINE tooltip copy rewritten/shortened (orig note 3622140302, Important)",
+          "omnicheck_verdict": "NOT_APPLIED",
+          "ground_truth": "FIX ABSENT at 4ee7eff2: CitationsView.tsx:1791 still reads the shortened 'How your brand is represented across each AI engine — citation count and query coverage.' Post-run commit 2812ea69 message: 'restore the detailed PRESENCE BY ENGINE tooltip' — corroborates.",
+          "judgment": "CORRECT_REJECT"
+        },
+        {
+          "thread_id": "nudge-3625224480",
+          "anchor": "ClientDetailView structural refactor with zero test coverage (orig note 3622140381, Important)",
+          "omnicheck_verdict": "NOT_APPLIED",
+          "ground_truth": "FIX ABSENT at 4ee7eff2: only SEO/frontend/components/ClientDetail/ClientDetailView.tsx exists; no ClientDetailView.test.tsx in the tree. Post-run 2812ea69 adds ClientDetailView.test.tsx (168 lines) covering mobile-card vs desktop-table dual render — corroborates.",
+          "judgment": "CORRECT_REJECT"
+        },
+        {
+          "thread_id": "nudge-3625223915",
+          "anchor": "SectionCard.tsx — richContentOverflowSx recreated on every render (orig note 3622140479, Minor)",
+          "omnicheck_verdict": "NOT_APPLIED",
+          "ground_truth": "FIX ABSENT at 4ee7eff2: declaration at SectionCard.tsx:549 sits inside the SectionCard component body (component starts :150). Post-run 2812ea69 hoists it to module scope (working tree now shows it at module level) — corroborates.",
+          "judgment": "CORRECT_REJECT"
+        },
+        {
+          "thread_id": "nudge-3625224106",
+          "anchor": "LeftSection.tsx:403 — mobile toggle offset hardcodes 288 duplicating drawer width (orig note 3622140578, Minor)",
+          "omnicheck_verdict": "NOT_APPLIED",
+          "ground_truth": "FIX ABSENT at 4ee7eff2: LeftSection.tsx:403 `left: isMobile ? (isOpen ? 288 : 10) : (isOpen ? '17%' : '10px')` — hardcoded literal, no MOBILE_DRAWER_WIDTH constant. Post-run 2812ea69 derives offset from MOBILE_DRAWER_WIDTH — corroborates.",
+          "judgment": "CORRECT_REJECT"
+        }
+      ],
+      "overall": "CORRECT",
+      "overall_note": "All four findings genuinely unaddressed at the run-time head; every NOT_APPLIED verdict verified against the tree and corroborated by the author's follow-up commit 2812ea69 ('fix(ui): resolve MR !1032 follow-up review findings') 53 minutes after the check, which fixes exactly those four items. Gate REJECTED matches ground truth. No SILENTLY_APPLIED verdicts existed in this run to sample (table: 0 applied / 0 SA / 4 NA / 0 NH). Anchors in the nudges matched run-head line numbers exactly (LeftSection.tsx:403) — no H1 drift observed.",
+      "root_causes": []
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+ "repo": "cleo",
+ "iid": 1125,
+ "title": "feat(mcp): enable the connector in production",
+ "runs": [
+  {
+   "timestamp": "2026-08-08T17:30:40.901Z",
+   "gate": "APPROVED",
+   "head_at_run": "d7307da460c9",
+   "bot_approval": "2026-08-08T17:29:58.428Z",
+   "merged": "2026-08-08T17:31:44.657Z",
+   "fc_counts": {
+    "applied": 0,
+    "silently_applied": 1,
+    "not_applied": 0,
+    "needs_human": 0
+   },
+   "per_thread": [
+    {
+     "thread_id": "(pipeline-guard concern; NO review threads exist on this MR)",
+     "anchor": "test_deploy_config.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "d7307da4 (head) flips guard assertions test_production_is_disabled->test_production_is_enabled with docstring recording date/MR/accepted gaps",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git show d7307da4 hunk"
+    }
+   ],
+   "overall": "CORRECT",
+   "overall_note": "No omnireview threads existed; the sole concern (deliberate guard flip) was addressed transparently at the approved head.",
+   "root_causes": []
+  }
+ ]
+}

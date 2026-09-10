@@ -1,0 +1,82 @@
+{
+ "repo": "cleo",
+ "iid": 1180,
+ "title": "fix(mongo): clear durable read-through caches once per new deploy",
+ "runs": [
+  {
+   "timestamp": "2026-08-15T08:13:08.668Z",
+   "gate": "APPROVED",
+   "head_at_run": "0c211b28cbaa",
+   "bot_approval": "2026-08-15T08:12:58.550Z",
+   "merged": "2026-08-15T08:13:45.395Z",
+   "fc_counts": {
+    "applied": 0,
+    "silently_applied": 11,
+    "not_applied": 2,
+    "needs_human": 1
+   },
+   "per_thread": [
+    {
+     "thread_id": "710ba240 non-atomic claim",
+     "anchor": "seo_collections.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "fix present: atomic conditional update_one claim ($ne) + tests (bcbb08b5)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff lines 115, 288-373"
+    },
+    {
+     "thread_id": "4f364bc8 no kill switch",
+     "anchor": "seo_collections.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "DEPLOY_CACHE_CLEAR_ENABLED=false kill switch + test_disabled_via_kill_switch",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff lines 126, 451"
+    },
+    {
+     "thread_id": "6702c9d8 tests in zero CI jobs",
+     "anchor": "CI",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "CI job runs pytest tests/test_deploy_cache_clear.py (0c211b28)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff line 26"
+    },
+    {
+     "thread_id": "9cd3410c BACKEND_VERSION collision",
+     "anchor": "deploy env",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "head commit 0c211b28 'fix BACKEND_VERSION collision' (message + CI changes) \u2014 consistent",
+     "judgment": "CORRECT_APPLY (spot)",
+     "hypothesis": null,
+     "evidence": "commit message"
+    },
+    {
+     "thread_id": "8fa3a45e/#1ec2235 drain-window repopulation",
+     "anchor": "seo_collections.py:775",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: no drain-window/grace mitigation in diff",
+     "judgment": "CORRECT (finding real, unfixed)",
+     "hypothesis": null,
+     "evidence": "grep drain/grace/delay -> absent"
+    },
+    {
+     "thread_id": "47978a72/#9dc027d coarse trigger",
+     "anchor": "seo_collections.py:700",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: trigger still BACKEND_VERSION, no payload-shape condition",
+     "judgment": "CORRECT (finding real, unfixed)",
+     "hypothesis": null,
+     "evidence": "grep shape/SCHEMA_VERSION -> absent"
+    }
+   ],
+   "overall": "FALSE_APPROVE",
+   "overall_note": "Gate APPROVED with 2 NOT_APPLIED + 1 NEEDS_HUMAN; table section literally headed 'Unaddressed Findings (approved despite these \u2014 not nudged)'. Worst race (atomicity) was fixed, but two real Important design gaps (stale data surviving drain window for full TTL; unconditional paid recompute per deploy) shipped unaddressed.",
+   "root_causes": [
+    "H5-class: APPROVED despite NA=2+NH=1, nudges explicitly skipped",
+    "OTHER: risk-acceptance documented in-report instead of gating"
+   ]
+  }
+ ]
+}

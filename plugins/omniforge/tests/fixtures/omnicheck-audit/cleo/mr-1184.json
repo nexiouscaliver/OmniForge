@@ -1,0 +1,688 @@
+{
+  "meta": {
+    "iid": 1184,
+    "title": "feat(remediation): PR pre-merge verification — correctness, evidence, Check Runs, LLM-path coverage",
+    "state": "merged",
+    "author_username": "DiwakarNadar",
+    "created_at": "2026-08-14T03:06:02.050Z",
+    "updated_at": "2026-08-15T13:46:55.144Z",
+    "merged_at": "2026-08-15T13:46:52.335Z",
+    "labels": [],
+    "source_branch": "git-app",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184",
+    "sha": "3bf8cc01f416b6f032868aa8ea156a1075f861fb",
+    "merge_commit_sha": "4d3b847f62cf40769040cffa2736bd8b8441c575",
+    "diff_refs": {
+      "base_sha": "cae19f1ccaad15844feabcdeea3adaa3a1376e63",
+      "head_sha": "3bf8cc01f416b6f032868aa8ea156a1075f861fb",
+      "start_sha": "ee0d519ef78e59a2fbc6f54fc27c9fb75dbf12c1"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3685403446,
+      "body": "requested review from @Abhishek-2004-17",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T03:06:02.187Z"
+    },
+    {
+      "id": 3685505904,
+      "body": "added 1 commit\n\n<ul><li>df38ef5c - fix(studio): give the gallery&#39;s Watch action a real accessible name</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961592553&start_sha=337b23739d05279334ca40849370b83d85e062d8)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T04:11:12.066Z"
+    },
+    {
+      "id": 3685648016,
+      "body": "added 1 commit\n\n<ul><li>8ddaf401 - fix(remediation): keep server prose out of the GitHub App install toast</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961656122&start_sha=df38ef5c06eda42fcce867002e80040806bba8b0)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T05:23:01.503Z"
+    },
+    {
+      "id": 3685665066,
+      "body": "added 1 commit\n\n<ul><li>4a262c2c - perf(ci): stop firing seven frontend jobs on every CI-config edit</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961664747&start_sha=8ddaf401f133c42ab401d5cb0119a4cffd1a9d19)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T05:33:02.481Z"
+    },
+    {
+      "id": 3685796154,
+      "body": "added 1 commit\n\n<ul><li>992f120e - perf(ci): halve frontend-test shards from 4 to 2</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961730690&start_sha=4a262c2cdce6d4f4352e933652509b85cbcf00f4)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T06:34:36.315Z"
+    },
+    {
+      "id": 3685872223,
+      "body": "added 1 commit\n\n<ul><li>0d4be773 - fix(remediation): classify remediation_code_ci_status in the WS contract</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961776084&start_sha=992f120edf3cdaacf47c3398d1a46949775f24c8)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T07:05:54.131Z"
+    },
+    {
+      "id": 3687527959,
+      "body": "added 28 commits\n\n<ul><li>0d4be773...a187ee13 - 27 commits from branch <code>staging-phase</code></li><li>83881377 - Merge branch &#39;staging-phase&#39; into git-app</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1962631403&start_sha=0d4be773234d4066e1f9525e2b58933b52c32a4b)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T13:54:41.580Z"
+    },
+    {
+      "id": 3688588746,
+      "body": "## OmniForge\n\n**Verdict:** BLOCK\n\n### Overview\n\nThis MR builds a genuinely well-architected safety system for auto-verifying AI-generated code fixes before they reach a customer's PR queue — the core gate mechanism is fail-closed, secret handling is provably clean, webhook auth is textbook-correct, and the system is structurally incapable of auto-merging at all (no merge capability exists anywhere in the codebase, enforced by a tripwire assertion). But two independent agents reached opposite conclusions on the exact same question — whether the safety gate can be bypassed — and the Codebase Reviewer's finding is specific and well-evidenced enough that it needs human resolution before merge. Layered on top: the MR currently has real merge conflicts, 0 of 2 required approvals, and a test-count claim off by roughly 3x.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 3 (1 contested) |\n| Important | 4 |\n| Minor | 1 |\n\n### Strengths\n\n- The core `PromotionGate`/`BuildVerificationRouter` stack is fail-closed and consistently honored everywhere both agents traced it.\n- The system cannot auto-merge, structurally, not by convention — no merge method exists on any backend, enforced by a tripwire assertion checked in tests.\n- Secret/log-excerpt handling is accurate as claimed — traced through every producer and consumer, raw CI text never reaches the DB, metrics, comments, or annotations.\n- Webhook signature verification is textbook-correct; cross-tenant installation-token IDOR is explicitly closed.\n- Prompt-injection defenses in the LLM edit path are unusually thorough (fencing + explicit data-not-instructions framing + post-hoc unsafe-content scan regardless of what the model was told).\n- Both feature flags default OFF, independently verified true.\n- The \"twelve gaps, three silent-pass gates\" CI claim checks out concretely; the error-leak guard was genuinely hardened, not loosened for this MR's own benefit.\n\n### Key Concerns\n\n- **[Critical — CONTESTED, needs human judgment]** The Codebase Reviewer found `RemediationOrchestrator.run()` calls `channel.apply()` directly, never `apply_via_gate` — bypassing the promotion gate entirely for content/git-content primary channels behind the independently-toggleable `ENABLE_CONTENT_VERIFICATION` flag, with zero test coverage of this path. The Security Reviewer's adversarial pass concluded no bypass exists, but that trace's explicitly-stated file scope didn't include this specific caller. See inline thread — this needs direct verification before merge.\n- **[Critical]** Three unrelated, differently-risky concerns bundled into one unit — the feature subsystem is flag-gated and dark, but the `.gitlab-ci.yml` overhaul (512 lines) is live and unconditional on merge, and the description doesn't disclose that distinction.\n- **[Important]** The MR currently cannot be merged — real conflicts against `staging-phase` (108 commits ahead), overlapping the exact files (`.gitlab-ci.yml`, `feature_flags.py`) central to its own safety claims.\n- **[Important]** Test-count claim is off by roughly 3x (claimed +63, independently verified +204).\n- **[Important]** Zero review activity despite an assigned reviewer — 0/2 approvals, no human comments.\n- **[Important]** Branch reaper can delete an orphaned staging-base branch while a still-open PR still targets it as base — see inline thread.\n\n### Security\n\nThe system's core design is sound where traced: fail-closed gate error handling, provably clean secret handling, correct webhook auth, closed cross-tenant IDOR, and a structural inability to auto-merge at all. The one serious open question is the contested orchestrator-bypass finding above, which needs direct verification since it falls outside this agent's explicitly-traced scope.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 8 findings above threshold*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T18:42:54.352Z"
+    },
+    {
+      "id": 3688589204,
+      "body": "**Critical — CONTESTED, needs human verification** — Does `RemediationOrchestrator` bypass the promotion gate entirely?\n\n**What:** `RemediationOrchestrator.run()` (`remediation/router/orchestrator.py:135`) calls `channel.apply()` directly — never `apply_via_gate`. This orchestrator has no `gate` parameter at all. This file (`orchestrator_wiring.py`, changed by this MR) wires a live `CodeChannel` as the primary channel for the git-content arm and the J1 \"CMS-less pure-JS site\" arm, gated behind `ENABLE_CONTENT_VERIFICATION` — a flag independently toggleable from `ENABLE_PR_PREVERIFICATION`. `gate_factory.py`'s own docstring appears to predict exactly this class of gap: \"copies drift: a tier added to one list and not the other is a silent hole.\" The MR's own regression test (`test_llm_edit_reaches_the_gate_instead_of_bypassing_it`) only exercises `CodeChannel.apply_via_gate`, never `RemediationOrchestrator.run()`.\n\n**Why this is contested:** The Security Reviewer's independent adversarial pass concluded \"no path found where code could be applied/merged without passing through the promotion gate\" — but that trace's explicitly-stated file scope was `channel.py`, `promotion_gate.py`, `gate_factory.py`, `universal_adapter.py`, and did not include `remediation/router/orchestrator.py` or this file's content/git-content wiring arms.\n\n**Why it matters:** If this holds, then with `ENABLE_CONTENT_VERIFICATION=True` and a code/git-content primary channel, a site's fixes could open a production-targeted PR with zero build verification and no \"unverified\" marker — silently reproducing the exact bug class Phase 4.1 claims to have closed, just via a different caller.\n\n**Recommendation:**\n```\nBefore merge, directly verify whether RemediationOrchestrator.run() can be\nreached with ENABLE_CONTENT_VERIFICATION=True and a code/git-content primary\nchannel. If so, wire it to apply_via_gate the same way channel.py's LLM path\nnow is (e.g. give RemediationOrchestrator a gate_provider mirroring\ncode_provider/config_provider), or add an explicit runtime guard refusing to\nconstruct such an orchestrator until it's wired.\n```\n\nConfidence: 85/100 | Found by: Codebase Reviewer (contradicts Security Reviewer's narrower-scoped conclusion — see summary)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T18:43:03.633Z"
+    },
+    {
+      "id": 3688589392,
+      "body": "**Important** — Reaper can delete an orphaned staging-base branch while a still-open PR targets it as base\n\n**What:** The reaper's open-PR check (`find_open_pr_number`) only searches for PRs where the candidate branch is the **head** — but the ephemeral `cleo/staging-*` base branch (`STAGING_BRANCH_PREFIX`) is by construction only ever a PR's **base**, never its head. This check can never protect it.\n\n**Why it matters:** If `PromotionGate.run()` crashes or is killed between opening a staging PR and reaching cleanup (or the shielded cleanup itself fails on the base-branch delete — a `try/except Exception: logger.warning` swallow), the staging PR is left open, orphaned, targeting the ephemeral base. Once that base branch crosses the reaper's TTL (default 7 days), the next sweep deletes it — while the orphaned staging PR is still open on the host — breaking that PR's mergeability. The MR's own test (`test_reaps_orphaned_staging_bases_and_llm_drafts`) deletes a 30-day-old staging base with no assertion that a still-open staging PR targeting it as base is checked first.\n\n**Recommendation:**\n```\nExtend the reaper's open-PR check to also cover PRs where the candidate is\nthe base (a find_open_pr_number variant, or a combined query), or have the\npromotion gate register the staging-base branch as protected whenever an\norphaned staging PR is discovered still open during a sweep.\n```\n\nConfidence: 80/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T18:43:08.804Z"
+    },
+    {
+      "id": 3690099760,
+      "body": "added 3 commits\n\n<ul><li>1d269354 - fix(remediation): apply through the promotion gate from the orchestrator too</li><li>d4495b6e - fix(remediation): never reap a staging base an open PR still targets</li><li>8d6fd77e - fix(remediation): keep server prose out of CI Cleo&#39;s error banners</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963802889&start_sha=8388137738975990e40034c8e5ec1bd9492a86e9)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T11:31:06.019Z"
+    },
+    {
+      "id": 3690101496,
+      "body": "added 247 commits\n\n<ul><li>8d6fd77e...cae19f1c - 246 commits from branch <code>staging-phase</code></li><li>0e53ec61 - Merge branch &#39;staging-phase&#39; of gitlab.com:regenai-gitlab/regenai-digital/cleo into git-app</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963803872&start_sha=8d6fd77efe73f3ff5235854b2449e7b2684939c0)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T11:34:01.210Z"
+    },
+    {
+      "id": 3690119552,
+      "body": "added 1 commit\n\n<ul><li>a34cfb6d - fix(errors): key the two new error banners off category, not server prose</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963812847&start_sha=0e53ec6165e2c994b1b76aa0be947cd63763d8e6)",
+      "author_username": "DiwakarNadar",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T12:01:39.532Z"
+    },
+    {
+      "id": 3690182746,
+      "body": "added 1 commit\n\n<ul><li>3bf8cc01 - ops: add build-repair/branch-reaper tuning knobs to ECS task defs and CI substitution</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963838724&start_sha=a34cfb6d4da45ccb5cce45cf00e702be47dc6f71)",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T13:05:44.572Z"
+    },
+    {
+      "id": 3690212238,
+      "body": "Status update based on the current diff: this is partially, not fully, resolved.\n\n`RemediationOrchestrator.run()` no longer calls `channel.apply()` unconditionally — it now goes through `self._apply()`, which routes via `apply_via_gate` when a `gate_provider` is wired. The J1 code-primary arm (the concrete example above) is now gated (`gate_config=code_cfg` in `orchestrator_wiring.py`), with dedicated coverage in the new `test_orchestrator_gate.py`.\n\nThe git-content-primary arm is still not gated. A new comment in `orchestrator_wiring.py` explains why: `GitContentChannel` writes via `patch_field` and never builds a `PullRequestSpec`, so it can't go through `PromotionGate.run` without a write-path restructure — it stays unverified \"for now.\" That's now disclosed rather than silent, but neither of the two remedies suggested above (full gating, or a runtime guard) was applied to this arm.\n\nWorth a direct call before merge: is a documented-but-still-ungated git-content path acceptable as-is, or does it need the guard?",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-15T13:38:30.267Z"
+    },
+    {
+      "id": 3690213707,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T13:41:00.313Z"
+    },
+    {
+      "id": 3690213900,
+      "body": "## Follow-up Check — MR !1184\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 2 |\n\nBranch reaper / staging-base deletion race is fully resolved, with dedicated test coverage.\n\nApproved. Two items remain open at approval time and are noted here for visibility:\n- The git-content-primary arm of `RemediationOrchestrator` remains intentionally ungated (see the reply on the gate-bypass thread for detail) — disclosed in code, not silent, but still open.\n- 0/2 required approvals were recorded prior to this one.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T13:41:20.514Z"
+    },
+    {
+      "id": 3690217665,
+      "body": "mentioned in commit 4d3b847f62cf40769040cffa2736bd8b8441c575",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T13:46:53.337Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "ecffed4835cbd15bb3ce10e3ff45e94238fcd908",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685403446,
+          "body": "requested review from @Abhishek-2004-17",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T03:06:02.187Z"
+        }
+      ]
+    },
+    {
+      "id": "a3b27e7f1f0ea0f349c2511552cb1a1393f9600d",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685505904,
+          "body": "added 1 commit\n\n<ul><li>df38ef5c - fix(studio): give the gallery&#39;s Watch action a real accessible name</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961592553&start_sha=337b23739d05279334ca40849370b83d85e062d8)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T04:11:12.066Z"
+        }
+      ]
+    },
+    {
+      "id": "7d1d0835a97d8e33a645c94e6dc824ae6e1107ad",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685648016,
+          "body": "added 1 commit\n\n<ul><li>8ddaf401 - fix(remediation): keep server prose out of the GitHub App install toast</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961656122&start_sha=df38ef5c06eda42fcce867002e80040806bba8b0)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T05:23:01.503Z"
+        }
+      ]
+    },
+    {
+      "id": "8df85051e2be75a4a8f309b4ad8b5981391ea761",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685665066,
+          "body": "added 1 commit\n\n<ul><li>4a262c2c - perf(ci): stop firing seven frontend jobs on every CI-config edit</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961664747&start_sha=8ddaf401f133c42ab401d5cb0119a4cffd1a9d19)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T05:33:02.481Z"
+        }
+      ]
+    },
+    {
+      "id": "6ac0b134f1173e2d71950e859673d3c6e443203b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685796154,
+          "body": "added 1 commit\n\n<ul><li>992f120e - perf(ci): halve frontend-test shards from 4 to 2</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961730690&start_sha=4a262c2cdce6d4f4352e933652509b85cbcf00f4)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T06:34:36.315Z"
+        }
+      ]
+    },
+    {
+      "id": "c792f17be82f1ec373c14aac00c628d2c670226a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685872223,
+          "body": "added 1 commit\n\n<ul><li>0d4be773 - fix(remediation): classify remediation_code_ci_status in the WS contract</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1961776084&start_sha=992f120edf3cdaacf47c3398d1a46949775f24c8)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T07:05:54.131Z"
+        }
+      ]
+    },
+    {
+      "id": "181fa2e766ad2b9d25b2a92f31950c9a78c75b62",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3687527959,
+          "body": "added 28 commits\n\n<ul><li>0d4be773...a187ee13 - 27 commits from branch <code>staging-phase</code></li><li>83881377 - Merge branch &#39;staging-phase&#39; into git-app</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1962631403&start_sha=0d4be773234d4066e1f9525e2b58933b52c32a4b)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T13:54:41.580Z"
+        }
+      ]
+    },
+    {
+      "id": "d41eda94bb26bcba36a3859be5ddd1d998df1cae",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3688588746,
+          "body": "## OmniForge\n\n**Verdict:** BLOCK\n\n### Overview\n\nThis MR builds a genuinely well-architected safety system for auto-verifying AI-generated code fixes before they reach a customer's PR queue — the core gate mechanism is fail-closed, secret handling is provably clean, webhook auth is textbook-correct, and the system is structurally incapable of auto-merging at all (no merge capability exists anywhere in the codebase, enforced by a tripwire assertion). But two independent agents reached opposite conclusions on the exact same question — whether the safety gate can be bypassed — and the Codebase Reviewer's finding is specific and well-evidenced enough that it needs human resolution before merge. Layered on top: the MR currently has real merge conflicts, 0 of 2 required approvals, and a test-count claim off by roughly 3x.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 3 (1 contested) |\n| Important | 4 |\n| Minor | 1 |\n\n### Strengths\n\n- The core `PromotionGate`/`BuildVerificationRouter` stack is fail-closed and consistently honored everywhere both agents traced it.\n- The system cannot auto-merge, structurally, not by convention — no merge method exists on any backend, enforced by a tripwire assertion checked in tests.\n- Secret/log-excerpt handling is accurate as claimed — traced through every producer and consumer, raw CI text never reaches the DB, metrics, comments, or annotations.\n- Webhook signature verification is textbook-correct; cross-tenant installation-token IDOR is explicitly closed.\n- Prompt-injection defenses in the LLM edit path are unusually thorough (fencing + explicit data-not-instructions framing + post-hoc unsafe-content scan regardless of what the model was told).\n- Both feature flags default OFF, independently verified true.\n- The \"twelve gaps, three silent-pass gates\" CI claim checks out concretely; the error-leak guard was genuinely hardened, not loosened for this MR's own benefit.\n\n### Key Concerns\n\n- **[Critical — CONTESTED, needs human judgment]** The Codebase Reviewer found `RemediationOrchestrator.run()` calls `channel.apply()` directly, never `apply_via_gate` — bypassing the promotion gate entirely for content/git-content primary channels behind the independently-toggleable `ENABLE_CONTENT_VERIFICATION` flag, with zero test coverage of this path. The Security Reviewer's adversarial pass concluded no bypass exists, but that trace's explicitly-stated file scope didn't include this specific caller. See inline thread — this needs direct verification before merge.\n- **[Critical]** Three unrelated, differently-risky concerns bundled into one unit — the feature subsystem is flag-gated and dark, but the `.gitlab-ci.yml` overhaul (512 lines) is live and unconditional on merge, and the description doesn't disclose that distinction.\n- **[Important]** The MR currently cannot be merged — real conflicts against `staging-phase` (108 commits ahead), overlapping the exact files (`.gitlab-ci.yml`, `feature_flags.py`) central to its own safety claims.\n- **[Important]** Test-count claim is off by roughly 3x (claimed +63, independently verified +204).\n- **[Important]** Zero review activity despite an assigned reviewer — 0/2 approvals, no human comments.\n- **[Important]** Branch reaper can delete an orphaned staging-base branch while a still-open PR still targets it as base — see inline thread.\n\n### Security\n\nThe system's core design is sound where traced: fail-closed gate error handling, provably clean secret handling, correct webhook auth, closed cross-tenant IDOR, and a structural inability to auto-merge at all. The one serious open question is the contested orchestrator-bypass finding above, which needs direct verification since it falls outside this agent's explicitly-traced scope.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 8 findings above threshold*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T18:42:54.352Z"
+        }
+      ]
+    },
+    {
+      "id": "2492fe435ca9b04405a6c98d272452107280dd2b",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688589204,
+          "body": "**Critical — CONTESTED, needs human verification** — Does `RemediationOrchestrator` bypass the promotion gate entirely?\n\n**What:** `RemediationOrchestrator.run()` (`remediation/router/orchestrator.py:135`) calls `channel.apply()` directly — never `apply_via_gate`. This orchestrator has no `gate` parameter at all. This file (`orchestrator_wiring.py`, changed by this MR) wires a live `CodeChannel` as the primary channel for the git-content arm and the J1 \"CMS-less pure-JS site\" arm, gated behind `ENABLE_CONTENT_VERIFICATION` — a flag independently toggleable from `ENABLE_PR_PREVERIFICATION`. `gate_factory.py`'s own docstring appears to predict exactly this class of gap: \"copies drift: a tier added to one list and not the other is a silent hole.\" The MR's own regression test (`test_llm_edit_reaches_the_gate_instead_of_bypassing_it`) only exercises `CodeChannel.apply_via_gate`, never `RemediationOrchestrator.run()`.\n\n**Why this is contested:** The Security Reviewer's independent adversarial pass concluded \"no path found where code could be applied/merged without passing through the promotion gate\" — but that trace's explicitly-stated file scope was `channel.py`, `promotion_gate.py`, `gate_factory.py`, `universal_adapter.py`, and did not include `remediation/router/orchestrator.py` or this file's content/git-content wiring arms.\n\n**Why it matters:** If this holds, then with `ENABLE_CONTENT_VERIFICATION=True` and a code/git-content primary channel, a site's fixes could open a production-targeted PR with zero build verification and no \"unverified\" marker — silently reproducing the exact bug class Phase 4.1 claims to have closed, just via a different caller.\n\n**Recommendation:**\n```\nBefore merge, directly verify whether RemediationOrchestrator.run() can be\nreached with ENABLE_CONTENT_VERIFICATION=True and a code/git-content primary\nchannel. If so, wire it to apply_via_gate the same way channel.py's LLM path\nnow is (e.g. give RemediationOrchestrator a gate_provider mirroring\ncode_provider/config_provider), or add an explicit runtime guard refusing to\nconstruct such an orchestrator until it's wired.\n```\n\nConfidence: 85/100 | Found by: Codebase Reviewer (contradicts Security Reviewer's narrower-scoped conclusion — see summary)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T18:43:03.633Z"
+        },
+        {
+          "id": 3690212238,
+          "body": "Status update based on the current diff: this is partially, not fully, resolved.\n\n`RemediationOrchestrator.run()` no longer calls `channel.apply()` unconditionally — it now goes through `self._apply()`, which routes via `apply_via_gate` when a `gate_provider` is wired. The J1 code-primary arm (the concrete example above) is now gated (`gate_config=code_cfg` in `orchestrator_wiring.py`), with dedicated coverage in the new `test_orchestrator_gate.py`.\n\nThe git-content-primary arm is still not gated. A new comment in `orchestrator_wiring.py` explains why: `GitContentChannel` writes via `patch_field` and never builds a `PullRequestSpec`, so it can't go through `PromotionGate.run` without a write-path restructure — it stays unverified \"for now.\" That's now disclosed rather than silent, but neither of the two remedies suggested above (full gating, or a runtime guard) was applied to this arm.\n\nWorth a direct call before merge: is a documented-but-still-ungated git-content path acceptable as-is, or does it need the guard?",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-15T13:38:30.267Z"
+        }
+      ]
+    },
+    {
+      "id": "6d225316b28b73928cff9b8f50701101dc176c1f",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688589392,
+          "body": "**Important** — Reaper can delete an orphaned staging-base branch while a still-open PR targets it as base\n\n**What:** The reaper's open-PR check (`find_open_pr_number`) only searches for PRs where the candidate branch is the **head** — but the ephemeral `cleo/staging-*` base branch (`STAGING_BRANCH_PREFIX`) is by construction only ever a PR's **base**, never its head. This check can never protect it.\n\n**Why it matters:** If `PromotionGate.run()` crashes or is killed between opening a staging PR and reaching cleanup (or the shielded cleanup itself fails on the base-branch delete — a `try/except Exception: logger.warning` swallow), the staging PR is left open, orphaned, targeting the ephemeral base. Once that base branch crosses the reaper's TTL (default 7 days), the next sweep deletes it — while the orphaned staging PR is still open on the host — breaking that PR's mergeability. The MR's own test (`test_reaps_orphaned_staging_bases_and_llm_drafts`) deletes a 30-day-old staging base with no assertion that a still-open staging PR targeting it as base is checked first.\n\n**Recommendation:**\n```\nExtend the reaper's open-PR check to also cover PRs where the candidate is\nthe base (a find_open_pr_number variant, or a combined query), or have the\npromotion gate register the staging-base branch as protected whenever an\norphaned staging PR is discovered still open during a sweep.\n```\n\nConfidence: 80/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T18:43:08.804Z"
+        }
+      ]
+    },
+    {
+      "id": "a262ca34b4bf3d33fc9d0f1cd7f9bfe8d7bf0fcd",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690099760,
+          "body": "added 3 commits\n\n<ul><li>1d269354 - fix(remediation): apply through the promotion gate from the orchestrator too</li><li>d4495b6e - fix(remediation): never reap a staging base an open PR still targets</li><li>8d6fd77e - fix(remediation): keep server prose out of CI Cleo&#39;s error banners</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963802889&start_sha=8388137738975990e40034c8e5ec1bd9492a86e9)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T11:31:06.019Z"
+        }
+      ]
+    },
+    {
+      "id": "42334318ff4f4a016eda8493683d53aee586c90f",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690101496,
+          "body": "added 247 commits\n\n<ul><li>8d6fd77e...cae19f1c - 246 commits from branch <code>staging-phase</code></li><li>0e53ec61 - Merge branch &#39;staging-phase&#39; of gitlab.com:regenai-gitlab/regenai-digital/cleo into git-app</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963803872&start_sha=8d6fd77efe73f3ff5235854b2449e7b2684939c0)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T11:34:01.210Z"
+        }
+      ]
+    },
+    {
+      "id": "d448757b65bb9fd63b935c3d35224f5b5dd5be14",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690119552,
+          "body": "added 1 commit\n\n<ul><li>a34cfb6d - fix(errors): key the two new error banners off category, not server prose</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963812847&start_sha=0e53ec6165e2c994b1b76aa0be947cd63763d8e6)",
+          "author_username": "DiwakarNadar",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T12:01:39.532Z"
+        }
+      ]
+    },
+    {
+      "id": "21ed7daf1a97dae1eaeb1bac15bd14b255aeabcd",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690182746,
+          "body": "added 1 commit\n\n<ul><li>3bf8cc01 - ops: add build-repair/branch-reaper tuning knobs to ECS task defs and CI substitution</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1184/diffs?diff_id=1963838724&start_sha=a34cfb6d4da45ccb5cce45cf00e702be47dc6f71)",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T13:05:44.572Z"
+        }
+      ]
+    },
+    {
+      "id": "faea003d292306bff73f79e4ce1e55ef545785ef",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690213707,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T13:41:00.313Z"
+        }
+      ]
+    },
+    {
+      "id": "a0aa9175ca7c377e7621aae0ec3b376008ae02cb",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690213900,
+          "body": "## Follow-up Check — MR !1184\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 2 |\n\nBranch reaper / staging-base deletion race is fully resolved, with dedicated test coverage.\n\nApproved. Two items remain open at approval time and are noted here for visibility:\n- The git-content-primary arm of `RemediationOrchestrator` remains intentionally ungated (see the reply on the gate-bypass thread for detail) — disclosed in code, not silent, but still open.\n- 0/2 required approvals were recorded prior to this one.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T13:41:20.514Z"
+        }
+      ]
+    },
+    {
+      "id": "38a8c308eb0368ac2ff8d70e54f6ef2afb4cd183",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3690217665,
+          "body": "mentioned in commit 4d3b847f62cf40769040cffa2736bd8b8441c575",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T13:46:53.337Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "3bf8cc01f416b6f032868aa8ea156a1075f861fb",
+      "title": "ops: add build-repair/branch-reaper tuning knobs to ECS task defs and CI substitution",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-15T18:23:41.000+05:30"
+    },
+    {
+      "id": "a34cfb6d4da45ccb5cce45cf00e702be47dc6f71",
+      "title": "fix(errors): key the two new error banners off category, not server prose",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-15T12:01:32.000+00:00"
+    },
+    {
+      "id": "0e53ec6165e2c994b1b76aa0be947cd63763d8e6",
+      "title": "Merge branch 'staging-phase' of gitlab.com:regenai-gitlab/regenai-digital/cleo into git-app",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-15T11:33:54.000+00:00"
+    },
+    {
+      "id": "8d6fd77efe73f3ff5235854b2449e7b2684939c0",
+      "title": "fix(remediation): keep server prose out of CI Cleo's error banners",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-15T09:01:35.000+00:00"
+    },
+    {
+      "id": "d4495b6e05cf926220f502ffd6d0e22311ec9dca",
+      "title": "fix(remediation): never reap a staging base an open PR still targets",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-15T09:01:14.000+00:00"
+    },
+    {
+      "id": "1d269354b1cd29fa1836b5548924606d8d5b763a",
+      "title": "fix(remediation): apply through the promotion gate from the orchestrator too",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-15T09:00:55.000+00:00"
+    },
+    {
+      "id": "8388137738975990e40034c8e5ec1bd9492a86e9",
+      "title": "Merge branch 'staging-phase' into git-app",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T13:54:27.000+00:00"
+    },
+    {
+      "id": "0d4be773234d4066e1f9525e2b58933b52c32a4b",
+      "title": "fix(remediation): classify remediation_code_ci_status in the WS contract",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T07:05:41.000+00:00"
+    },
+    {
+      "id": "992f120edf3cdaacf47c3398d1a46949775f24c8",
+      "title": "perf(ci): halve frontend-test shards from 4 to 2",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T06:34:23.000+00:00"
+    },
+    {
+      "id": "4a262c2cdce6d4f4352e933652509b85cbcf00f4",
+      "title": "perf(ci): stop firing seven frontend jobs on every CI-config edit",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T05:32:50.000+00:00"
+    },
+    {
+      "id": "8ddaf401f133c42ab401d5cb0119a4cffd1a9d19",
+      "title": "fix(remediation): keep server prose out of the GitHub App install toast",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T05:22:48.000+00:00"
+    },
+    {
+      "id": "df38ef5c06eda42fcce867002e80040806bba8b0",
+      "title": "fix(studio): give the gallery's Watch action a real accessible name",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T04:10:59.000+00:00"
+    },
+    {
+      "id": "337b23739d05279334ca40849370b83d85e062d8",
+      "title": "fix(ci): close twelve gaps in the deploy pipeline, incl. three silent-pass gates",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T03:00:58.000+00:00"
+    },
+    {
+      "id": "c87ae7abccd3fe8c97a7f7f9a539b1df1cea9b7b",
+      "title": "Merge branch 'staging-phase' of gitlab.com:regenai-gitlab/regenai-digital/cleo into git-app",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-14T02:23:01.000+00:00"
+    },
+    {
+      "id": "fa9dad87032f0111b863af0e980d3f019e2ec3f0",
+      "title": "Merge staging-phase into git-app",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-12T06:02:51.000+00:00"
+    },
+    {
+      "id": "ae38f027946b0356e247f7ce4cde01a01c773bf6",
+      "title": "refactor(remediation): lead the CI panel with the answer, not the evidence",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-12T05:30:12.000+00:00"
+    },
+    {
+      "id": "1165b5020a282f2feb0986032f72481aad8a0a6b",
+      "title": "fix(remediation): resolve a site's git identity in one place, not eight",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-11T14:09:23.000+00:00"
+    },
+    {
+      "id": "d988a0c2eda79f06356b7f8d3c087cdc9f11d283",
+      "title": "fix(remediation): widen the verdict window, declare an unavailable gate, honour the repo's Node pin",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-11T02:51:19.000+00:00"
+    },
+    {
+      "id": "50e4f1a764fccb8581e96983c64e2e8c51bfc59e",
+      "title": "fix(remediation): persist batch build verdicts, and stop the strip misreporting them",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-11T02:35:03.000+00:00"
+    },
+    {
+      "id": "bc6e2d0f095fff79b012565a8e75bd8c72a035c6",
+      "title": "feat(remediation): CI Cleo — a fix's whole journey, from staged edit to merged PR",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-08T02:34:49.000+00:00"
+    },
+    {
+      "id": "b9140d6a837ed622dceaacc89b1ff9fb5a4bac23",
+      "title": "feat(remediation): Tier 2 injected CI so a draft branch always builds",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-07T03:05:27.000+00:00"
+    },
+    {
+      "id": "2406e4eea02699b93f00410f2e6ad742631ca88e",
+      "title": "docs: track the PR verification + GitHub App architecture v1.0",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-06T05:01:38.000+00:00"
+    },
+    {
+      "id": "973a0c9bac5ed75718d5b3ad6af262ee18f194fd",
+      "title": "feat(remediation): repair heuristic edits too, not just adapter-authored ones",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-05T03:04:05.000+00:00"
+    },
+    {
+      "id": "bc2cfc9c9240502991105ede2cd79ee17ef231ae",
+      "title": "feat(remediation): surface the pre-merge build verdict to the operator",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-05T03:03:54.000+00:00"
+    },
+    {
+      "id": "69ae9eac079e5ef380a535e5402d5149bb2f0856",
+      "title": "docs(remediation): correct Phase 1 status in the GitHub App roadmap",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-04T12:48:58.000+00:00"
+    },
+    {
+      "id": "e2ba359af9068720c9bdb2fb22692a63552f940e",
+      "title": "fix(remediation): classify deploy-integration refusals as infra, not a code fault",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T09:57:19.000+00:00"
+    },
+    {
+      "id": "1ab51bfc3e42091a7e7653faf233035e434b86f4",
+      "title": "chore(remediation): make go-live a CI-variable flip, and fix the flag default",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T09:45:01.000+00:00"
+    },
+    {
+      "id": "7e50eb3eb711b6aa8a1682c9647aa223449f37cb",
+      "title": "feat(remediation): bounded agent repair loop on a code-fault verdict",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T09:38:36.000+00:00"
+    },
+    {
+      "id": "0a9d7a481b881f52eaa027614d4e5c51b1b1dd6d",
+      "title": "fix(remediation): keep reverts out of the promotion gate, and make them trackable",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T09:28:49.000+00:00"
+    },
+    {
+      "id": "cc5c12ef4a1a80eef936d0716401ee68f0b8cae1",
+      "title": "feat(remediation): gate the create/config and routing apply paths",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T09:21:35.000+00:00"
+    },
+    {
+      "id": "c9c589d0735ff9ef98682d6086b60dc686bc2087",
+      "title": "feat(remediation): route batch applies through the promotion gate",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T08:59:50.000+00:00"
+    },
+    {
+      "id": "58f1f18ffabb8ad9edc213f92fc469635537847e",
+      "title": "feat(remediation): GitHub App connect flow + pre-merge verdict in the UI",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T08:46:49.000+00:00"
+    },
+    {
+      "id": "2ef2d969fe6212231618575f4f732e7454c91632",
+      "title": "feat(remediation): branch reaper, base-health absolution, cancellation-safe teardown",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T08:34:00.000+00:00"
+    },
+    {
+      "id": "055df339511e2f3532d945c549aa3d13bc2ce971",
+      "title": "feat(remediation): PR pre-merge verification — correctness, evidence, Check Runs, LLM-path coverage",
+      "author_name": "Diwakar Muthukrishnan Nadar",
+      "created_at": "2026-08-03T08:12:48.000+00:00"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-15T13:41:00.085Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

@@ -1,0 +1,322 @@
+{
+ "repo": "loop-plugin",
+ "iid": 62,
+ "title": "safe-mode resource coordinator + Bash hook for parallel overnight sessions",
+ "runs": [
+  {
+   "timestamp": "2026-09-01T15:06:53.845Z",
+   "summary_note": 3770244221,
+   "trigger_note": 3770148479,
+   "head_at_run": "4c525040a656cb0348a118507fb242b89896da4c",
+   "base": "a189f1b8d000270a62c746d25b6397cd7096ad95",
+   "gate": "REJECTED",
+   "gate_evidence": "meta.labels=['omniforge::check-rejected']; 18 NOT_APPLIED + 3 NEEDS_HUMAN -> REJECTED",
+   "per_thread": [
+    {
+     "thread_id": "#f6b3ee0",
+     "anchor": "docs/gate-tuning.md:39",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "two REGENLOOP_GUARD_MEM_FLOOR_MB rows at 4c52504: '2048' (:39) and '1/12 of RAM' (:44)"
+    },
+    {
+     "thread_id": "#a927ea3",
+     "anchor": "docs/gate-tuning.md:115",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "worked example shows --class heavy --quiet --max-wait-s 300 -- with no --total-budget-s"
+    },
+    {
+     "thread_id": "#9d7d020",
+     "anchor": "tests/_testhelpers.py:81",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "ENGINE_TUNING_ENV_VARS omits GUARD_ROOT/MEM_FLOOR/SWAP_FLOOR/RESERVED/POLL/HEAD_STALL/FLOOR_STALL/MAX_LIGHT/WEIGHT vars; exactly six classes at 1611/1709/1739/1772/1808/2100 inherit unittest.TestCase not _GuardBase"
+    },
+    {
+     "thread_id": "#d5a3edc",
+     "anchor": "scripts/regenloop_guard.py:660",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "_ensure_guard_root refuses only root.is_symlink(); children mkdir(exist_ok=True); _write_json_atomic plain open(tmp,'w'), no O_CREAT|O_EXCL"
+    },
+    {
+     "thread_id": "#182565f",
+     "anchor": "CHANGELOG.md:38",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "'three re-entrancy fences' bullet present at :38"
+    },
+    {
+     "thread_id": "#8465dd8",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "git grep --total-budget-s over docs/ skills/ commands/ at 4c52504 = 0 hits"
+    },
+    {
+     "thread_id": "#4353984",
+     "anchor": "general (description S4)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "S4 presents F3/F4/F5/R1 as live; fixes present at head: DEFAULT_HOOK_BG_TIMEOUT_S=7200 (hook:134), MEM_FLOOR_FRACTION 1/12 (guard:165), isinstance(cwd,...) (hook:836), pipe=None if stream (guard:1559)"
+    },
+    {
+     "thread_id": "#5b50750",
+     "anchor": "hooks/guard_bash_tests.py:224",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "peel requires seg[idx+1]=='run' with no flag-skip; sh/bash not in _EXEC_WRAPPERS (npx/bunx/pnpx/dlx only) -> 'uv run --no-sync pytest', 'sh -c' miss"
+    },
+    {
+     "thread_id": "#3672de3",
+     "anchor": "scripts/regenloop_guard.py:1824",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "admin_release unlinks lease/ticket files for any id; no flock-on-.lock check, no --force"
+    },
+    {
+     "thread_id": "#1f5a23f",
+     "anchor": "general (description)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "description contains no round-8 row (0 hits); ledger stops at round 7 while round-8 fix is the head"
+    },
+    {
+     "thread_id": "#18dc2e6",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "stale dispositions spot-verified: --total-budget-s emitted (hook:917), bg bound exists, derived floor exists, isinstance cwd exists, symlink root refusal exists"
+    },
+    {
+     "thread_id": "#e34edd8",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "git log --format=%b on a85ac75311, 6ccebce2ef, 213e4bdf4f = empty bodies"
+    },
+    {
+     "thread_id": "#3f266f6",
+     "anchor": "scripts/regenloop_guard.py:1761",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "status() docstring 'Reap pass, then a read-only snapshot. Never raises.' while _reap_and_tally signals/unlinks"
+    },
+    {
+     "thread_id": "#0f06598",
+     "anchor": "general (description)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "Gates table last row f7f7d21; four later commits (6ccebce,213e4bd,255c298,4c52504) unrecorded at run time"
+    },
+    {
+     "thread_id": "#f523c90",
+     "anchor": "general (review verdict note #3769806528)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "BLOCK verdict note un-amended at run time though both criticals fixed at 14:38Z push (system note #3770072417)"
+    },
+    {
+     "thread_id": "#c91a546",
+     "anchor": "general (description)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "'No gate ran red at any point' still present; round-1 gate note #3756420948 records could_not_run 900s timeout (could_not_run-vs-red wording contestable but claim untouched)"
+    },
+    {
+     "thread_id": "#7927ad1",
+     "anchor": "general (description vs measurements doc)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "description 481-483s; measurements doc :58 'without --safe (-n auto) | 216 s' at head"
+    },
+    {
+     "thread_id": "#c4d5d81",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "API blocking_discussions_resolved=True (live fetch) while >=25 resolvable threads unresolved in evidence"
+    },
+    {
+     "thread_id": "C1 bare-$ bypass (note 3769806696)",
+     "anchor": "hooks/guard_bash_tests.py:355",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "_VOUCH_UNSAFE_RE now leads with \\\\$ (regex r'\\$|\\$\\(|...') at :375"
+    },
+    {
+     "thread_id": "C2 trailing-& lease release (note 3769806883)",
+     "anchor": "scripts/regenloop_guard.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "drain_group=True set by every supervised path (:1523/:1586/:1724/:1744); group drained before release"
+    },
+    {
+     "thread_id": "total_budget_s in _run_via_guard (note 3769807070)",
+     "anchor": "scripts/gate_runner.py:958",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "total_budget_s=timeout passed with explanatory comment at :979-987"
+    },
+    {
+     "thread_id": "lease liveness keyed to group (note 3769807290)",
+     "anchor": "scripts/regenloop_guard.py:423",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "_pgroup_alive uses os.killpg(pgid,0); TestLeaseLivenessKeysOnTheGroup pins it"
+    },
+    {
+     "thread_id": "lease JSON redaction (note 3769807497)",
+     "anchor": "scripts/regenloop_guard.py:1761",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "status() holders strip argv_prefix key (comprehension excludes it)"
+    },
+    {
+     "thread_id": "exec-wrapper chain audit (note 3769807704)",
+     "anchor": "hooks/guard_bash_tests.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "_segment_program returns whole chain ('lets the caller judge every link')"
+    },
+    {
+     "thread_id": "thread 6001d8bb disposition",
+     "anchor": "carried",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "--total-budget-s emitted at hook:917; MAX_BASH_TIMEOUT_MS/1000 - margin"
+    },
+    {
+     "thread_id": "thread e208b32f disposition",
+     "anchor": "carried",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "DEFAULT_HOOK_BG_TIMEOUT_S = 7200.0 + background_timeout_s() at hook:134-144"
+    },
+    {
+     "thread_id": "thread d0d7e00a disposition",
+     "anchor": "carried",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "MEM_FLOOR_FRACTION = 1.0/12.0 applied at guard:258"
+    },
+    {
+     "thread_id": "thread 7712e0b1 disposition",
+     "anchor": "carried",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "isinstance(cwd,(str,os.PathLike)) check at hook:836"
+    },
+    {
+     "thread_id": "thread 6811cd18 disposition",
+     "anchor": "carried",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "symlinked-root refusal + 0o700 chmod in _ensure_guard_root at guard:637-676"
+    },
+    {
+     "thread_id": "thread de8e284b disposition",
+     "anchor": "carried",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "module docstring residual-risk section documents pgid_none micro-window at guard:58-62"
+    },
+    {
+     "thread_id": "#0434523",
+     "anchor": "scripts/regenloop_guard.py:446",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "DISCLOSED-ACCEPTED residual (finding itself says 'Suggested fix: none required')",
+     "judgment": "MISSED_CALL",
+     "hypothesis": "H3",
+     "evidence": "determinable as accepted-residual from thread text + docstring; counted NH -> REJECTED contribution"
+    },
+    {
+     "thread_id": "#830732f",
+     "anchor": "general",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "ACCEPTED process note (rider on nine-concern commit, 'not reworkable')",
+     "judgment": "MISSED_CALL",
+     "hypothesis": "H3",
+     "evidence": "determinable disposition; no code question"
+    },
+    {
+     "thread_id": "#ada966c",
+     "anchor": "general",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "DECLARED out-of-scope mechanism change",
+     "judgment": "MISSED_CALL",
+     "hypothesis": "H3",
+     "evidence": "determinable disposition; no code question"
+    }
+   ],
+   "overall": "CORRECT",
+   "overall_note": "All 18 NOT_APPLIED verified accurate at run head; 12/30 SILENTLY_APPLIED sampled, all accurate (incl. both criticals fixed by 255c298 pushed 14:38Z, before the 14:50Z /omnicheck). 3 NEEDS_HUMAN are quality misses (H3) but REJECTED was independently justified by the 18 genuine unaddressed findings. MR merged 3 minutes after the run, overriding check-rejected. Full diff = 10,902 lines / 544,590 chars (3.6x the 150k-char budget) yet no truncation-attributable wrong verdict found (H2 latent, not manifested).",
+   "root_causes": [
+    "H3 (NEEDS_HUMAN on disclosed/accepted residuals forces REJECTED)",
+    "H2 latent (diff far over truncation budget with no observed harm)",
+    "OTHER: gate label has no merge-blocking teeth \u2014 human merged 3 minutes after REJECTED"
+   ]
+  }
+ ]
+}

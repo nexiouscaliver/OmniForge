@@ -1,0 +1,702 @@
+{
+  "meta": {
+    "iid": 1226,
+    "title": "UI: perception + local page restyle (Local_UI)",
+    "state": "merged",
+    "author_username": "priyansh-gupta23",
+    "created_at": "2026-08-18T17:38:17.018Z",
+    "updated_at": "2026-08-23T08:14:40.096Z",
+    "merged_at": "2026-08-23T08:14:38.630Z",
+    "labels": [],
+    "source_branch": "Local_UI",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226",
+    "sha": "03cf31d7061123b07ffd89835b3b864ddc64bb06",
+    "merge_commit_sha": "68c2e437718155396f0d55aa6b8289591e803ca6",
+    "diff_refs": {
+      "base_sha": "b8b7439cfb8f72d4845cb5eb10fabbbe1b1a8c34",
+      "head_sha": "03cf31d7061123b07ffd89835b3b864ddc64bb06",
+      "start_sha": "c0c9f46d7e9cf9e0c02d3b2d75111e4d4c122d40"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3701365603,
+      "body": "requested review from @Abhishek-2004-17",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-18T17:38:37.738Z"
+    },
+    {
+      "id": 3701603238,
+      "body": "added 1 commit\n\n<ul><li>3a942f48 - fix(perception): resolve CI type-check + test failures after staging merge</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1969176596&start_sha=154f04b128b85ab47242493986be0b30922d42e2)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-18T18:42:44.691Z"
+    },
+    {
+      "id": 3703559048,
+      "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nLarge (19-file, +1684/−886) frontend-only restyle of Perception (Reviews/Mentions/Citation Gap) and Local Presence. Colour/font token discipline in the new code is genuinely strong, but the description doesn't match the diff: it claims \"UI changes only, no functionality changed,\" while at least five user-facing capabilities were silently removed, a brand-new pagination control is completely non-functional, and a claimed mock-removal never happened. All three independent review agents converged on the disclosure gap without prompting each other.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 3 |\n| Important | 8 (posted inline) |\n| Minor | 6 (posted inline) |\n\n### Strengths\n\n- Colour/font token discipline is excellent — a grep for hex/`rgba()` across all touched files matched comments only; real values resolve through theme tokens\n- New tokens added symmetrically to both Pearl and Obsidian palettes with Figma-reference comments\n- `designSystem.ts`'s FROZEN-file rule respected (no new exports); merge with `staging-phase` was textually clean\n\n### Key Concerns\n\n- **Non-functional pagination control** shipped in the Response Queue — buttons with no handlers, hardcoded \"01 of 01\" (see inline thread on `RespondView.tsx`)\n- **Description doesn't match the diff** — \"UI changes only\" claimed while ≥5 capabilities were silently removed/changed (claimed-platform filter, verified badges, engine columns, reply-routing indicator, unfiltered \"Read All\" entry point) — see inline thread on `ReviewsTab.tsx`\n- **Unrecognised citation engines render as ChatGPT's logo** — a data-accuracy regression in `mentionsShared.tsx`\n- Not independently verifiable in the diff, but worth flagging here: the merge commit (`154f04b12`) failed CI type-check and both test shards before a follow-up commit fixed it — the \"clean merge, green build\" framing in the description doesn't reflect that. The MR description's claim that temporary mocks (`reviewsMock`, `FORCE_EXAMPLE`, `localPresenceMockData`) were removed also doesn't hold — none were actually removed (verified via `git log -S`); harmless in production since `FORCE_EXAMPLE` is dev-only, but the description is factually wrong.\n\n### Security\n\nNo blocking security issues. Frontend-only scope confirmed (no backend/dependency changes), no injection sinks, no secrets. Two minor findings posted inline (unencoded URL param, new third-party favicon request). One additional low-confidence observation (62/100, below the posting threshold): citation URLs bound to `href` without running through this repo's existing `sanitizeURL` helper, which is already applied to identical data elsewhere in the codebase — cheap to fix, worth a look even though it didn't clear the confidence bar for its own thread.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 14 findings posted inline (of 24 total ≥70; the remaining 10 are description/commit-level observations with no corresponding diff line — see this summary's Key Concerns)*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-19T06:53:44.588Z"
+    },
+    {
+      "id": 3703559558,
+      "body": "**Critical** — Non-functional pagination control shipped to users\n\n**What:** A brand-new pager (‹ / › buttons, \"01 of 01\" label) was added to the Response Queue with no `onClick` handlers and no pagination state. The count line also mixes `total` (all reviews) with `queue.length` (the filtered set) — with a filter active it reads e.g. \"Showing 1–3 of 412 items\", which is factually wrong.\n\n**Why it matters:** The buttons carry `aria-label`s so they're announced to assistive tech as actionable controls, but clicking them does nothing. This is a real, user-visible defect in a restyle MR framed as presentational-only.\n\n**Recommendation:**\n```tsx\n// Either wire real pagination state:\nconst [page, setPage] = useState(1);\n// ...onClick={() => setPage(p => Math.max(1, p - 1))}\n\n// Or remove the block entirely and keep:\nShowing 1–{queue.length} of {queue.length} items\n```\n\nConfidence: 100/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:53:55.891Z"
+    },
+    {
+      "id": 3703559828,
+      "body": "**Critical** — MR description misrepresents the diff: undisclosed behavioural/capability changes\n\n**What:** The MR description states \"UI changes only — all workflow, functionality and backend behaviour is taken from staging-phase\" and calls the diffs \"presentational rewrites, not logic changes.\" That's not accurate. Concretely, in this file the `platforms.filter(p => p.claimed)` guard was dropped (unclaimed platforms now render where they previously didn't) and `onViewReviews` changed from \"open all reviews\" to \"open reviews filtered by platform.\" Elsewhere in the same MR, undisclosed: the \"Cited by Engines\" column and the Citation Gap Rivals/Priority columns were deleted, the ✓ verified badge was removed from Acquisition's recent-review cards, the reply-routing indicator (\"Opens {platform}\" vs \"Replies in CLEO\") was removed from RespondView, the only unfiltered \"Read All Reviews →\" entry point was removed twice, and per-platform accent colours were dropped in favour of one uniform gold.\n\n**Why it matters:** A reviewer trusting the description will approve real functional/data-visibility changes believing they're a repaint. None of the above got a product decision — they got a styling rubber-stamp.\n\n**Recommendation:**\nEither revert the behavioural changes into a separate MR, or rewrite the description to enumerate every one of them explicitly (with before/after screenshots) and get explicit product sign-off before merge.\n\nConfidence: 100/100 | Found by: MR Analyst, Codebase Reviewer, Security Reviewer (all three independently)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:01.292Z"
+    },
+    {
+      "id": 3703560065,
+      "body": "**Critical** — Unrecognised citation engine silently mislabeled as ChatGPT\n\n**What:** `engineIconKey()` falls through to the raw (lowercased) engine name for anything it doesn't recognise, and `getLLMIcon`'s `default:` case (`components/GEO/LLMIcons.tsx:455-456`) renders the ChatGPT logo for any unmatched key.\n\n**Why it matters:** Any engine this mapper doesn't know — a newly added engine, a renamed display string — will render with the ChatGPT logo. The Citation Gap / Mentions tables then visually assert a citation from an engine that never actually cited the source. The previous text pill was always correct; this regresses data accuracy for the sake of the visual refresh.\n\n**Recommendation:**\n```tsx\nconst key = engineIconKey(engine);\nreturn key ? getLLMIcon(key, { sx: { fontSize: 18 } }) : (\n  <Box sx={perceptionEnginePillSx(isDark)}>{engine}</Box>\n);\n```\nMake the fallback explicit (return `null`/`undefined` from `engineIconKey` for unmapped names) rather than silently defaulting to a specific brand's logo.\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:06.548Z"
+    },
+    {
+      "id": 3703560221,
+      "body": "**Important** — Local Presence tab-bar restyle is dark-mode only\n\n**What:** The author's own comment says \"Dark-only — the stroke is a dark Figma hex, so Pearl keeps the default styling.\" The active-tab stroke/label treatment is gated entirely on `isDark`, with no Pearl branch.\n\n**Why it matters:** This directly contradicts both the MR description's \"both Pearl (light) and Obsidian (dark) modes are covered\" claim and this repo's styling rule that every new/touched UI component must work correctly in both modes. The same MR correctly added Pearl analogues for five other new tokens — the pattern was known, just not applied here.\n\n**Recommendation:**\nAdd Pearl analogues for `border.rangeActive` / `text.tabActiveLabel` in `theme.ts` (mirroring the other five tokens added in this diff) and resolve via the same per-mode pattern instead of the `isDark ? {...} : {}` conditional spread.\n\nConfidence: 100/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed on the same lines)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:10.370Z"
+    },
+    {
+      "id": 3703560423,
+      "body": "**Important** — Pearl (light mode) contrast regression on active tab label\n\n**What:** The new `activeLabelColor` override (also applied at `Reviews/ReviewsTab.tsx:252`) resolves to `#5C5C5C` for Pearl's active label, which is barely distinguishable from the existing inactive label colour `#6B655A`. Dark mode is fine (`#B7B7B7` active vs. `~#737373` inactive).\n\n**Why it matters:** In Pearl the selected sub-tab loses its label-colour signal — only the faint pill background distinguishes it. This is exactly the light-mode-only failure mode the repo's styling rule exists to prevent.\n\n**Recommendation:**\nThe Figma value `#B7B7B7` is a dark-surface grey; the Pearl analogue should preserve contrast ratio against the Pearl pill background rather than mirroring the raw hex lightness — something around `#3A3A3A` would restore adequate contrast.\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:14.631Z"
+    },
+    {
+      "id": 3703560601,
+      "body": "**Important** — Global `'&& *'` font-weight override breaks existing component tokens\n\n**What:** Five page roots (this file, plus `MentionsOverview.tsx:147`, `Reviews/RespondView.tsx:119`, `Reviews/ReviewsDirectories.tsx:87`, `Reviews/AcquisitionView.tsx:84`) apply `'&& *': { fontWeight: agencyTypography.fontWeight.regular }` at doubled specificity. This outranks any descendant's own `sx`, including deliberately-bold shared tokens — confirmed: `getAgencyOutlineGoldButtonSx`'s `fontWeight: medium` is silently discarded on the \"Open outreach board →\" button and the Inclusion Gate CTA rendered inside these subtrees.\n\n**Why it matters:** Shared design tokens no longer mean what they say inside these five subtrees, and any future child that legitimately needs bold text can't get it without an `!important` fight. Not disclosed as a trade-off anywhere in the MR description.\n\n**Recommendation:**\nApply `fontWeight: regular` directly on the ~15 style helpers in `reviewsStyles.ts` that need it (most already do this correctly) and drop the blanket descendant selector from all five page shells.\n\nConfidence: 100/100 | Found by: MR Analyst (disclosure gap), Codebase Reviewer (concrete token breakage) — same root cause, independently found",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:18.555Z"
+    },
+    {
+      "id": 3703560820,
+      "body": "**Important** — Shared chip helper's hardcoded gold styling breaks risk-colour semantics in an untouched dialog\n\n**What:** `localPageChipSx` now forces `color`/`bgcolor`/`border` plus a `'& .MuiChip-label'` override to a gold treatment, at specificity that outranks MUI's `color` prop. This helper is consumed by four components, only one of which (`CrawlPanel.tsx`) is in this MR's scope. In `components/LocalPresence/GBPPreviewModal.tsx:72-77`, a risk-level `<Chip color={riskColor}>` (HIGH=error/red, MEDIUM=warning/amber, LOW=success/green) now renders identically gold regardless of risk level.\n\n**Why it matters:** `GBPPreviewModal` is a destructive-change confirmation dialog — losing the risk-colour signal there is a real usability/safety regression in a file this MR never intended to touch.\n\n**Recommendation:**\n```ts\nexport const localPageChipSx = (isDark: boolean, tone: 'gold' | 'inherit' = 'inherit') => {\n  // only apply the gold color/bgcolor/border override when tone === 'gold'\n};\n```\nPass `'gold'` only from `CrawlPanel`'s services chips; leave the other three call sites (`GBPPreviewModal`, `PostsScheduler`, `ReviewsPanel`) on their existing semantics.\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:23.927Z"
+    },
+    {
+      "id": 3703561049,
+      "body": "**Important** — Hardcoded rgba() colours replace token-derived values\n\n**What:** `localPageCategoryBadgeSx` changed from `hexToRgba(c.accent.gold, ...)` / a token-derived stroke to raw `rgba(255,255,255,0.04)` / `rgba(0,0,0,0.03)` literals.\n\n**Why it matters:** This is the only place in the entire 19-file diff with hardcoded colours — everywhere else genuinely resolves through theme tokens (verified by grep across all touched files). It directly contradicts both the repo's styling rule (never hardcode hex/rgba values) and this MR's own \"no hardcoded colours\" claim, and these two colour pairs won't follow any future theme/palette change.\n\n**Recommendation:**\nUse the existing neutral-overlay pattern instead, e.g. `alpha(c.text.primary, 0.04)` / `c.border.default`, or add explicit `pearl`/`obsidian` tokens for a neutral chip wash in `theme.ts`.\n\nConfidence: 95/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:27.912Z"
+    },
+    {
+      "id": 3703561259,
+      "body": "**Important** — Test suite regression guards silently defanged\n\n**What:** This test was flipped from asserting an engine pill renders (`getByText('ChatGPT')`) to asserting it does not — but `MentionsOverview.tsx` no longer renders `EnginePills` at all, so this (and two other tests in the same file, the \"empty engines array\" and \"R8 DOM restructure / anchor\" tests) now pass tautologically, for reasons unrelated to what their names claim to verify.\n\n**Why it matters:** The suite reports green while its actual regression coverage for SC-2 and R8 is gone — a future reintroduction of either bug would ship silently. There's also no test anywhere for this MR's headline change (engine logos via `getLLMIcon`), including no coverage of the unknown-engine fallback flagged separately as a Critical finding.\n\n**Recommendation:**\nDelete or rewrite the now-vacuous tests, and add a `mentionsShared.test.tsx` asserting `EnginePills`/`getLLMIcon` renders one icon per known engine, an em-dash for `[]`, and does **not** silently render the ChatGPT mark for an unrecognised engine name.\n\nConfidence: 96/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:32.431Z"
+    },
+    {
+      "id": 3703561432,
+      "body": "**Important** — Shared accessible tab-switch replaced with inaccessible hand-rolled buttons\n\n**What:** The sentiment filter was migrated off the shared `SiteWorkspaceTabSwitch` component onto bare `Box component=\"button\"` pills with no `aria-pressed` / `role=\"tab\"` / `aria-selected`. Selected state is now conveyed by colour alone.\n\n**Why it matters:** This is invisible to screen readers, and it's an odd choice given this exact MR *extends* `SiteWorkspaceTabSwitch` elsewhere with a new `activeLabelColor` prop — the shared, accessible component was clearly still viable here.\n\n**Recommendation:**\nUse `SiteWorkspaceTabSwitch` (now that it supports `activeLabelColor`) for this filter too, or at minimum add `aria-pressed={filter === f.id}` to each hand-rolled button.\n\nConfidence: 88/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:36.271Z"
+    },
+    {
+      "id": 3703561608,
+      "body": "**Minor** — Unencoded URL parameter + new third-party data channel\n\n**What:** `m.domain` (a backend-supplied value, not guaranteed to be a bare hostname) is interpolated into the Google favicon URL without `encodeURIComponent`, diverging from 7 other call sites in this codebase that do encode it. Separately, this is a genuinely new outbound request — previously this table rendered engine names as text with zero external requests; now every card fetches from `google.com`, carrying the domain plus the viewer's Google cookies/Referer.\n\n**Why it matters:** A domain containing `&` or `#` mangles the query string and silently drops the favicon (low severity — the host is hardcoded, so this isn't a redirect/SSRF vector). The new Google request is a minor confidentiality consideration worth a conscious decision rather than a side effect of a restyle.\n\n**Recommendation:**\n```tsx\nsrc={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(m.domain)}&sz=64`}\n```\nConsider also adding `referrerPolicy=\"no-referrer\"`, or proxying favicons through the backend / rendering a first-party letter avatar as `LocalPresence` does elsewhere.\n\nConfidence: 88/100 | Found by: Security Reviewer, Codebase Reviewer (independently confirmed on the same line)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:40.647Z"
+    },
+    {
+      "id": 3703561858,
+      "body": "**Minor** — Dead ternary with identical branches\n\n**What:** `background: hexToRgba(c.accent.gold, isDark ? 0.1 : 0.1)` — both branches resolve to the same value.\n\n**Why it matters:** Reads as an intentional per-mode difference that doesn't exist; a future edit to one branch will silently diverge from the other without anyone noticing why they're different.\n\n**Recommendation:**\n```ts\nbackground: hexToRgba(c.accent.gold, 0.1),\n```\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:45.244Z"
+    },
+    {
+      "id": 3703562066,
+      "body": "**Minor** — Magic numbers contradict the file's own \"no hardcoded values\" claim\n\n**What:** This file's header comment (and the MR description) states every value resolves from the theme with no hardcoded colours, fonts, or magic numbers. In practice a dozen Figma-derived literals remain: `letterSpacing: '0.8px'` (here and at line 626), plus others (`'0.5px'`, `'-1px'`, fixed pixel heights, `borderRadius: '3px'`) scattered through the file.\n\n**Why it matters:** Not a functional defect — colour/font sourcing genuinely is clean throughout this file — but the claim as written is falsifiable, and the repo's styling rule explicitly calls out \"magic numbers pulled from a plan/mockup.\"\n\n**Recommendation:**\nEither soften the header comment to scope the claim to colours/fonts, or promote the recurring letterSpacing/height values into a shared `agencyTypography.letterSpacing` / `reviewsMetrics` token object.\n\nConfidence: 78/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:49.344Z"
+    },
+    {
+      "id": 3703562295,
+      "body": "**Minor** — Keyboard-inert clickable cards\n\n**What:** The new directory cards apply `role=\"button\"` and `tabIndex={0}` when clickable, but there's no `onKeyDown` handler — only the `onClick`.\n\n**Why it matters:** The card takes keyboard focus and is announced by assistive tech as a button, but Enter/Space do nothing (WCAG 2.1.1). This repo's ESLint config has no `jsx-a11y` plugin, so CI won't catch it.\n\n**Recommendation:**\n```tsx\nonKeyDown={(e) => {\n  if (e.key === 'Enter' || e.key === ' ') {\n    e.preventDefault();\n    onViewReviews?.(platform.id);\n  }\n}}\n```\nOr simpler: render the card as `component=\"button\" type=\"button\"` and get correct keyboard behaviour for free.\n\nConfidence: 85/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-19T06:54:53.460Z"
+    },
+    {
+      "id": 3713172337,
+      "body": "added 1 commit\n\n<ul><li>bbad4322 - fix(perception): address OmniForge review findings</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1974761098&start_sha=3a942f48d94b60659f8109d9c459e6469ae3bee8)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-20T20:57:05.863Z"
+    },
+    {
+      "id": 3719442895,
+      "body": "added 110 commits\n\n<ul><li>bbad4322...b8b7439c - 109 commits from branch <code>staging-phase</code></li><li>25140d37 - Merge branch &#39;staging-phase&#39; into &#39;Local_UI&#39;</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1977598509&start_sha=bbad4322e988a765233043d86e9a0df684ad7725)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-22T08:44:48.747Z"
+    },
+    {
+      "id": 3719511116,
+      "body": "## Follow-up Check — MR !1226\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 12 |\n| ✗ Not Applied | 2 |\n| ? Needs Human | 0 |\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #39b8087 | general | MR description still claims \"UI changes only\" while several behavioural/data-visibility changes (dropped platform filter, changed onViewReviews signature, removed columns/badge, removed unfiltered \"Read All Reviews\" entry point) remain undisclosed |\n| #2103151 | general | Dead ternary with identical branches (`hexToRgba(c.accent.gold, isDark ? 0.1 : 0.1)`) could not be located in the current diff |",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-22T09:38:43.672Z"
+    },
+    {
+      "id": 3719512929,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-22T09:41:59.556Z"
+    },
+    {
+      "id": 3720967891,
+      "body": "added 1 commit\n\n<ul><li>03cf31d7 - ci(frontend-build): raise container memory to fix vite build OOM</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1978071303&start_sha=25140d37b425f24527b17ca855df99873151271b)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-23T07:14:42.267Z"
+    },
+    {
+      "id": 3720968345,
+      "body": "reset approvals from @service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd by pushing to the branch",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-23T07:14:55.905Z"
+    },
+    {
+      "id": 3721010283,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-23T07:59:52.198Z"
+    },
+    {
+      "id": 3721029274,
+      "body": "mentioned in commit 68c2e437718155396f0d55aa6b8289591e803ca6",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-23T08:14:39.350Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "abe717c9ddad0ceed67b98129b8258335715c52c",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3701365603,
+          "body": "requested review from @Abhishek-2004-17",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-18T17:38:37.738Z"
+        }
+      ]
+    },
+    {
+      "id": "febcf5198f779fe99bf1f2c3008167ead37e5838",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3701603238,
+          "body": "added 1 commit\n\n<ul><li>3a942f48 - fix(perception): resolve CI type-check + test failures after staging merge</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1969176596&start_sha=154f04b128b85ab47242493986be0b30922d42e2)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-18T18:42:44.691Z"
+        }
+      ]
+    },
+    {
+      "id": "7ca69d2dbe5a3813f8f84766de59d4ebe25834c3",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3703559048,
+          "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nLarge (19-file, +1684/−886) frontend-only restyle of Perception (Reviews/Mentions/Citation Gap) and Local Presence. Colour/font token discipline in the new code is genuinely strong, but the description doesn't match the diff: it claims \"UI changes only, no functionality changed,\" while at least five user-facing capabilities were silently removed, a brand-new pagination control is completely non-functional, and a claimed mock-removal never happened. All three independent review agents converged on the disclosure gap without prompting each other.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 3 |\n| Important | 8 (posted inline) |\n| Minor | 6 (posted inline) |\n\n### Strengths\n\n- Colour/font token discipline is excellent — a grep for hex/`rgba()` across all touched files matched comments only; real values resolve through theme tokens\n- New tokens added symmetrically to both Pearl and Obsidian palettes with Figma-reference comments\n- `designSystem.ts`'s FROZEN-file rule respected (no new exports); merge with `staging-phase` was textually clean\n\n### Key Concerns\n\n- **Non-functional pagination control** shipped in the Response Queue — buttons with no handlers, hardcoded \"01 of 01\" (see inline thread on `RespondView.tsx`)\n- **Description doesn't match the diff** — \"UI changes only\" claimed while ≥5 capabilities were silently removed/changed (claimed-platform filter, verified badges, engine columns, reply-routing indicator, unfiltered \"Read All\" entry point) — see inline thread on `ReviewsTab.tsx`\n- **Unrecognised citation engines render as ChatGPT's logo** — a data-accuracy regression in `mentionsShared.tsx`\n- Not independently verifiable in the diff, but worth flagging here: the merge commit (`154f04b12`) failed CI type-check and both test shards before a follow-up commit fixed it — the \"clean merge, green build\" framing in the description doesn't reflect that. The MR description's claim that temporary mocks (`reviewsMock`, `FORCE_EXAMPLE`, `localPresenceMockData`) were removed also doesn't hold — none were actually removed (verified via `git log -S`); harmless in production since `FORCE_EXAMPLE` is dev-only, but the description is factually wrong.\n\n### Security\n\nNo blocking security issues. Frontend-only scope confirmed (no backend/dependency changes), no injection sinks, no secrets. Two minor findings posted inline (unencoded URL param, new third-party favicon request). One additional low-confidence observation (62/100, below the posting threshold): citation URLs bound to `href` without running through this repo's existing `sanitizeURL` helper, which is already applied to identical data elsewhere in the codebase — cheap to fix, worth a look even though it didn't clear the confidence bar for its own thread.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 14 findings posted inline (of 24 total ≥70; the remaining 10 are description/commit-level observations with no corresponding diff line — see this summary's Key Concerns)*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-19T06:53:44.588Z"
+        }
+      ]
+    },
+    {
+      "id": "60603331b5f5bf54d5a81e296ac00170c16dc55f",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703559558,
+          "body": "**Critical** — Non-functional pagination control shipped to users\n\n**What:** A brand-new pager (‹ / › buttons, \"01 of 01\" label) was added to the Response Queue with no `onClick` handlers and no pagination state. The count line also mixes `total` (all reviews) with `queue.length` (the filtered set) — with a filter active it reads e.g. \"Showing 1–3 of 412 items\", which is factually wrong.\n\n**Why it matters:** The buttons carry `aria-label`s so they're announced to assistive tech as actionable controls, but clicking them does nothing. This is a real, user-visible defect in a restyle MR framed as presentational-only.\n\n**Recommendation:**\n```tsx\n// Either wire real pagination state:\nconst [page, setPage] = useState(1);\n// ...onClick={() => setPage(p => Math.max(1, p - 1))}\n\n// Or remove the block entirely and keep:\nShowing 1–{queue.length} of {queue.length} items\n```\n\nConfidence: 100/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:53:55.891Z"
+        }
+      ]
+    },
+    {
+      "id": "39b808774b2fa889fe672310d86081dba515c05f",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703559828,
+          "body": "**Critical** — MR description misrepresents the diff: undisclosed behavioural/capability changes\n\n**What:** The MR description states \"UI changes only — all workflow, functionality and backend behaviour is taken from staging-phase\" and calls the diffs \"presentational rewrites, not logic changes.\" That's not accurate. Concretely, in this file the `platforms.filter(p => p.claimed)` guard was dropped (unclaimed platforms now render where they previously didn't) and `onViewReviews` changed from \"open all reviews\" to \"open reviews filtered by platform.\" Elsewhere in the same MR, undisclosed: the \"Cited by Engines\" column and the Citation Gap Rivals/Priority columns were deleted, the ✓ verified badge was removed from Acquisition's recent-review cards, the reply-routing indicator (\"Opens {platform}\" vs \"Replies in CLEO\") was removed from RespondView, the only unfiltered \"Read All Reviews →\" entry point was removed twice, and per-platform accent colours were dropped in favour of one uniform gold.\n\n**Why it matters:** A reviewer trusting the description will approve real functional/data-visibility changes believing they're a repaint. None of the above got a product decision — they got a styling rubber-stamp.\n\n**Recommendation:**\nEither revert the behavioural changes into a separate MR, or rewrite the description to enumerate every one of them explicitly (with before/after screenshots) and get explicit product sign-off before merge.\n\nConfidence: 100/100 | Found by: MR Analyst, Codebase Reviewer, Security Reviewer (all three independently)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:01.292Z"
+        }
+      ]
+    },
+    {
+      "id": "17792d636c24ce6c2d13bf6984913d6a4d37c5bf",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703560065,
+          "body": "**Critical** — Unrecognised citation engine silently mislabeled as ChatGPT\n\n**What:** `engineIconKey()` falls through to the raw (lowercased) engine name for anything it doesn't recognise, and `getLLMIcon`'s `default:` case (`components/GEO/LLMIcons.tsx:455-456`) renders the ChatGPT logo for any unmatched key.\n\n**Why it matters:** Any engine this mapper doesn't know — a newly added engine, a renamed display string — will render with the ChatGPT logo. The Citation Gap / Mentions tables then visually assert a citation from an engine that never actually cited the source. The previous text pill was always correct; this regresses data accuracy for the sake of the visual refresh.\n\n**Recommendation:**\n```tsx\nconst key = engineIconKey(engine);\nreturn key ? getLLMIcon(key, { sx: { fontSize: 18 } }) : (\n  <Box sx={perceptionEnginePillSx(isDark)}>{engine}</Box>\n);\n```\nMake the fallback explicit (return `null`/`undefined` from `engineIconKey` for unmapped names) rather than silently defaulting to a specific brand's logo.\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:06.548Z"
+        }
+      ]
+    },
+    {
+      "id": "3c65b8769c88f605e2f6a0a0d83c24119669e236",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703560221,
+          "body": "**Important** — Local Presence tab-bar restyle is dark-mode only\n\n**What:** The author's own comment says \"Dark-only — the stroke is a dark Figma hex, so Pearl keeps the default styling.\" The active-tab stroke/label treatment is gated entirely on `isDark`, with no Pearl branch.\n\n**Why it matters:** This directly contradicts both the MR description's \"both Pearl (light) and Obsidian (dark) modes are covered\" claim and this repo's styling rule that every new/touched UI component must work correctly in both modes. The same MR correctly added Pearl analogues for five other new tokens — the pattern was known, just not applied here.\n\n**Recommendation:**\nAdd Pearl analogues for `border.rangeActive` / `text.tabActiveLabel` in `theme.ts` (mirroring the other five tokens added in this diff) and resolve via the same per-mode pattern instead of the `isDark ? {...} : {}` conditional spread.\n\nConfidence: 100/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed on the same lines)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:10.370Z"
+        }
+      ]
+    },
+    {
+      "id": "1ba30d550b68fd67952e998cc962f5d887fef5e6",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703560423,
+          "body": "**Important** — Pearl (light mode) contrast regression on active tab label\n\n**What:** The new `activeLabelColor` override (also applied at `Reviews/ReviewsTab.tsx:252`) resolves to `#5C5C5C` for Pearl's active label, which is barely distinguishable from the existing inactive label colour `#6B655A`. Dark mode is fine (`#B7B7B7` active vs. `~#737373` inactive).\n\n**Why it matters:** In Pearl the selected sub-tab loses its label-colour signal — only the faint pill background distinguishes it. This is exactly the light-mode-only failure mode the repo's styling rule exists to prevent.\n\n**Recommendation:**\nThe Figma value `#B7B7B7` is a dark-surface grey; the Pearl analogue should preserve contrast ratio against the Pearl pill background rather than mirroring the raw hex lightness — something around `#3A3A3A` would restore adequate contrast.\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:14.631Z"
+        }
+      ]
+    },
+    {
+      "id": "68aa7f4868fb7da39f80240e83a383d8de322ddd",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703560601,
+          "body": "**Important** — Global `'&& *'` font-weight override breaks existing component tokens\n\n**What:** Five page roots (this file, plus `MentionsOverview.tsx:147`, `Reviews/RespondView.tsx:119`, `Reviews/ReviewsDirectories.tsx:87`, `Reviews/AcquisitionView.tsx:84`) apply `'&& *': { fontWeight: agencyTypography.fontWeight.regular }` at doubled specificity. This outranks any descendant's own `sx`, including deliberately-bold shared tokens — confirmed: `getAgencyOutlineGoldButtonSx`'s `fontWeight: medium` is silently discarded on the \"Open outreach board →\" button and the Inclusion Gate CTA rendered inside these subtrees.\n\n**Why it matters:** Shared design tokens no longer mean what they say inside these five subtrees, and any future child that legitimately needs bold text can't get it without an `!important` fight. Not disclosed as a trade-off anywhere in the MR description.\n\n**Recommendation:**\nApply `fontWeight: regular` directly on the ~15 style helpers in `reviewsStyles.ts` that need it (most already do this correctly) and drop the blanket descendant selector from all five page shells.\n\nConfidence: 100/100 | Found by: MR Analyst (disclosure gap), Codebase Reviewer (concrete token breakage) — same root cause, independently found",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:18.555Z"
+        }
+      ]
+    },
+    {
+      "id": "3b068e76259f74458fa7b0c4561550498b9c8742",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703560820,
+          "body": "**Important** — Shared chip helper's hardcoded gold styling breaks risk-colour semantics in an untouched dialog\n\n**What:** `localPageChipSx` now forces `color`/`bgcolor`/`border` plus a `'& .MuiChip-label'` override to a gold treatment, at specificity that outranks MUI's `color` prop. This helper is consumed by four components, only one of which (`CrawlPanel.tsx`) is in this MR's scope. In `components/LocalPresence/GBPPreviewModal.tsx:72-77`, a risk-level `<Chip color={riskColor}>` (HIGH=error/red, MEDIUM=warning/amber, LOW=success/green) now renders identically gold regardless of risk level.\n\n**Why it matters:** `GBPPreviewModal` is a destructive-change confirmation dialog — losing the risk-colour signal there is a real usability/safety regression in a file this MR never intended to touch.\n\n**Recommendation:**\n```ts\nexport const localPageChipSx = (isDark: boolean, tone: 'gold' | 'inherit' = 'inherit') => {\n  // only apply the gold color/bgcolor/border override when tone === 'gold'\n};\n```\nPass `'gold'` only from `CrawlPanel`'s services chips; leave the other three call sites (`GBPPreviewModal`, `PostsScheduler`, `ReviewsPanel`) on their existing semantics.\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:23.927Z"
+        }
+      ]
+    },
+    {
+      "id": "9137474c76245c10ae966d3ed12e948fbf95c038",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703561049,
+          "body": "**Important** — Hardcoded rgba() colours replace token-derived values\n\n**What:** `localPageCategoryBadgeSx` changed from `hexToRgba(c.accent.gold, ...)` / a token-derived stroke to raw `rgba(255,255,255,0.04)` / `rgba(0,0,0,0.03)` literals.\n\n**Why it matters:** This is the only place in the entire 19-file diff with hardcoded colours — everywhere else genuinely resolves through theme tokens (verified by grep across all touched files). It directly contradicts both the repo's styling rule (never hardcode hex/rgba values) and this MR's own \"no hardcoded colours\" claim, and these two colour pairs won't follow any future theme/palette change.\n\n**Recommendation:**\nUse the existing neutral-overlay pattern instead, e.g. `alpha(c.text.primary, 0.04)` / `c.border.default`, or add explicit `pearl`/`obsidian` tokens for a neutral chip wash in `theme.ts`.\n\nConfidence: 95/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:27.912Z"
+        }
+      ]
+    },
+    {
+      "id": "d85583708cad269564fdb078ff0a649fad0296c6",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703561259,
+          "body": "**Important** — Test suite regression guards silently defanged\n\n**What:** This test was flipped from asserting an engine pill renders (`getByText('ChatGPT')`) to asserting it does not — but `MentionsOverview.tsx` no longer renders `EnginePills` at all, so this (and two other tests in the same file, the \"empty engines array\" and \"R8 DOM restructure / anchor\" tests) now pass tautologically, for reasons unrelated to what their names claim to verify.\n\n**Why it matters:** The suite reports green while its actual regression coverage for SC-2 and R8 is gone — a future reintroduction of either bug would ship silently. There's also no test anywhere for this MR's headline change (engine logos via `getLLMIcon`), including no coverage of the unknown-engine fallback flagged separately as a Critical finding.\n\n**Recommendation:**\nDelete or rewrite the now-vacuous tests, and add a `mentionsShared.test.tsx` asserting `EnginePills`/`getLLMIcon` renders one icon per known engine, an em-dash for `[]`, and does **not** silently render the ChatGPT mark for an unrecognised engine name.\n\nConfidence: 96/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:32.431Z"
+        }
+      ]
+    },
+    {
+      "id": "86be3a8e78d2f71bdf95bcd738a05e82f9ca8d70",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703561432,
+          "body": "**Important** — Shared accessible tab-switch replaced with inaccessible hand-rolled buttons\n\n**What:** The sentiment filter was migrated off the shared `SiteWorkspaceTabSwitch` component onto bare `Box component=\"button\"` pills with no `aria-pressed` / `role=\"tab\"` / `aria-selected`. Selected state is now conveyed by colour alone.\n\n**Why it matters:** This is invisible to screen readers, and it's an odd choice given this exact MR *extends* `SiteWorkspaceTabSwitch` elsewhere with a new `activeLabelColor` prop — the shared, accessible component was clearly still viable here.\n\n**Recommendation:**\nUse `SiteWorkspaceTabSwitch` (now that it supports `activeLabelColor`) for this filter too, or at minimum add `aria-pressed={filter === f.id}` to each hand-rolled button.\n\nConfidence: 88/100 | Found by: MR Analyst, Codebase Reviewer (independently confirmed)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:36.271Z"
+        }
+      ]
+    },
+    {
+      "id": "c243573297efacb3ad4ecc938bcf648ef2f376d3",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703561608,
+          "body": "**Minor** — Unencoded URL parameter + new third-party data channel\n\n**What:** `m.domain` (a backend-supplied value, not guaranteed to be a bare hostname) is interpolated into the Google favicon URL without `encodeURIComponent`, diverging from 7 other call sites in this codebase that do encode it. Separately, this is a genuinely new outbound request — previously this table rendered engine names as text with zero external requests; now every card fetches from `google.com`, carrying the domain plus the viewer's Google cookies/Referer.\n\n**Why it matters:** A domain containing `&` or `#` mangles the query string and silently drops the favicon (low severity — the host is hardcoded, so this isn't a redirect/SSRF vector). The new Google request is a minor confidentiality consideration worth a conscious decision rather than a side effect of a restyle.\n\n**Recommendation:**\n```tsx\nsrc={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(m.domain)}&sz=64`}\n```\nConsider also adding `referrerPolicy=\"no-referrer\"`, or proxying favicons through the backend / rendering a first-party letter avatar as `LocalPresence` does elsewhere.\n\nConfidence: 88/100 | Found by: Security Reviewer, Codebase Reviewer (independently confirmed on the same line)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:40.647Z"
+        }
+      ]
+    },
+    {
+      "id": "210315d1a517556c993650fc0c3b935a570d8043",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703561858,
+          "body": "**Minor** — Dead ternary with identical branches\n\n**What:** `background: hexToRgba(c.accent.gold, isDark ? 0.1 : 0.1)` — both branches resolve to the same value.\n\n**Why it matters:** Reads as an intentional per-mode difference that doesn't exist; a future edit to one branch will silently diverge from the other without anyone noticing why they're different.\n\n**Recommendation:**\n```ts\nbackground: hexToRgba(c.accent.gold, 0.1),\n```\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:45.244Z"
+        }
+      ]
+    },
+    {
+      "id": "369288d095d46ab000680bc087005f967be64511",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703562066,
+          "body": "**Minor** — Magic numbers contradict the file's own \"no hardcoded values\" claim\n\n**What:** This file's header comment (and the MR description) states every value resolves from the theme with no hardcoded colours, fonts, or magic numbers. In practice a dozen Figma-derived literals remain: `letterSpacing: '0.8px'` (here and at line 626), plus others (`'0.5px'`, `'-1px'`, fixed pixel heights, `borderRadius: '3px'`) scattered through the file.\n\n**Why it matters:** Not a functional defect — colour/font sourcing genuinely is clean throughout this file — but the claim as written is falsifiable, and the repo's styling rule explicitly calls out \"magic numbers pulled from a plan/mockup.\"\n\n**Recommendation:**\nEither soften the header comment to scope the claim to colours/fonts, or promote the recurring letterSpacing/height values into a shared `agencyTypography.letterSpacing` / `reviewsMetrics` token object.\n\nConfidence: 78/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:49.344Z"
+        }
+      ]
+    },
+    {
+      "id": "5972c1d5c8545d7777bf23d080d8d88a4459ad2c",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3703562295,
+          "body": "**Minor** — Keyboard-inert clickable cards\n\n**What:** The new directory cards apply `role=\"button\"` and `tabIndex={0}` when clickable, but there's no `onKeyDown` handler — only the `onClick`.\n\n**Why it matters:** The card takes keyboard focus and is announced by assistive tech as a button, but Enter/Space do nothing (WCAG 2.1.1). This repo's ESLint config has no `jsx-a11y` plugin, so CI won't catch it.\n\n**Recommendation:**\n```tsx\nonKeyDown={(e) => {\n  if (e.key === 'Enter' || e.key === ' ') {\n    e.preventDefault();\n    onViewReviews?.(platform.id);\n  }\n}}\n```\nOr simpler: render the card as `component=\"button\" type=\"button\"` and get correct keyboard behaviour for free.\n\nConfidence: 85/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-19T06:54:53.460Z"
+        }
+      ]
+    },
+    {
+      "id": "ec775802425f4f7a3f37e4e4d83712debae042a2",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3713172337,
+          "body": "added 1 commit\n\n<ul><li>bbad4322 - fix(perception): address OmniForge review findings</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1974761098&start_sha=3a942f48d94b60659f8109d9c459e6469ae3bee8)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-20T20:57:05.863Z"
+        }
+      ]
+    },
+    {
+      "id": "3df478b71d579a903affca657d2ea2e0ccde1084",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3719442895,
+          "body": "added 110 commits\n\n<ul><li>bbad4322...b8b7439c - 109 commits from branch <code>staging-phase</code></li><li>25140d37 - Merge branch &#39;staging-phase&#39; into &#39;Local_UI&#39;</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1977598509&start_sha=bbad4322e988a765233043d86e9a0df684ad7725)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-22T08:44:48.747Z"
+        }
+      ]
+    },
+    {
+      "id": "c1c5921956e543cbed63d7269f6003e4e4154b64",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3719511116,
+          "body": "## Follow-up Check — MR !1226\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 12 |\n| ✗ Not Applied | 2 |\n| ? Needs Human | 0 |\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #39b8087 | general | MR description still claims \"UI changes only\" while several behavioural/data-visibility changes (dropped platform filter, changed onViewReviews signature, removed columns/badge, removed unfiltered \"Read All Reviews\" entry point) remain undisclosed |\n| #2103151 | general | Dead ternary with identical branches (`hexToRgba(c.accent.gold, isDark ? 0.1 : 0.1)`) could not be located in the current diff |",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-22T09:38:43.672Z"
+        }
+      ]
+    },
+    {
+      "id": "674fa1cf3bd854d1e6b8a395db38503f8189760d",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3719512929,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-22T09:41:59.556Z"
+        }
+      ]
+    },
+    {
+      "id": "8865d3249121fad003c7c3157d33d7178032dcb0",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3720967891,
+          "body": "added 1 commit\n\n<ul><li>03cf31d7 - ci(frontend-build): raise container memory to fix vite build OOM</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1226/diffs?diff_id=1978071303&start_sha=25140d37b425f24527b17ca855df99873151271b)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-23T07:14:42.267Z"
+        }
+      ]
+    },
+    {
+      "id": "31c4be8d652690aebf36ec65602a66e9022bbb2b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3720968345,
+          "body": "reset approvals from @service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd by pushing to the branch",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-23T07:14:55.905Z"
+        }
+      ]
+    },
+    {
+      "id": "ff853bd997aaffb5343d8e24b2ea8ce98521a76b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3721010283,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-23T07:59:52.198Z"
+        }
+      ]
+    },
+    {
+      "id": "16a19c653614c0e188304cf62e0f862ffc517185",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3721029274,
+          "body": "mentioned in commit 68c2e437718155396f0d55aa6b8289591e803ca6",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-23T08:14:39.350Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "03cf31d7061123b07ffd89835b3b864ddc64bb06",
+      "title": "ci(frontend-build): raise container memory to fix vite build OOM",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-08-23T12:43:54.000+05:30"
+    },
+    {
+      "id": "25140d37b425f24527b17ca855df99873151271b",
+      "title": "Merge branch 'staging-phase' into 'Local_UI'",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-08-22T08:44:47.000+00:00"
+    },
+    {
+      "id": "bbad4322e988a765233043d86e9a0df684ad7725",
+      "title": "fix(perception): address OmniForge review findings",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-08-21T02:26:24.000+05:30"
+    },
+    {
+      "id": "3a942f48d94b60659f8109d9c459e6469ae3bee8",
+      "title": "fix(perception): resolve CI type-check + test failures after staging merge",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-08-19T00:12:34.000+05:30"
+    },
+    {
+      "id": "154f04b128b85ab47242493986be0b30922d42e2",
+      "title": "Merge remote-tracking branch 'origin/staging-phase' into Local_UI",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-08-18T21:33:32.000+05:30"
+    },
+    {
+      "id": "666ebab13c059416f4c39df68acb31dc9c637017",
+      "title": "UI: perception + local page restyle (Local_UI)",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-08-18T21:30:30.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-23T07:59:52.123Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

@@ -1,0 +1,55 @@
+{
+ "repo": "cleo",
+ "iid": 1184,
+ "title": "feat(remediation): PR pre-merge verification \u2014 correctness, evidence, Check Runs, LLM-path coverage",
+ "runs": [
+  {
+   "timestamp": "2026-08-15T13:41:20.514Z",
+   "gate": "APPROVED",
+   "head_at_run": "3bf8cc01f416",
+   "bot_approval": "2026-08-15T13:41:00.085Z",
+   "merged": "2026-08-15T13:46:52.335Z",
+   "fc_counts": {
+    "applied": 0,
+    "silently_applied": 1,
+    "not_applied": 0,
+    "needs_human": 2
+   },
+   "per_thread": [
+    {
+     "thread_id": "dc176c1f reaper deletes live-PR base",
+     "anchor": "branch reaper",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "fix present: find_open_pr_targeting on both backends + reaper fails safe + tests (d4495b6e)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff 3324-3407, 4022-4023"
+    },
+    {
+     "thread_id": "7280dd2b Critical-CONTESTED gate bypass",
+     "anchor": "orchestrator.py:135",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "partial: J1 arm gated via _apply/gate_provider; git-content arm STILL ungated, disclosed in comment; check itself said 'worth a direct call before merge' then approved without it",
+     "judgment": "OPEN CRITICAL AT MERGE",
+     "hypothesis": "H3-inverted / H5-class",
+     "evidence": "reply 13:38:30 + FC note"
+    },
+    {
+     "thread_id": "(approval-count)",
+     "anchor": "MR process",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "'0/2 required approvals were recorded prior to this one' \u2014 bot approval filled a human-approval quota",
+     "judgment": "PROCESS BYPASS",
+     "hypothesis": "OTHER",
+     "evidence": "FC note bullet 2"
+    }
+   ],
+   "overall": "FALSE_APPROVE",
+   "overall_note": "Per-thread verdicts accurate, but the gate approved with 2 NEEDS_HUMAN incl. a contested-Critical left partially open, and the bot's approval itself became the required approval the MR was waiting on.",
+   "root_causes": [
+    "H5-class: APPROVED despite NEEDS_HUMAN=2",
+    "OTHER: service-account approval substituted for missing human approvals"
+   ]
+  }
+ ]
+}

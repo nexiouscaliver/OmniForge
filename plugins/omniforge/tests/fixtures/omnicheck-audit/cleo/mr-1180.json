@@ -1,0 +1,584 @@
+{
+  "meta": {
+    "iid": 1180,
+    "title": "fix(mongo): clear durable read-through caches once per new deploy",
+    "state": "merged",
+    "author_username": "Abhishek-2004-17",
+    "created_at": "2026-08-13T19:53:36.048Z",
+    "updated_at": "2026-08-15T08:13:46.600Z",
+    "merged_at": "2026-08-15T08:13:45.395Z",
+    "labels": [],
+    "source_branch": "fix/deploy-cache-clear-on-deploy",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1180",
+    "sha": "0c211b28cbaae854f980b21fe94c9b286cfaa42a",
+    "merge_commit_sha": "65e58c9643af49e2cc75ffae1208836d80112b6b",
+    "diff_refs": {
+      "base_sha": "1a03c5921d88f80f661e67902c780d3c528ffadf",
+      "head_sha": "0c211b28cbaae854f980b21fe94c9b286cfaa42a",
+      "start_sha": "b0688a64554af2d74a24816fea72e6cdb9fb3bdc"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3688793811,
+      "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis MR clears three durable Mongo read-through caches on new deploy, gated on `BACKEND_VERSION`. The security posture is genuinely low-risk — no attacker-reachable path. But two independent reviewers converged on the same structural problem from different angles: the clear-then-claim ordering isn't atomic (races across concurrent ECS tasks during a rolling deploy, and turns a partial Mongo failure into a permanent repeated-wipe loop), and the clear fires too early in a rolling deploy to actually establish the guarantee it claims — old-version tasks keep refilling the just-cleared caches. Layered on top: new tests run in no CI job, three fail in a clean checkout, the branch is 135 commits stale against its target, and the MR shipped with zero review engagement.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 12 |\n| Minor | 5 |\n\n### Strengths\n- `delete_many({})` instead of `drop()` is a deliberately good call — preserves indexes a long-running process would never recreate.\n- `DEPLOY_ENV` namespacing is correct and verified end-to-end against both ECS task definitions — the shared-Mongo collision the docstring warns about cannot actually occur.\n- Reuses an already-plumbed deploy signal (`BACKEND_VERSION`) rather than inventing new infra; commit message and test design are above this repo's average where they run.\n\n### Key Concerns\n- Non-atomic clear-then-claim ordering races across ECS tasks and can loop indefinitely on partial failure — flagged independently by both the Codebase and Security reviewers. See inline threads.\n- The clear runs too early in a rolling deploy for its own guarantee to hold — old-version tasks refill the caches it just cleared. Also independently cross-correlated.\n- New tests aren't wired into CI, and 3 of 8 fail in a clean checkout.\n\n### Security\nNo attacker-reachable path; overall risk assessed low. The two security-relevant findings (atomic-claim ordering, rolling-deploy repopulation) are availability/data-integrity concerns rather than exploitable vulnerabilities, and are folded into the Important findings above via cross-correlation with the Codebase Reviewer's independent discovery of the same issues.\n\n### Process notes (no diff location — not posted inline)\n- No verification evidence anywhere in the MR description for a change that deletes production data on every deploy (confidence 88, MR Analyst).\n- Branch is 135 commits behind target `staging-phase` — the reviewed diff is not the diff that will merge (confidence 97, MR Analyst).\n- Zero comments, reviewers, assignees, or labels on a change touching shared production Mongo state (confidence 95, MR Analyst).\n- Commit message doesn't disclose the CI-wiring gap or the 3 environment-dependent test failures (confidence 85, MR Analyst).\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 17 findings above threshold, 13 posted inline*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T19:51:03.625Z"
+    },
+    {
+      "id": 3688794245,
+      "body": "**Important** — Non-atomic clear-then-claim ordering: races across ECS tasks, permanent-loop on partial failure\n\n**What:** `find_one` → three `delete_many` → `replace_one` is a non-atomic check-and-set. `is_primary_worker()` is per-container, not fleet-wide, so during a rolling deploy every task has its own \"primary\" and none of them serialize against each other on this marker.\n\n**Why it matters:** Multiple concurrent tasks can all read the marker before any writes it, all running the full wipe. Worse: the marker is written *after* the deletes, so if that write fails (transient Mongo error, missing role on the new collection) while the deletes already succeeded, the marker never advances — every subsequent restart of that version re-wipes all three caches indefinitely, with no alarm.\n\n**Recommendation:**\n```python\n# Claim the version atomically BEFORE clearing:\nclaim = await marker_collection.update_one(\n    {\"_id\": \"marker\", \"last_cleared_version\": {\"$ne\": current_version}},\n    {\"$set\": {\"last_cleared_version\": current_version,\n              \"cleared_at\": datetime.now(timezone.utc)}},\n    upsert=True,\n)\nif not (claim.modified_count or claim.upserted_id):\n    return False  # another task already claimed this version\n# ...then delete_many on the three caches\n```\nA failed clear after a successful claim then degrades to \"briefly stale\" (the docstring's own stated acceptable failure mode) instead of an unbounded wipe loop.\n\nConfidence: 100/100 (cross-correlated — flagged independently by 2 agents) | Found by: Codebase Reviewer (OmniForge), Security Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:16.195Z"
+    },
+    {
+      "id": 3688794408,
+      "body": "**Important** — Rolling-deploy repopulation window defeats the fix's own purpose\n\n**What:** The clear fires the moment the first new-version task boots, but old-version tasks keep serving and writing to the same collections for the rest of the ALB drain window — multiple read-paths repopulate on every cache miss.\n\n**Why it matters:** Old-shaped documents written during the drain window survive for the caches' full TTL (26h / 24h) — which is the exact \"stale-shaped snapshot\" problem this MR exists to fix. The marker has already advanced by the time this happens, so there's no second chance to clear.\n\n**Recommendation:**\n```text\nStamp each cached document with the writing process's BACKEND_VERSION and\ntreat a mismatch as a read-side miss, instead of a wall-clock wipe. Removes\nthe marker, the lock, and the race entirely. If the one-shot wipe is kept,\ntrigger it from the post-deploy CI step that already polls /health until\nthe new version is live fleet-wide, not from process startup.\n```\n\nConfidence: 100/100 (cross-correlated — flagged independently by 2 agents) | Found by: Codebase Reviewer (OmniForge), Security Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:21.442Z"
+    },
+    {
+      "id": 3688794541,
+      "body": "**Important** — BACKEND_VERSION is not unique per deploy — collides across different builds\n\n**What:** CI derives `VERSION` by stripping the tag prefix, and multiple prefixes deploying to the same service collapse to the same string (e.g. on staging, tags `s3.15.51` and `sb3.15.51` both yield `VERSION=3.15.51`; on production, `v3.15.51`/`b3.15.51` collide identically).\n\n**Why it matters:** Two genuinely different builds can ship with an identical BACKEND_VERSION. The second one silently skips the clear — precisely on staging, where shape changes are meant to be validated first.\n\n**Recommendation:**\n```text\nUse TAG_NAME (already computed and exported in version.env) or\nCI_COMMIT_SHA/the image digest as the marker value instead of the\nstripped semver. Also log at INFO when the clear is skipped for an\nunchanged version, so the no-op is observable.\n```\n\nConfidence: 88/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:25.047Z"
+    },
+    {
+      "id": 3688794728,
+      "body": "**Important** — seo_audit_report_cache violates this function's own \"safe to clear\" precondition\n\n**What:** The docstring above this tuple requires every cleared collection to self-rebuild on the next read-side miss. Two real readers of `seo_audit_report_cache` — the MCP `get_seo_score` tool and the agno audit-read tool — have no recompute path at all and simply return \"no data\" on a miss.\n\n**Why it matters:** After every deploy, those two customer-facing tools report \"no audit / no score\" for every site until a human manually opens that site's SEO dashboard. This surfaces as missing data, not as an expected cold cache.\n\n**Recommendation:**\n```text\nEither exclude seo_audit_report_cache from the deploy clear, or give\nget_seo_score / seo_audit_read_tool a fallback to\n_read_autonomous_audit_history (already used elsewhere in the SEO\nwebsocket handler for the same cache).\n```\n\nConfidence: 88/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:28.738Z"
+    },
+    {
+      "id": 3688794945,
+      "body": "**Important** — Invalidation trigger is coarser than the actual problem\n\n**What:** The trigger for clearing is \"any new deploy,\" but the real invalidation condition is \"the cached payload's shape changed\" — a much rarer, code-level fact.\n\n**Why it matters:** Every deploy re-incurs a paid SE Ranking API call per site (seo_audit_report_cache miss) plus a multi-second GEO dashboard recompute (9-way async gather per site), whether or not anything shape-relevant actually changed. At this repo's deploy cadence that's a recurring, unnecessary cost.\n\n**Recommendation:**\n```text\nGate on a developer-maintained CACHE_SCHEMA_VERSION constant, bumped only\nin the commit that actually changes a payload shape, instead of\nBACKEND_VERSION (which changes on every deploy).\n```\n\nConfidence: 84/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:32.975Z"
+    },
+    {
+      "id": 3688795152,
+      "body": "**Important** — Docstring overclaims \"every\" cache; duplicates an existing registry without linking it\n\n**What:** This docstring claims to clear \"every durable Mongo read-through cache,\" but the tuple below covers only 3 of at least 7 such collections in this file. The same module already has a differently-scoped \"complete\" list (`GEO_CACHE_COLLECTIONS`, ~line 569) with an identical completeness promise for its own admin-triggered clear.\n\n**Why it matters:** Two divergent lists in one module, each claiming to be authoritative, will drift as either is extended — a future maintainer registering a new cache in one will reasonably assume it's covered by both.\n\n**Recommendation:**\n```text\nEither derive one list from the other, or state the exclusion criterion\nexplicitly (e.g. \"short-TTL caches are excluded because...\") and soften\nthe docstring from \"every\" to the actual scope.\n```\n\nConfidence: 100/100 (cross-correlated — flagged independently by 2 agents) | Found by: MR Analyst (OmniForge), Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:37.131Z"
+    },
+    {
+      "id": 3688795376,
+      "body": "**Important** — These 192 lines of new tests run in zero CI jobs\n\n**What:** No job in `.gitlab-ci.yml` names this file or has a `changes:` rule covering `db/seo_collections.py` or `main.py`. Every backend test job in this repo uses a hand-enumerated file list; none include this one.\n\n**Why it matters:** 60% of this MR's line count buys zero pipeline protection. Combined with the fact that this code runs `delete_many({})` against three production Mongo collections on every deploy, there's currently no automated signal this logic still works after any future change.\n\n**Recommendation:**\n```text\nAdd a changes:-gated CI job covering db/seo_collections.py, main.py, and\nthis test file — the pure-function test class needs only pytest +\npytest-asyncio + the seo_collections import closure.\n```\n\nConfidence: 97/100 | Found by: MR Analyst (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:40.989Z"
+    },
+    {
+      "id": 3688795674,
+      "body": "**Important** — 3 of 8 new tests fail in a clean checkout\n\n**What:** `TestStartupClearDeployCachesHook` does `from main import startup_clear_deploy_caches`, which drags in the full application import closure and hard-requires DB env vars, then an OpenAI API key. Unlike 82 other test files in this repo, this class carries no `pytest.importorskip` guard, so the failure is a hard error, not a visible skip.\n\n**Why it matters:** These 3 tests pass only on a machine with a fully-populated `.env` — i.e. the author's box — which compounds the CI-wiring gap above: even if wired in, this class would need the guard to run in a lean CI environment. (Note: this is confirmed to be a pre-existing repo-wide pattern — a sibling test file fails identically in a bare env — not a regression unique to this MR, but it still blocks these specific tests from being CI-able as written.)\n\n**Recommendation:**\n```python\npytestmark = pytest.importorskip(\"main\")\n# or: extract the hook's env/worker gating into a helper that doesn't\n# require the full app closure, and test that helper directly.\n```\n\nConfidence: 95/100 | Found by: MR Analyst (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:46.320Z"
+    },
+    {
+      "id": 3688795917,
+      "body": "**Important** — No kill switch or rollback plan for an unconditional production delete\n\n**What:** This repo has a strong, explicit convention of env-var kill switches for changes in this risk class (e.g. `GEO_ENGINE_SWAP_ENABLED`, `SELF_SERVE_TRIAL_ENABLED`, `KEYWORD_RANKING_PROVIDER`). This MR ships an unflagged, unconditional delete against shared production Mongo state, and its only failure signal is a `logger.warning` inside a fire-and-forget task — indistinguishable from a successful no-op skip.\n\n**Why it matters:** If the clear turns out to cause an unexpected thundering-herd recompute immediately post-deploy, the only rollback is another deploy. There's also no documented way for an operator to confirm the clear ran (the `[deploy-cache-clear]` log line and marker document aren't mentioned anywhere).\n\n**Recommendation:**\n```text\nDocument the rollback story (even \"revert the commit and redeploy\"), and\nconsider a DEPLOY_CACHE_CLEAR_ENABLED env gate consistent with repo\nconvention. State in the MR description how an operator verifies the\nclear ran.\n```\n\nConfidence: 82/100 | Found by: MR Analyst (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:51.062Z"
+    },
+    {
+      "id": 3688796115,
+      "body": "**Minor** — Staging's lax BACKEND_VERSION fallback can silently disable this feature\n\n**What:** The staging deploy job templates `BACKEND_VERSION` via `os.environ.get('VERSION', '')` (empty-string fallback), while the production job uses the strict `os.environ['VERSION']` (fails loudly if unset). This code treats an empty BACKEND_VERSION as \"skip entirely,\" with no log line.\n\n**Why it matters:** If the version-extraction step ever fails to propagate on staging, this feature silently never runs there — the one environment meant to validate shape-changing deploys before they reach production. The defect would only surface in production.\n\n**Recommendation:**\n```text\nMake staging's BACKEND_VERSION templating strict (os.environ['VERSION'])\nto match production, and add a logger.warning on the empty-version early\nreturn here so the skip is observable rather than silent.\n```\n\nConfidence: 93/100 (cross-correlated — flagged independently by 2 agents) | Found by: MR Analyst (OmniForge), Security Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:55.322Z"
+    },
+    {
+      "id": 3688796329,
+      "body": "**Minor** — Exception handling loses the Sentry capture safe_create_task was chosen to provide\n\n**What:** The blanket `except Exception` here routes into `logger.warning` instead of the already-imported `handle_error` from `config/error_handler`. Because the coroutine never lets an exception escape, wrapping it in `safe_create_task` buys nothing beyond a strong task reference — the Sentry routing that wrapper exists for never triggers.\n\n**Why it matters:** A persistent failure (e.g. the Mongo user lacking write role on the new `deploy_cache_clear_marker` collection) means this feature silently never works, discoverable only by grepping logs for a warning-level line.\n\n**Recommendation:**\n```python\nexcept Exception as e:\n    handle_error(e, extra={\"task_name\": \"clear_deploy_caches_if_new_version\"})\n    return False\n```\n\nConfidence: 82/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:51:59.803Z"
+    },
+    {
+      "id": 3688796546,
+      "body": "**Minor** — This test doesn't actually prove the \"doesn't block startup\" claim\n\n**What:** `test_triggers_clear_on_primary_worker_with_version_set` asserts on a bare `AsyncMock`, so `assert_called_once_with` is satisfied the instant the coroutine is constructed. It would pass identically whether `safe_create_task` is used, replaced with a no-op, or swapped for a blocking `await`.\n\n**Why it matters:** The single most important property of this startup hook — \"a slow/unreachable Mongo cannot delay startup\" — has no coverage. A regression to `await clear_deploy_caches_if_new_version(...)` would keep all 8 tests green.\n\n**Recommendation:**\n```text\nPatch utils.task_wrapper.safe_create_task directly and assert it was\ninvoked (not just the coroutine constructed), and add a test where the\npatched target sleeps, asserting the hook itself returns immediately.\n```\n\nConfidence: 80/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:52:03.538Z"
+    },
+    {
+      "id": 3688796750,
+      "body": "**Minor** — importlib.reload is unnecessary here and risks test-suite state leakage\n\n**What:** `_reload_sc` duplicates an identical helper already in `test_cache_env_namespacing.py`, and the `importlib.reload(sc)` it performs isn't needed for this module — `_deploy_env()` reads `os.getenv` at call time, so `monkeypatch.setenv(\"DEPLOY_ENV\", ...)` alone would suffice.\n\n**Why it matters:** The reload re-executes module-level state (ensured-index flags, asyncio.Lock instances) for the remainder of the pytest session. ~20 other test files import `db.seo_collections`, so this risks order-dependent leakage across the suite, and the duplicated helper will drift from its twin over time.\n\n**Recommendation:**\n```text\nDrop the reload and just set the env var via monkeypatch, or import the\nexisting _reload_sc-equivalent helper from test_cache_env_namespacing.py\ninstead of redefining it.\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-14T19:52:07.405Z"
+    },
+    {
+      "id": 3689806066,
+      "body": "mentioned in commit bcbb08b5b181a12e477a154ab45667be5992ec6a",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T05:07:25.180Z"
+    },
+    {
+      "id": 3689806073,
+      "body": "added 1 commit\n\n<ul><li>bcbb08b5 - fix(mongo): address OmniForge review — atomic claim, kill switch, exclude unsafe cache</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1180/diffs?diff_id=1963674118&start_sha=2c2a260c9905fad83aa53b0e0795c9f3f7610c7a)",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T05:07:25.781Z"
+    },
+    {
+      "id": 3689814218,
+      "body": "mentioned in commit 0c211b28cbaae854f980b21fe94c9b286cfaa42a",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T05:13:09.970Z"
+    },
+    {
+      "id": 3689814222,
+      "body": "added 1 commit\n\n<ul><li>0c211b28 - ci(deploy-cache-clear): fix BACKEND_VERSION collision, add CI coverage</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1180/diffs?diff_id=1963677022&start_sha=bcbb08b5b181a12e477a154ab45667be5992ec6a)",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T05:13:10.620Z"
+    },
+    {
+      "id": 3689948695,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T08:12:58.745Z"
+    },
+    {
+      "id": 3689948813,
+      "body": "## Follow-up Check — MR !1180\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 11 |\n| ✗ Not Applied | 2 |\n| ? Needs Human | 1 |\n\n### Unaddressed Findings (approved despite these — not nudged)\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #1ec2235 | SEO/backend/db/seo_collections.py:775 | Clear fires too early in the rolling deploy — old-version tasks still repopulate the just-cleared caches with stale-shaped data for the rest of the drain window, and the marker has already advanced so there's no second chance |\n| #9dc027d | SEO/backend/db/seo_collections.py:700 | Invalidation trigger (BACKEND_VERSION/TAG_NAME) is coarser than the real condition (\"payload shape changed\") — every deploy re-incurs the paid recompute cost regardless of whether anything shape-relevant changed |\n\nMR approved.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T08:13:08.668Z"
+    },
+    {
+      "id": 3689949304,
+      "body": "mentioned in commit 65e58c9643af49e2cc75ffae1208836d80112b6b",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-15T08:13:46.509Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "2794a156b1920e2b64cccb9ad355a373d7dfb1a5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3688793811,
+          "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis MR clears three durable Mongo read-through caches on new deploy, gated on `BACKEND_VERSION`. The security posture is genuinely low-risk — no attacker-reachable path. But two independent reviewers converged on the same structural problem from different angles: the clear-then-claim ordering isn't atomic (races across concurrent ECS tasks during a rolling deploy, and turns a partial Mongo failure into a permanent repeated-wipe loop), and the clear fires too early in a rolling deploy to actually establish the guarantee it claims — old-version tasks keep refilling the just-cleared caches. Layered on top: new tests run in no CI job, three fail in a clean checkout, the branch is 135 commits stale against its target, and the MR shipped with zero review engagement.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 12 |\n| Minor | 5 |\n\n### Strengths\n- `delete_many({})` instead of `drop()` is a deliberately good call — preserves indexes a long-running process would never recreate.\n- `DEPLOY_ENV` namespacing is correct and verified end-to-end against both ECS task definitions — the shared-Mongo collision the docstring warns about cannot actually occur.\n- Reuses an already-plumbed deploy signal (`BACKEND_VERSION`) rather than inventing new infra; commit message and test design are above this repo's average where they run.\n\n### Key Concerns\n- Non-atomic clear-then-claim ordering races across ECS tasks and can loop indefinitely on partial failure — flagged independently by both the Codebase and Security reviewers. See inline threads.\n- The clear runs too early in a rolling deploy for its own guarantee to hold — old-version tasks refill the caches it just cleared. Also independently cross-correlated.\n- New tests aren't wired into CI, and 3 of 8 fail in a clean checkout.\n\n### Security\nNo attacker-reachable path; overall risk assessed low. The two security-relevant findings (atomic-claim ordering, rolling-deploy repopulation) are availability/data-integrity concerns rather than exploitable vulnerabilities, and are folded into the Important findings above via cross-correlation with the Codebase Reviewer's independent discovery of the same issues.\n\n### Process notes (no diff location — not posted inline)\n- No verification evidence anywhere in the MR description for a change that deletes production data on every deploy (confidence 88, MR Analyst).\n- Branch is 135 commits behind target `staging-phase` — the reviewed diff is not the diff that will merge (confidence 97, MR Analyst).\n- Zero comments, reviewers, assignees, or labels on a change touching shared production Mongo state (confidence 95, MR Analyst).\n- Commit message doesn't disclose the CI-wiring gap or the 3 environment-dependent test failures (confidence 85, MR Analyst).\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 17 findings above threshold, 13 posted inline*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T19:51:03.625Z"
+        }
+      ]
+    },
+    {
+      "id": "468f3c248db815ba95bca590a71e1621710ba240",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688794245,
+          "body": "**Important** — Non-atomic clear-then-claim ordering: races across ECS tasks, permanent-loop on partial failure\n\n**What:** `find_one` → three `delete_many` → `replace_one` is a non-atomic check-and-set. `is_primary_worker()` is per-container, not fleet-wide, so during a rolling deploy every task has its own \"primary\" and none of them serialize against each other on this marker.\n\n**Why it matters:** Multiple concurrent tasks can all read the marker before any writes it, all running the full wipe. Worse: the marker is written *after* the deletes, so if that write fails (transient Mongo error, missing role on the new collection) while the deletes already succeeded, the marker never advances — every subsequent restart of that version re-wipes all three caches indefinitely, with no alarm.\n\n**Recommendation:**\n```python\n# Claim the version atomically BEFORE clearing:\nclaim = await marker_collection.update_one(\n    {\"_id\": \"marker\", \"last_cleared_version\": {\"$ne\": current_version}},\n    {\"$set\": {\"last_cleared_version\": current_version,\n              \"cleared_at\": datetime.now(timezone.utc)}},\n    upsert=True,\n)\nif not (claim.modified_count or claim.upserted_id):\n    return False  # another task already claimed this version\n# ...then delete_many on the three caches\n```\nA failed clear after a successful claim then degrades to \"briefly stale\" (the docstring's own stated acceptable failure mode) instead of an unbounded wipe loop.\n\nConfidence: 100/100 (cross-correlated — flagged independently by 2 agents) | Found by: Codebase Reviewer (OmniForge), Security Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:16.195Z"
+        }
+      ]
+    },
+    {
+      "id": "1ec2235d5b44e10e23de65c40b1f5b628fa3a45e",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688794408,
+          "body": "**Important** — Rolling-deploy repopulation window defeats the fix's own purpose\n\n**What:** The clear fires the moment the first new-version task boots, but old-version tasks keep serving and writing to the same collections for the rest of the ALB drain window — multiple read-paths repopulate on every cache miss.\n\n**Why it matters:** Old-shaped documents written during the drain window survive for the caches' full TTL (26h / 24h) — which is the exact \"stale-shaped snapshot\" problem this MR exists to fix. The marker has already advanced by the time this happens, so there's no second chance to clear.\n\n**Recommendation:**\n```text\nStamp each cached document with the writing process's BACKEND_VERSION and\ntreat a mismatch as a read-side miss, instead of a wall-clock wipe. Removes\nthe marker, the lock, and the race entirely. If the one-shot wipe is kept,\ntrigger it from the post-deploy CI step that already polls /health until\nthe new version is live fleet-wide, not from process startup.\n```\n\nConfidence: 100/100 (cross-correlated — flagged independently by 2 agents) | Found by: Codebase Reviewer (OmniForge), Security Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:21.442Z"
+        }
+      ]
+    },
+    {
+      "id": "bdbfd2fd6b1f0457b84fafa5cbe9d9669cd3410c",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688794541,
+          "body": "**Important** — BACKEND_VERSION is not unique per deploy — collides across different builds\n\n**What:** CI derives `VERSION` by stripping the tag prefix, and multiple prefixes deploying to the same service collapse to the same string (e.g. on staging, tags `s3.15.51` and `sb3.15.51` both yield `VERSION=3.15.51`; on production, `v3.15.51`/`b3.15.51` collide identically).\n\n**Why it matters:** Two genuinely different builds can ship with an identical BACKEND_VERSION. The second one silently skips the clear — precisely on staging, where shape changes are meant to be validated first.\n\n**Recommendation:**\n```text\nUse TAG_NAME (already computed and exported in version.env) or\nCI_COMMIT_SHA/the image digest as the marker value instead of the\nstripped semver. Also log at INFO when the clear is skipped for an\nunchanged version, so the no-op is observable.\n```\n\nConfidence: 88/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:25.047Z"
+        }
+      ]
+    },
+    {
+      "id": "11a48a0a5a68f6d31df82ee168ab47e44ad3beed",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688794728,
+          "body": "**Important** — seo_audit_report_cache violates this function's own \"safe to clear\" precondition\n\n**What:** The docstring above this tuple requires every cleared collection to self-rebuild on the next read-side miss. Two real readers of `seo_audit_report_cache` — the MCP `get_seo_score` tool and the agno audit-read tool — have no recompute path at all and simply return \"no data\" on a miss.\n\n**Why it matters:** After every deploy, those two customer-facing tools report \"no audit / no score\" for every site until a human manually opens that site's SEO dashboard. This surfaces as missing data, not as an expected cold cache.\n\n**Recommendation:**\n```text\nEither exclude seo_audit_report_cache from the deploy clear, or give\nget_seo_score / seo_audit_read_tool a fallback to\n_read_autonomous_audit_history (already used elsewhere in the SEO\nwebsocket handler for the same cache).\n```\n\nConfidence: 88/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:28.738Z"
+        }
+      ]
+    },
+    {
+      "id": "9dc027dfb34f92e2af34a529930cbf0047978a72",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688794945,
+          "body": "**Important** — Invalidation trigger is coarser than the actual problem\n\n**What:** The trigger for clearing is \"any new deploy,\" but the real invalidation condition is \"the cached payload's shape changed\" — a much rarer, code-level fact.\n\n**Why it matters:** Every deploy re-incurs a paid SE Ranking API call per site (seo_audit_report_cache miss) plus a multi-second GEO dashboard recompute (9-way async gather per site), whether or not anything shape-relevant actually changed. At this repo's deploy cadence that's a recurring, unnecessary cost.\n\n**Recommendation:**\n```text\nGate on a developer-maintained CACHE_SCHEMA_VERSION constant, bumped only\nin the commit that actually changes a payload shape, instead of\nBACKEND_VERSION (which changes on every deploy).\n```\n\nConfidence: 84/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:32.975Z"
+        }
+      ]
+    },
+    {
+      "id": "d0086fa42fa07ad1542d1f93363b0742cc057262",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688795152,
+          "body": "**Important** — Docstring overclaims \"every\" cache; duplicates an existing registry without linking it\n\n**What:** This docstring claims to clear \"every durable Mongo read-through cache,\" but the tuple below covers only 3 of at least 7 such collections in this file. The same module already has a differently-scoped \"complete\" list (`GEO_CACHE_COLLECTIONS`, ~line 569) with an identical completeness promise for its own admin-triggered clear.\n\n**Why it matters:** Two divergent lists in one module, each claiming to be authoritative, will drift as either is extended — a future maintainer registering a new cache in one will reasonably assume it's covered by both.\n\n**Recommendation:**\n```text\nEither derive one list from the other, or state the exclusion criterion\nexplicitly (e.g. \"short-TTL caches are excluded because...\") and soften\nthe docstring from \"every\" to the actual scope.\n```\n\nConfidence: 100/100 (cross-correlated — flagged independently by 2 agents) | Found by: MR Analyst (OmniForge), Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:37.131Z"
+        }
+      ]
+    },
+    {
+      "id": "bd26b5a597f66c70e148ff94fa70a9606702c9d8",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688795376,
+          "body": "**Important** — These 192 lines of new tests run in zero CI jobs\n\n**What:** No job in `.gitlab-ci.yml` names this file or has a `changes:` rule covering `db/seo_collections.py` or `main.py`. Every backend test job in this repo uses a hand-enumerated file list; none include this one.\n\n**Why it matters:** 60% of this MR's line count buys zero pipeline protection. Combined with the fact that this code runs `delete_many({})` against three production Mongo collections on every deploy, there's currently no automated signal this logic still works after any future change.\n\n**Recommendation:**\n```text\nAdd a changes:-gated CI job covering db/seo_collections.py, main.py, and\nthis test file — the pure-function test class needs only pytest +\npytest-asyncio + the seo_collections import closure.\n```\n\nConfidence: 97/100 | Found by: MR Analyst (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:40.989Z"
+        }
+      ]
+    },
+    {
+      "id": "aac66b48d39faac5898f308ae7204ad4274b7ed1",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688795674,
+          "body": "**Important** — 3 of 8 new tests fail in a clean checkout\n\n**What:** `TestStartupClearDeployCachesHook` does `from main import startup_clear_deploy_caches`, which drags in the full application import closure and hard-requires DB env vars, then an OpenAI API key. Unlike 82 other test files in this repo, this class carries no `pytest.importorskip` guard, so the failure is a hard error, not a visible skip.\n\n**Why it matters:** These 3 tests pass only on a machine with a fully-populated `.env` — i.e. the author's box — which compounds the CI-wiring gap above: even if wired in, this class would need the guard to run in a lean CI environment. (Note: this is confirmed to be a pre-existing repo-wide pattern — a sibling test file fails identically in a bare env — not a regression unique to this MR, but it still blocks these specific tests from being CI-able as written.)\n\n**Recommendation:**\n```python\npytestmark = pytest.importorskip(\"main\")\n# or: extract the hook's env/worker gating into a helper that doesn't\n# require the full app closure, and test that helper directly.\n```\n\nConfidence: 95/100 | Found by: MR Analyst (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:46.320Z"
+        }
+      ]
+    },
+    {
+      "id": "7dc48a90e937510a6f33676511fe2d3e4f364bc8",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688795917,
+          "body": "**Important** — No kill switch or rollback plan for an unconditional production delete\n\n**What:** This repo has a strong, explicit convention of env-var kill switches for changes in this risk class (e.g. `GEO_ENGINE_SWAP_ENABLED`, `SELF_SERVE_TRIAL_ENABLED`, `KEYWORD_RANKING_PROVIDER`). This MR ships an unflagged, unconditional delete against shared production Mongo state, and its only failure signal is a `logger.warning` inside a fire-and-forget task — indistinguishable from a successful no-op skip.\n\n**Why it matters:** If the clear turns out to cause an unexpected thundering-herd recompute immediately post-deploy, the only rollback is another deploy. There's also no documented way for an operator to confirm the clear ran (the `[deploy-cache-clear]` log line and marker document aren't mentioned anywhere).\n\n**Recommendation:**\n```text\nDocument the rollback story (even \"revert the commit and redeploy\"), and\nconsider a DEPLOY_CACHE_CLEAR_ENABLED env gate consistent with repo\nconvention. State in the MR description how an operator verifies the\nclear ran.\n```\n\nConfidence: 82/100 | Found by: MR Analyst (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:51.062Z"
+        }
+      ]
+    },
+    {
+      "id": "6bf6af5305c124c6ad74c4da083d8afa1ce09aa6",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688796115,
+          "body": "**Minor** — Staging's lax BACKEND_VERSION fallback can silently disable this feature\n\n**What:** The staging deploy job templates `BACKEND_VERSION` via `os.environ.get('VERSION', '')` (empty-string fallback), while the production job uses the strict `os.environ['VERSION']` (fails loudly if unset). This code treats an empty BACKEND_VERSION as \"skip entirely,\" with no log line.\n\n**Why it matters:** If the version-extraction step ever fails to propagate on staging, this feature silently never runs there — the one environment meant to validate shape-changing deploys before they reach production. The defect would only surface in production.\n\n**Recommendation:**\n```text\nMake staging's BACKEND_VERSION templating strict (os.environ['VERSION'])\nto match production, and add a logger.warning on the empty-version early\nreturn here so the skip is observable rather than silent.\n```\n\nConfidence: 93/100 (cross-correlated — flagged independently by 2 agents) | Found by: MR Analyst (OmniForge), Security Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:55.322Z"
+        }
+      ]
+    },
+    {
+      "id": "a02eb625674beaa3eadf3201a1efd5f7ae8f4637",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688796329,
+          "body": "**Minor** — Exception handling loses the Sentry capture safe_create_task was chosen to provide\n\n**What:** The blanket `except Exception` here routes into `logger.warning` instead of the already-imported `handle_error` from `config/error_handler`. Because the coroutine never lets an exception escape, wrapping it in `safe_create_task` buys nothing beyond a strong task reference — the Sentry routing that wrapper exists for never triggers.\n\n**Why it matters:** A persistent failure (e.g. the Mongo user lacking write role on the new `deploy_cache_clear_marker` collection) means this feature silently never works, discoverable only by grepping logs for a warning-level line.\n\n**Recommendation:**\n```python\nexcept Exception as e:\n    handle_error(e, extra={\"task_name\": \"clear_deploy_caches_if_new_version\"})\n    return False\n```\n\nConfidence: 82/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:51:59.803Z"
+        }
+      ]
+    },
+    {
+      "id": "3caa5d3b051037b1b258c9f156db9f78ad45170b",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688796546,
+          "body": "**Minor** — This test doesn't actually prove the \"doesn't block startup\" claim\n\n**What:** `test_triggers_clear_on_primary_worker_with_version_set` asserts on a bare `AsyncMock`, so `assert_called_once_with` is satisfied the instant the coroutine is constructed. It would pass identically whether `safe_create_task` is used, replaced with a no-op, or swapped for a blocking `await`.\n\n**Why it matters:** The single most important property of this startup hook — \"a slow/unreachable Mongo cannot delay startup\" — has no coverage. A regression to `await clear_deploy_caches_if_new_version(...)` would keep all 8 tests green.\n\n**Recommendation:**\n```text\nPatch utils.task_wrapper.safe_create_task directly and assert it was\ninvoked (not just the coroutine constructed), and add a test where the\npatched target sleeps, asserting the hook itself returns immediately.\n```\n\nConfidence: 80/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:52:03.538Z"
+        }
+      ]
+    },
+    {
+      "id": "64826010cf36940aac1efa15c89acf6eade98cfd",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3688796750,
+          "body": "**Minor** — importlib.reload is unnecessary here and risks test-suite state leakage\n\n**What:** `_reload_sc` duplicates an identical helper already in `test_cache_env_namespacing.py`, and the `importlib.reload(sc)` it performs isn't needed for this module — `_deploy_env()` reads `os.getenv` at call time, so `monkeypatch.setenv(\"DEPLOY_ENV\", ...)` alone would suffice.\n\n**Why it matters:** The reload re-executes module-level state (ensured-index flags, asyncio.Lock instances) for the remainder of the pytest session. ~20 other test files import `db.seo_collections`, so this risks order-dependent leakage across the suite, and the duplicated helper will drift from its twin over time.\n\n**Recommendation:**\n```text\nDrop the reload and just set the env var via monkeypatch, or import the\nexisting _reload_sc-equivalent helper from test_cache_env_namespacing.py\ninstead of redefining it.\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-14T19:52:07.405Z"
+        }
+      ]
+    },
+    {
+      "id": "600751d6ad0ba8c4dccc58d2ed801565c86ce217",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689806066,
+          "body": "mentioned in commit bcbb08b5b181a12e477a154ab45667be5992ec6a",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T05:07:25.180Z"
+        }
+      ]
+    },
+    {
+      "id": "97c86caec7a4cf59090562c5bb6ece3296d21427",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689806073,
+          "body": "added 1 commit\n\n<ul><li>bcbb08b5 - fix(mongo): address OmniForge review — atomic claim, kill switch, exclude unsafe cache</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1180/diffs?diff_id=1963674118&start_sha=2c2a260c9905fad83aa53b0e0795c9f3f7610c7a)",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T05:07:25.781Z"
+        }
+      ]
+    },
+    {
+      "id": "454bbb861a9f932088175467d31624f6766bbeac",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689814218,
+          "body": "mentioned in commit 0c211b28cbaae854f980b21fe94c9b286cfaa42a",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T05:13:09.970Z"
+        }
+      ]
+    },
+    {
+      "id": "7e3823fb2b1f5c714d51d9ff1bf592a8efc64f38",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689814222,
+          "body": "added 1 commit\n\n<ul><li>0c211b28 - ci(deploy-cache-clear): fix BACKEND_VERSION collision, add CI coverage</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1180/diffs?diff_id=1963677022&start_sha=bcbb08b5b181a12e477a154ab45667be5992ec6a)",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T05:13:10.620Z"
+        }
+      ]
+    },
+    {
+      "id": "633a42d09804d3c7dc8a6cbb6e2225262ddcf91f",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689948695,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T08:12:58.745Z"
+        }
+      ]
+    },
+    {
+      "id": "10e6dac0fc8c7adb395c36f7269c1fd1469be36f",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689948813,
+          "body": "## Follow-up Check — MR !1180\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 11 |\n| ✗ Not Applied | 2 |\n| ? Needs Human | 1 |\n\n### Unaddressed Findings (approved despite these — not nudged)\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #1ec2235 | SEO/backend/db/seo_collections.py:775 | Clear fires too early in the rolling deploy — old-version tasks still repopulate the just-cleared caches with stale-shaped data for the rest of the drain window, and the marker has already advanced so there's no second chance |\n| #9dc027d | SEO/backend/db/seo_collections.py:700 | Invalidation trigger (BACKEND_VERSION/TAG_NAME) is coarser than the real condition (\"payload shape changed\") — every deploy re-incurs the paid recompute cost regardless of whether anything shape-relevant changed |\n\nMR approved.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T08:13:08.668Z"
+        }
+      ]
+    },
+    {
+      "id": "af4b6cb89f3585ab27ceb601bcd351759d24a4f1",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3689949304,
+          "body": "mentioned in commit 65e58c9643af49e2cc75ffae1208836d80112b6b",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-15T08:13:46.509Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "0c211b28cbaae854f980b21fe94c9b286cfaa42a",
+      "title": "ci(deploy-cache-clear): fix BACKEND_VERSION collision, add CI coverage",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-15T10:43:01.000+05:30"
+    },
+    {
+      "id": "bcbb08b5b181a12e477a154ab45667be5992ec6a",
+      "title": "fix(mongo): address OmniForge review — atomic claim, kill switch, exclude unsafe cache",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-15T10:37:08.000+05:30"
+    },
+    {
+      "id": "2c2a260c9905fad83aa53b0e0795c9f3f7610c7a",
+      "title": "fix(mongo): clear durable read-through caches once per new deploy",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-14T01:22:36.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-15T08:12:58.550Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

@@ -1,0 +1,1654 @@
+{
+  "meta": {
+    "iid": 59,
+    "title": "loop/implement regenloop ship improvements",
+    "state": "merged",
+    "author": "shahilkadia",
+    "created_at": "2026-08-25T03:23:45.183Z",
+    "updated_at": "2026-08-29T15:32:38.561Z",
+    "merged_at": "2026-08-29T15:32:37.599Z",
+    "labels": [
+      "omniforge::check-rejected"
+    ],
+    "source_branch": "loop/implement-regenloop-ship-improvements",
+    "target_branch": "main",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59",
+    "sha": "6b007563c8d15ee4e11b558f2a414d45c53e5381",
+    "merge_commit_sha": "a189f1b8d000270a62c746d25b6397cd7096ad95",
+    "diff_refs": {
+      "base_sha": "c90a419f76c2c53eeebad97259bc29c920819bf8",
+      "head_sha": "6b007563c8d15ee4e11b558f2a414d45c53e5381",
+      "start_sha": "c90a419f76c2c53eeebad97259bc29c920819bf8"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success",
+    "head_pipeline": {
+      "id": 2802046102,
+      "iid": 233,
+      "project_id": 83930487,
+      "sha": "6b007563c8d15ee4e11b558f2a414d45c53e5381",
+      "ref": "loop/implement-regenloop-ship-improvements",
+      "status": "success",
+      "source": "push",
+      "created_at": "2026-08-29T14:16:46.800Z",
+      "updated_at": "2026-08-29T14:26:59.296Z",
+      "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/loop-plugin/-/pipelines/2802046102",
+      "before_sha": "e6a4ffd09f807e80e0b8d391d5de08ff3ab8c2bd",
+      "tag": false,
+      "yaml_errors": null,
+      "user": {
+        "id": 29651405,
+        "username": "shahilkadia",
+        "public_email": null,
+        "name": "Shahil Kadia",
+        "state": "active",
+        "locked": false,
+        "avatar_url": "https://secure.gravatar.com/avatar/3bf51697c0d308d3fb60da2dc503e1cef26f00236f5b746e975f9538b9c06cd1?s=80&d=identicon",
+        "web_url": "https://gitlab.com/shahilkadia"
+      },
+      "started_at": "2026-08-29T14:16:47.470Z",
+      "finished_at": "2026-08-29T14:26:59.284Z",
+      "committed_at": null,
+      "duration": 610,
+      "queued_duration": null,
+      "coverage": null,
+      "detailed_status": {
+        "icon": "status_success",
+        "text": "Passed",
+        "label": "passed",
+        "group": "success",
+        "tooltip": "passed",
+        "has_details": true,
+        "details_path": "/regenai-gitlab/regenai-digital/loop-plugin/-/pipelines/2802046102",
+        "illustration": null,
+        "favicon": "/assets/ci_favicons/favicon_status_success-8451333011eee8ce9f2ab25dc487fe24a8758c694827a582f17f42b0a90446a2.png"
+      },
+      "archived": false
+    }
+  },
+  "notes": [
+    {
+      "id": 3729453613,
+      "body": "<!-- regenloop-ship:review:round-1:f-2f9ac010c25f -->\n**blocking** — §9's target fetch is unguarded, so a failed fetch silently yields a stale head the prose four lines later certifies as \"re-derived by the fetch above\". The identical §5h call carries a loud-stop guard and a pin; §9's twin has neither.\n\n**Evidence:** Transient fetch failure (token expiry, network flap, renamed target) → `git fetch` exits nonzero → `rev-parse` resolves the stale remote-tracking tip → the merge-check is briefed with a stale head labeled \"the target's current head\" and can return SAFE_TO_MERGE for a diff that changed. An empty `TARGET_HEAD` also rides unguarded.\n\n**Suggested fix:** Mirror §5h's guard in §9 (`git fetch ... || { echo \"could not fetch $REMOTE/$TARGET — refusing to brief the merge-check on a guessed head\"; exit 1; }`), add `[ -n \"$TARGET_HEAD\" ] ||` loud stop, and pin the guarded form in TestShipMergeCheckInputs.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:42.704Z"
+    },
+    {
+      "id": 3729453631,
+      "body": "<!-- regenloop-ship:review:round-1:f-5f218de84952 -->\n**blocking** — The [Unreleased] entry (lines 10-23) is duplicated verbatim inside the released [1.2.0] — 2026-08-25 section (lines 104-117). Introduced by merge commit ad019b5. v1.2.0 is tagged and contains origin/main; main's CHANGELOG has no [Unreleased] (consumed by the release).\n\n**Evidence:** Merging publishes these changes in the release notes of an already-tagged version that does not contain them — false release history — and the next release sweep re-emits the same bullets. Violates the MR's own §5h doctrine item 3 (the target's released resolution wins).\n\n**Suggested fix:** Delete lines 104-117 (keep only the [Unreleased] copy).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:43.743Z"
+    },
+    {
+      "id": 3729453661,
+      "body": "<!-- regenloop-ship:review:round-1:f-e81e8ec43249 -->\n**non-blocking** — §5f's mutation-proof prose names \"the pre-round code at HEAD~1\" as the natural mutation, contradicting the section's own baseline discipline (the fence comment records HEAD~1 broke on multi-commit rounds; the round base is $ROUND_BASE).\n\n**Evidence:** On a two-commit round, mutating HEAD~1 mutates mid-round code, not the pre-round state — at the exact step that certifies the round green.\n\n**Suggested fix:** Reference $ROUND_BASE (`git show \"$ROUND_BASE\":<path>`).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:45.386Z"
+    },
+    {
+      "id": 3729453682,
+      "body": "<!-- regenloop-ship:review:round-1:f-c44ba1d74341 -->\n**non-blocking** — §9's divergence rule needs \"the tip §5h's check certified against\" for the AHEAD=0 case, but §5h never records that tip: it prints nothing on no-movement, shell state does not survive, and §9's fetch overwrites the ref the value lived in. The comparison's left-hand operand exists nowhere.\n\n**Evidence:** AHEAD=0 at §5h, target advances during the CI wait, and at §9 the instructed divergence check cannot be executed as written — proceed-unflagged or improvised.\n\n**Suggested fix:** Either §5h prints the certified tip on AHEAD=0 (an orchestrator-carried fact), or §9 recomputes divergence directly: `git rev-list --count HEAD..\"$REMOTE/$TARGET\"` > 0 means unabsorbed movement, no carried baseline needed.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:46.549Z"
+    },
+    {
+      "id": 3729453698,
+      "body": "<!-- regenloop-ship:review:round-1:f-0e5a12380a17 -->\n**non-blocking** — `AHEAD` counts `$BASE..$REMOTE/$TARGET` (since the fork point) but the echo and prose interpret it as \"not absorbed by this branch\" — that set is `HEAD..`. They diverge once the branch has absorbed anything.\n\n**Evidence:** Re-running ship on a branch that previously absorbed the target reports movement when everything is absorbed, runs a no-op merge, then doctrine item 5 mandates a full verification restart plus a MAX_ROUNDS charge on identical state — to exhaustion.\n\n**Suggested fix:** `AHEAD=\"$(git rev-list --count HEAD..\"$REMOTE/$TARGET\")\"` (matches the echo's caption verbatim).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:47.506Z"
+    },
+    {
+      "id": 3729453721,
+      "body": "<!-- regenloop-ship:review:round-1:f-9676a707b445 -->\n**non-blocking** — The §5h fence's last line `[ \"$AHEAD\" -gt 0 ] && echo ...` returns rc 1 on the normal no-movement path. Everywhere else rc 1 is a deliberate hard stop; here the happy path exits with the failure code and no message.\n\n**Evidence:** An executor checking the block's exit status reads \"Exit code 1\" with no reason on the most common outcome.\n\n**Suggested fix:** `if [ \"$AHEAD\" -gt 0 ]; then echo ...; fi`.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:48.371Z"
+    },
+    {
+      "id": 3729453743,
+      "body": "<!-- regenloop-ship:review:round-1:f-53ba74e1415c -->\n**note** — \"All three exit 1 arms in that block\" routes only the card-specific stops; the block contains ~8 exit-1 arms (resolver/record/base) the sentence leaves unrouted, so the pinned claim \".worktrees/ship-review-$IID is never orphaned\" is falsified by the block's own earlier arms.\n\n**Suggested fix:** \"All `exit 1` arms in that block — including the shared resolver/record/base arms —\".",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:49.342Z"
+    },
+    {
+      "id": 3729453761,
+      "body": "<!-- regenloop-ship:review:round-1:f-5a25876ccb18 -->\n**note** — `check-staleness` is repo-wide while the trigger is branch-scoped: a card already stale at the fork point fails here, forcing this branch's fix vehicle to repair a card it never touched.\n\n**Suggested fix:** One sentence: a stale card whose anchor this branch did not touch is a posted operator note, not this branch's fix round.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:50.310Z"
+    },
+    {
+      "id": 3729453788,
+      "body": "<!-- regenloop-ship:review:round-1:f-d1275ddbd067 -->\n**note** — \"Pinned by 8 new classes (~20 total)\" — the file has 31 classes (23 pre-existing on origin/main + 8 new). \"~20\" is wrong on the natural reading.\n\n**Suggested fix:** \"(31 total)\".",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:51.290Z"
+    },
+    {
+      "id": 3729453816,
+      "body": "<!-- regenloop-ship:review:round-1:f-5a6acbe0edc6 -->\n**note** — `assertNotIn(\"before the content commits\", ...)` turns red on a same-meaning, rule-affirming rewording. The NotIn asserts the absence of a wording, not of a meaning.\n\n**Suggested fix:** Drop the assertNotIn or target a phrase that cannot occur in a correct statement.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:52.164Z"
+    },
+    {
+      "id": 3729453839,
+      "body": "<!-- regenloop-ship:review:round-1:f-786d5ba18206 -->\n**note** — Doctrine item 5's restart list omits §5g's card verification, and with the new BASE = absorbed tip, the knowledge-diff trigger excludes target-side card changes the merge just absorbed.\n\n**Suggested fix:** Add \"§5g's card verification re-runs (against the original fork base for the knowledge trigger)\" to item 5.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:53.161Z"
+    },
+    {
+      "id": 3729453863,
+      "body": "<!-- regenloop-ship:review:round-1:f-a096c578440e -->\n**non-blocking (security)** — Same site as F1: the §9 target-head fetch is unguarded; a stale remote-tracking ref can be presented to the merge-check as freshly derived. The §5h twin carries the guard and its pin.\n\n**Suggested fix:** Mirror §5h's guard in §9 and pin it in TestShipMergeCheckInputs.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:54.058Z"
+    },
+    {
+      "id": 3729453903,
+      "body": "<!-- regenloop-ship:review:round-1:f-804c6fe50f15 -->\n**non-blocking (security)** — The movement detector measures AHEAD against a BASE no fence updates after an absorption, so AHEAD > 0 is permanent post-absorption and the doctrine re-enters until MAX_ROUNDS exhaustion (over-verification, never under-verification). Same root as F6.\n\n**Suggested fix:** Persist the absorbed tip (record `base_sha` update or SHIP_TARGET_TIP) so the re-check measures movement since the last absorption.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:54.981Z"
+    },
+    {
+      "id": 3729453981,
+      "body": "<!-- regenloop-ship:review:round-1:f-9ae34a77f6fd -->\n**non-blocking (security)** — The detached-ops idiom (Popen from inside a script) is invisible to the PreToolUse merge-guard hook — the sole mechanical rule-1 enforcement — and leaves the output log path unspecified (a log under $REPO_ROOT gets swept into a round commit by §5e's git add -A).\n\n**Suggested fix:** Pin the idiom's mechanics: logs under $MAIN_ROOT/regenloop/local/ (gitignored, outside add -A), and spell the detached command out in the visible Bash call so hooks screen the actual command line.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:55.973Z"
+    },
+    {
+      "id": 3729454020,
+      "body": "<!-- regenloop-ship:review:round-1:f-ab1eb6421908 -->\n**note (security)** — Three smaller observations, all fail-closed: word-splitting in the card loop (paths asserted space-free, not enforced); INIT resolves in-repo so card verification is executed by the code under review (mirrors the documented gate_runner decision); the standalone TARGET fallback uses `grep -x` (BRE) and `head -1` (arbitrary pick).\n\n**Suggested fix:** None required for merge; `grep -v -F -x` and an anchored --list selection if touched.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T03:53:56.963Z"
+    },
+    {
+      "id": 3729454056,
+      "body": "<!-- regenloop-ship:review:round-1 -->\n### Review round 1\n\n**2 blocking, 8 non-blocking, 6 notes** across 2 reviewers (mr-code-reviewer, mr-security-reviewer). Files read beyond the diff: full post-image SKILL.md (1270 lines), all 31 test classes, scripts/regenloop_init.py, hooks/mr_merge_guard.py, resolve_plugin_path.sh, gates.toml, spec + plan docs, all 29 cards hash-checked. Security: secrets sweep clean; prompt-injection pass clean; posture — strengthens pre-promotion checks more than it widens attack surface. The two blocking findings are consistency gaps in the new §9 movement machinery and a merge-introduced CHANGELOG duplication.\n\n### Could not be anchored to a diff line\n\nGitLab rejects an inline thread whose line is not part of this MR's diff — usually because the finding concerns a line the MR did not change. Reported here instead so nothing is lost:\n\n- **`skills/regenloop-ship/SKILL.md:24`** — **non-blocking** — §1 rule 1 reads \"Never merge, and never approve\" (unscoped) while §5h step 1 now commands merging the target into the branch. §11 was rescoped to \"Merging the MR\" for exactly this; the top invariant was left contradicting a step the skill instructs.\n\n**Evidence:** A literal executor can cite rule 1 and refuse the absorption, or learn rule 1's blanket phrasing admits unstated exceptions.\n\n**Suggested fix:** Scope rule 1's first sentence (\"Never merge the MR, and never approve\") or append the parenthetical clarifying §5h's reversible target back-merge is not that action.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-25T03:53:57.782Z"
+    },
+    {
+      "id": 3729554427,
+      "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22#8afb403e15d0fe587da6c0f666334b900aa1d7fc_1167_1167)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:39:08.251Z"
+    },
+    {
+      "id": 3729554436,
+      "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22#ab09011fa121d0a2bb9fa4ca76094f2482b902b7_104_104)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:39:08.428Z"
+    },
+    {
+      "id": 3729554465,
+      "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22#8afb403e15d0fe587da6c0f666334b900aa1d7fc_1167_1167)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:39:08.978Z"
+    },
+    {
+      "id": 3729554499,
+      "body": "added 1 commit\n\n<ul><li>f512ff2c - review fixes (round 1)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:39:09.329Z"
+    },
+    {
+      "id": 3729556742,
+      "body": "<!-- regenloop-ship:fix:round-1:reply:02003f8c74076f13fbfc59a8650b6655022990ab -->\n**Fixed** — `f512ff2` (review fixes, round 1).\n\n`skills/regenloop-ship/SKILL.md:1167-1169`: the bare `git fetch \"$REMOTE\" \"$TARGET\"` now carries the §5h-mirrored guard — `|| { echo \"could not fetch $REMOTE/$TARGET — refusing to hand a stale target head to the merge-check\"; exit 1; }` — plus the empty-head stop `[ -n \"$TARGET_HEAD\" ] || { echo \"could not resolve $REMOTE/$TARGET after the fetch — no target head to hand the merge-check\"; exit 1; }`. The refusal message deliberately differs from §5h's so each pin binds its own fence.\n\n`tests/test_regenloop_ship_surface.py:1602-1609`: pin added — `TestShipMergeCheckInputs::test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head` asserts the guarded fetch form, the refusal message, and the empty-head stop.\n\nMutation-proof (this round's own §5f precondition, applied to its new test): red against the unguarded fence (`AssertionError: 'git fetch \"$REMOTE\" \"$TARGET\" ||' not found`) → guard stripped again post-fix → red → fence restored byte-verified (sha256 equal pre-mutation and post-restore) → green. Recorded: `mutation-proven: test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head — fails when the §9 fetch guard is removed`.\n\nTriage verdict was VALID @95; §5h's twin (line 933), the §2/§5 `$BRANCH` fetches, and the §9 prose (\"re-derived by the fetch above\" — now true) untouched.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T04:39:57.297Z"
+    },
+    {
+      "id": 3729557203,
+      "body": "<!-- regenloop-ship:fix:round-1:reply:20df9f143adb032250ae3cfdc72e388d34dedf62 -->\n**Fixed** — `f512ff2` (review fixes, round 1).\n\n`CHANGELOG.md:104-117` deleted — exactly the 14-line verbatim duplicate of the `[Unreleased]` block that merge commit `ad019b5` had manufactured inside the tagged `[1.2.0] — 2026-08-25` section. The `[Unreleased]` copy (lines 10-23) is retained verbatim; the deletion was guarded by content assertions (line 104 starts the bullet, 117 ends it, 118 blank, 119 `### Fixed`) and a pre-deletion byte-equality check that the `[Unreleased]` copy matched the removed block. The `[1.2.0]` `### Changed` list now ends at the regression-engine bullet.\n\nNet effect: the published 1.2.0 release notes no longer gain entries post-tag, and the next release sweep emits the entry exactly once. Triage verdict was VALID @97 (tag containment verified: `v1.2.0` dereferences to `795a01a`; the tagged changelog contains no copy of this entry).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-25T04:40:10.275Z"
+    },
+    {
+      "id": 3729557966,
+      "body": "<!-- regenloop-ship:fix:round-1 -->\n### Round 1 fix summary — commit `f512ff2`\n\n- `skills/regenloop-ship/SKILL.md:1167-1169` — §9's fetch guarded (§5h-mirrored loud stop on fetch failure + empty-`$TARGET_HEAD` stop); refusal message distinct from §5h's so each pin binds its own fence.\n- `tests/test_regenloop_ship_surface.py:1602-1609` — `TestShipMergeCheckInputs::test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head` added; asserts the guarded form, the refusal message, the empty-head stop.\n- `CHANGELOG.md:104-117` — deleted: the 14-line verbatim duplicate of `[Unreleased]` that merge `ad019b5` had placed inside the tagged `[1.2.0]` section; `[Unreleased]` copy retained verbatim.\n\n`mutation-proven: test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head — fails when the §9 fetch guard is removed` (red against the unguarded fence → guard stripped post-fix → red → restored byte-verified, sha256 equal → green).\n\nRe-gate (§5f): fast tier, base `7122702` → **green** — python-test pass, validate pass, lint pass; 3 gates executed; coverage clean; no meta-config change. Full surface file 151 passed / 327 subtests. Pre-push gates re-ran green (455s) before the push landed (`7122702..f512ff2`).\n\nBoth round-1 blocking findings are dispositioned **Fixed** on their threads. The 8 non-blocking findings and 6 notes ride as notes per rule 6 — listed in the MR description for the human's judgement.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:40:29.810Z"
+    },
+    {
+      "id": 3729558509,
+      "body": "<!-- regenloop-ship:gates:round-1 -->\n### Gate — round 1 re-gate (base `7122702`, fast tier)\n\n**verdict: green** at head `f512ff2` — python-test pass, validate pass, lint pass; 3 gates executed (`--require-evidence` satisfied), coverage: no unmatched, no fenced files; `meta_config_changed` empty.\n\nMutation-proof for the round's newly added test: `mutation-proven: test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head — fails when the §9 fetch guard is removed`.\n\nPre-push gates re-ran green at the same head before the push (wall 455s). Push transport needed three attempts (one silent launcher death, one remote-side SSH disconnect — `send-pack: unexpected disconnect`); the third completed cleanly. No `--no-verify` was used at any point.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:40:46.843Z"
+    },
+    {
+      "id": 3729581276,
+      "body": "added 1 commit\n\n<ul><li>e4b55616 - chore(knowledge): refresh ship and tests anchors after round-1 fixes</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981318743&start_sha=f512ff2ceef662ac50c0b4e31bc3d79a58fffe1b)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:51:44.450Z"
+    },
+    {
+      "id": 3729587636,
+      "body": "changed the description",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T04:54:23.303Z"
+    },
+    {
+      "id": 3729598483,
+      "body": "marked this merge request as **ready**",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T05:00:44.896Z"
+    },
+    {
+      "id": 3729626633,
+      "body": "<!-- regenloop-ship:check:final -->\n## Merge check — SAFE_TO_MERGE\n\n**Why this is good to merge**\nBoth blocking findings are fixed and independently re-verified: F1's §9 fetch guard is present with an §9-specific refusal message and a pin scoped to §9's slice only (checker ran it: 4 passed; full module 151 passed / 327 subtests); F2's duplicate is deleted with the `[1.2.0]` section byte-identical to the `v1.2.0` tag and `[Unreleased]` appearing exactly once. Fix-commit integrity holds (`f512ff2` = exactly the two fixes + pin; the two later commits are card-anchor lines only). No fenced path touched anywhere in the diff. Target divergence mechanically zero at check time (`merge-base(e4b5561, 795a01a)` = `795a01a` = target head). All 19 discussions audited: every finding dispositioned, nothing silently dropped, no human threads unanswered (none exist). Gates green, CI success at exactly `e4b5561` including Secret-Detection; cards valid and staleness clean (checker re-ran both).\n\n**Why it might not be**\nF5 is the sharpest residual — §9's no-movement divergence baseline is recorded nowhere, so in a future run where the target advances during the CI wait the instructed check is unexecutable as written (moot here: divergence verified zero; fix before the next ship run). F6/S2's `AHEAD` counts since-fork rather than unabsorbed — over-verification only, cannot bite this MR. The final full-tier gate ran at `f512ff2`, not the exact head `e4b5561` (delta = 4 card lines; CI, card verification, and the checker's own full-module run all cover the head). All 14 note-severity concerns remain live in the code as recorded — each verified as fail-closed, hygiene, or over-verifying, none misclassified. The two blocking threads are answered but unresolved on GitLab — resolution is the human's, by design.\n\n**What would change this:** evidence that a note is load-bearing for a consumer run (specifically F5 producing an actual stale-target merge-check) → fix in a follow-up MR before the next ship run; a new human comment on !59 after this check; main advancing past `795a01a` before merge (re-derive the head at merge time — §5h's guard covers it).\n\n| Finding | Source | Verdict |\n|---|---|---|\n| F1 §9 unguarded fetch | loop | APPLIED (f512ff2; pin re-run by checker) |\n| F2 CHANGELOG duplicate in tagged 1.2.0 | loop | APPLIED (f512ff2; byte-verified vs tag) |\n| S1 (F1's security twin) | loop | APPLIED (with F1) |\n| F3, F4, F5, F6/S2, F7, F8, F9, F10, F11, F12, S3, S4 | loop | NOT_APPLIED — note dispositions, accurately recorded; each verified fail-closed / hygiene / over-verifying |\n| Fix + gate summaries | loop | APPLIED (all factual claims reproduced) |\n\n**Not checked:** no local secret-scanner gate (CI Secret-Detection at `e4b5561` is the only automated secret scan — success, verdict-only, job logs not inspected); no Python type-checker gate (ruff correctness-only is the backstop); ui/e2e gates not fired (no such files in diff); SKILL.md fence semantics are executor prose — pinned and `bash -n`'d but not executed end-to-end; pre-existing operator follow-ups (cockpit/scripts card budgets, 8 INDEX desync rows) inherited from main, out of scope.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T05:11:12.531Z"
+    },
+    {
+      "id": 3756216265,
+      "body": "/omnicheck",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T10:43:31.601Z"
+    },
+    {
+      "id": 3756324069,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe card line still reads \"Pinned by 8 new `test_regenloop_ship_surface.py` classes (~20 total).\" at line 26 — the suggested \"(31 total)\" replacement is not present.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:28:49.634Z"
+    },
+    {
+      "id": 3756324098,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe fence still ends `[ \"$AHEAD\" -gt 0 ] && echo \"target moved: ...\"` at line 935, so the happy path exits 1 with no message. The suggested `if ... then ... fi` form is absent.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:28:51.306Z"
+    },
+    {
+      "id": 3756324150,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`self.assertNotIn(\"before the content commits\", self.slice)` is still at line 1541 and would go red on a same-meaning rewording. It was neither dropped nor retargeted.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:28:52.814Z"
+    },
+    {
+      "id": 3756324182,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 934 still reads `AHEAD=\"$(git rev-list --count \"$BASE\"..\"$REMOTE/$TARGET\")\"` while the echo below captions it as commits \"not absorbed by this branch\". The suggested `HEAD..` form appears nowhere.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:28:54.467Z"
+    },
+    {
+      "id": 3756324208,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 836 still opens \"All three `exit 1` arms in that block\", but the surrounding block contains more exit-1 arms than the three card-specific stops named. The suggested \"including the shared resolver/record/base arms\" wording was not adopted.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:28:56.140Z"
+    },
+    {
+      "id": 3756324353,
+      "body": "This concern appears unaddressed in the latest changes.\n\nNo `SHIP_TARGET_TIP` and no `base_sha` update appears anywhere in the new §5h or §9 text, so the re-check still measures against a BASE no fence refreshes after an absorption. The over-verification loop to MAX_ROUNDS remains possible.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:28:57.783Z"
+    },
+    {
+      "id": 3756324447,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 726 still says \"mutate what it guards (the pre-round code at `HEAD~1` is the natural mutation)\", contradicting the section's own baseline comment at line 655. No `$ROUND_BASE` reference was introduced in that sentence.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:28:59.425Z"
+    },
+    {
+      "id": 3756324508,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 185 still says only \"its output logged to a file and polled\" — it names no location under `$MAIN_ROOT/regenloop/local/` and does not require the detached command to be spelled out in the visible Bash call. Both halves of the suggested fix are absent.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:29:01.174Z"
+    },
+    {
+      "id": 3756324572,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe card loop still word-splits (`for CARD in $CARD_CHANGES`, line 828) and the TARGET fallback still uses `grep -v -x \"$BRANCH\" | head -1` (lines 121, 335, 923, 1157). The `grep -v -F -x` and anchored `--list` suggestions were not applied, though these lines are new in this MR.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:29:02.793Z"
+    },
+    {
+      "id": 3756324602,
+      "body": "This concern appears unaddressed in the latest changes.\n\nItem 5 (lines 959-965) names §5g's whole-branch gate, §8's CI re-wait and §9's merge-check, but never §5g's card verification, and carries no \"against the original fork base for the knowledge trigger\" qualifier. The suggested sentence was not added.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T11:29:05.054Z"
+    },
+    {
+      "id": 3756324643,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 832 still runs `check-staleness \"$REPO_ROOT\"` unconditionally with `|| exit 1`, so a card stale at the fork point still forces this branch's fix round. No carve-out sentence was added to SKILL.md.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:29:06.996Z"
+    },
+    {
+      "id": 3756324669,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 24 of the skill still reads \"1. **Never merge, and never approve.**\" unscoped, and no diff hunk touches §1. Only the §11 rescoping — which the record itself already notes as done — appears in the diff.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:29:08.613Z"
+    },
+    {
+      "id": 3756324708,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 1172 still references \"the tip its check certified against\", but §5h prints nothing on the no-movement path and §9 has no `git rev-list --count HEAD..\"$REMOTE/$TARGET\"` recompute. The comparison's left-hand operand still does not exist.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T11:29:10.313Z"
+    },
+    {
+      "id": 3756325293,
+      "body": "## Follow-up Check — MR !59\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 6 |\n| ✗ Not Applied | 13 |\n| ? Needs Human | 1 |\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| `#2e486d0` | regenloop/knowledge/cards/regenloop-ship.md:26 | Card says \"~20 total\" test classes; the file has 31 |\n| `#2aa3aa8` | skills/regenloop-ship/SKILL.md:935 | §5h's last line returns rc 1 on the normal no-movement path |\n| `#e0f0d1f` | tests/test_regenloop_ship_surface.py:1541 | assertNotIn pins a wording, not a meaning |\n| `#bc1bfcb` | skills/regenloop-ship/SKILL.md:934 | AHEAD counts since the fork point, not unabsorbed commits |\n| `#464c80d` | skills/regenloop-ship/SKILL.md:836 | \"All three exit 1 arms\" leaves the block's other arms unrouted |\n| `#b3a7b1e` | skills/regenloop-ship/SKILL.md:934 | AHEAD stays positive forever post-absorption; nothing persists the absorbed tip |\n| `#70a16ca` | skills/regenloop-ship/SKILL.md:726 | §5f mutation prose names HEAD~1 instead of the $ROUND_BASE discipline |\n| `#c810738` | skills/regenloop-ship/SKILL.md:185 | Detached-ops idiom has no pinned log path and no visible command line |\n| `#a2d07b3` | skills/regenloop-ship/SKILL.md:828 | Card-loop word-splitting and the grep -x TARGET fallback are unchanged |\n| `#88234a1` | skills/regenloop-ship/SKILL.md:959 | Doctrine item 5's restart list omits §5g's card verification |\n| `#edfd199` | skills/regenloop-ship/SKILL.md:832 | Repo-wide check-staleness runs unconditionally on a branch-scoped trigger |\n| `#f1a3347` | general | Round-1 review record's unanchorable finding: §1 rule 1's \"Never merge\" is unscoped |\n| `#6399755` | skills/regenloop-ship/SKILL.md:1172 | §9's AHEAD=0 divergence baseline is named but produced nowhere |\n\nThe two blocking findings were re-verified as fixed in the current diff: the §9 target fetch carries the loud-stop guard and empty-`$TARGET_HEAD` stop (`skills/regenloop-ship/SKILL.md:1167-1169`), pinned by `TestShipMergeCheckInputs::test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head`, and the duplicated `[1.2.0]` CHANGELOG block is gone at head `e4b5561` — that deletion nets to zero against the diff base because the duplicate originated on the branch side, so it is verified in-repo rather than in the diff hunks.\n\nThe thirteen findings above remain outstanding in the code as written. Each was verified directly against head `e4b5561`; they are recorded here as follow-ups rather than as a barrier to this MR, since all thirteen were triaged non-blocking or note severity in round 1.\n\nOne thread (`#3f4051`, general) is a bare command invocation with no finding attached and is left for a human to disposition.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T11:29:37.797Z"
+    },
+    {
+      "id": 3756476089,
+      "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_1172_1193)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:27.232Z"
+    },
+    {
+      "id": 3756476092,
+      "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_934_942)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:27.446Z"
+    },
+    {
+      "id": 3756476094,
+      "body": "mentioned in commit 1c8334113cd05f976c6e77d677948bbe6e3978f6",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:27.593Z"
+    },
+    {
+      "id": 3756476095,
+      "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_935_942)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:27.642Z"
+    },
+    {
+      "id": 3756476103,
+      "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_934_942)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:28.304Z"
+    },
+    {
+      "id": 3756476105,
+      "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_185_187)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:28.509Z"
+    },
+    {
+      "id": 3756476113,
+      "body": "added 2 commits\n\n<ul><li>1c833411 - fix: resolve tier-1/tier-2 review findings from the !59 follow-up check</li><li>e6a4ffd0 - chore(knowledge): refresh ship, tests, and hooks anchors after the follow-up fixes</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:06:28.911Z"
+    },
+    {
+      "id": 3756476557,
+      "body": "Fixed in commit 1c83341: §9 recomputes divergence at dispatch — `AHEAD=\"$(git rev-list --count HEAD..\"$REMOTE/$TARGET\")\"` with an observable echo — so no carried baseline exists to be missing.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:06:54.625Z"
+    },
+    {
+      "id": 3756476638,
+      "body": "Fixed in commit 1c83341: `AHEAD` now counts `HEAD..\"$REMOTE/$TARGET\"` — exactly the unabsorbed set the caption names — instead of the fork-point `$BASE..` set. The prose records why `HEAD` is the operand, and an uncountable target is a loud stop rather than a silent zero.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:06:56.581Z"
+    },
+    {
+      "id": 3756476695,
+      "body": "Fixed in commit 1c83341: the fence's last line is an `if` form, so the no-movement path exits 0; an empty `AHEAD` (unresolvable target) is now a loud `exit 1` mirroring the §9 `TARGET_HEAD` guard.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:06:58.482Z"
+    },
+    {
+      "id": 3756476849,
+      "body": "Fixed in commit 1c83341: §5g now records the carve-out — a card already stale at the fork point, whose anchor this branch never touched, is a posted operator note, not this branch's fix round.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:07:00.285Z"
+    },
+    {
+      "id": 3756476946,
+      "body": "Fixed in commit 1c83341: resolved by removal rather than persistence — the `HEAD..` measure is truthful after every absorption, so no absorbed tip needs to survive §5h in a variable or file; §9 recomputes the same measure at dispatch.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:07:02.083Z"
+    },
+    {
+      "id": 3756476982,
+      "body": "Fixed in commit 1c83341: the detached command must be spelled out in full in the visible Bash call (so the PreToolUse merge-guard hook screens the actual command line), and the log is pinned to $MAIN_ROOT/regenloop/local/ — created if missing, gitignored, outside §5e's `git add -A` reach.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:07:03.909Z"
+    },
+    {
+      "id": 3756477019,
+      "body": "Fixed in commit 1c83341: §1 rule 1 is scoped — \"Never merge the MR, and never approve it\" — with §5h's target absorption named as a different act; consistent with §11 and with hooks/mr_merge_guard.py (whose docstring citation was also re-quoted).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-29T13:07:05.769Z"
+    },
+    {
+      "id": 3756500827,
+      "body": "enabled an automatic merge when all merge checks for e6a4ffd09f807e80e0b8d391d5de08ff3ab8c2bd pass",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:20:11.869Z"
+    },
+    {
+      "id": 3756501094,
+      "body": "canceled the automatic merge",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:20:23.190Z"
+    },
+    {
+      "id": 3756582207,
+      "body": "mentioned in commit 6b007563c8d15ee4e11b558f2a414d45c53e5381",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T14:16:45.937Z"
+    },
+    {
+      "id": 3756582243,
+      "body": "added 37 commits\n\n<ul><li>e6a4ffd0...c90a419f - 36 commits from branch <code>main</code></li><li>6b007563 - merge: origin/main into loop/implement-regenloop-ship-improvements (resolve MR !59 conflicts)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992150108&start_sha=e6a4ffd09f807e80e0b8d391d5de08ff3ab8c2bd)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T14:16:47.905Z"
+    },
+    {
+      "id": 3756706523,
+      "body": "mentioned in commit a189f1b8d000270a62c746d25b6397cd7096ad95",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T15:32:38.059Z"
+    },
+    {
+      "id": 3770297549,
+      "body": "mentioned in commit e10b2ae42782b516f15c5ec99225430ff14a5293",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-09-01T15:16:50.078Z"
+    },
+    {
+      "id": 3770299486,
+      "body": "mentioned in merge request !63",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-09-01T15:17:12.958Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "02003f8c74076f13fbfc59a8650b6655022990ab",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453613,
+          "body": "<!-- regenloop-ship:review:round-1:f-2f9ac010c25f -->\n**blocking** — §9's target fetch is unguarded, so a failed fetch silently yields a stale head the prose four lines later certifies as \"re-derived by the fetch above\". The identical §5h call carries a loud-stop guard and a pin; §9's twin has neither.\n\n**Evidence:** Transient fetch failure (token expiry, network flap, renamed target) → `git fetch` exits nonzero → `rev-parse` resolves the stale remote-tracking tip → the merge-check is briefed with a stale head labeled \"the target's current head\" and can return SAFE_TO_MERGE for a diff that changed. An empty `TARGET_HEAD` also rides unguarded.\n\n**Suggested fix:** Mirror §5h's guard in §9 (`git fetch ... || { echo \"could not fetch $REMOTE/$TARGET — refusing to brief the merge-check on a guessed head\"; exit 1; }`), add `[ -n \"$TARGET_HEAD\" ] ||` loud stop, and pin the guarded form in TestShipMergeCheckInputs.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:42.704Z"
+        },
+        {
+          "id": 3729554427,
+          "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22#8afb403e15d0fe587da6c0f666334b900aa1d7fc_1167_1167)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:39:08.251Z"
+        },
+        {
+          "id": 3729556742,
+          "body": "<!-- regenloop-ship:fix:round-1:reply:02003f8c74076f13fbfc59a8650b6655022990ab -->\n**Fixed** — `f512ff2` (review fixes, round 1).\n\n`skills/regenloop-ship/SKILL.md:1167-1169`: the bare `git fetch \"$REMOTE\" \"$TARGET\"` now carries the §5h-mirrored guard — `|| { echo \"could not fetch $REMOTE/$TARGET — refusing to hand a stale target head to the merge-check\"; exit 1; }` — plus the empty-head stop `[ -n \"$TARGET_HEAD\" ] || { echo \"could not resolve $REMOTE/$TARGET after the fetch — no target head to hand the merge-check\"; exit 1; }`. The refusal message deliberately differs from §5h's so each pin binds its own fence.\n\n`tests/test_regenloop_ship_surface.py:1602-1609`: pin added — `TestShipMergeCheckInputs::test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head` asserts the guarded fetch form, the refusal message, and the empty-head stop.\n\nMutation-proof (this round's own §5f precondition, applied to its new test): red against the unguarded fence (`AssertionError: 'git fetch \"$REMOTE\" \"$TARGET\" ||' not found`) → guard stripped again post-fix → red → fence restored byte-verified (sha256 equal pre-mutation and post-restore) → green. Recorded: `mutation-proven: test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head — fails when the §9 fetch guard is removed`.\n\nTriage verdict was VALID @95; §5h's twin (line 933), the §2/§5 `$BRANCH` fetches, and the §9 prose (\"re-derived by the fetch above\" — now true) untouched.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T04:39:57.297Z"
+        }
+      ]
+    },
+    {
+      "id": "20df9f143adb032250ae3cfdc72e388d34dedf62",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453631,
+          "body": "<!-- regenloop-ship:review:round-1:f-5f218de84952 -->\n**blocking** — The [Unreleased] entry (lines 10-23) is duplicated verbatim inside the released [1.2.0] — 2026-08-25 section (lines 104-117). Introduced by merge commit ad019b5. v1.2.0 is tagged and contains origin/main; main's CHANGELOG has no [Unreleased] (consumed by the release).\n\n**Evidence:** Merging publishes these changes in the release notes of an already-tagged version that does not contain them — false release history — and the next release sweep re-emits the same bullets. Violates the MR's own §5h doctrine item 3 (the target's released resolution wins).\n\n**Suggested fix:** Delete lines 104-117 (keep only the [Unreleased] copy).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:43.743Z"
+        },
+        {
+          "id": 3729554436,
+          "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22#ab09011fa121d0a2bb9fa4ca76094f2482b902b7_104_104)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:39:08.428Z"
+        },
+        {
+          "id": 3729557203,
+          "body": "<!-- regenloop-ship:fix:round-1:reply:20df9f143adb032250ae3cfdc72e388d34dedf62 -->\n**Fixed** — `f512ff2` (review fixes, round 1).\n\n`CHANGELOG.md:104-117` deleted — exactly the 14-line verbatim duplicate of the `[Unreleased]` block that merge commit `ad019b5` had manufactured inside the tagged `[1.2.0] — 2026-08-25` section. The `[Unreleased]` copy (lines 10-23) is retained verbatim; the deletion was guarded by content assertions (line 104 starts the bullet, 117 ends it, 118 blank, 119 `### Fixed`) and a pre-deletion byte-equality check that the `[Unreleased]` copy matched the removed block. The `[1.2.0]` `### Changed` list now ends at the regression-engine bullet.\n\nNet effect: the published 1.2.0 release notes no longer gain entries post-tag, and the next release sweep emits the entry exactly once. Triage verdict was VALID @97 (tag containment verified: `v1.2.0` dereferences to `795a01a`; the tagged changelog contains no copy of this entry).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T04:40:10.275Z"
+        }
+      ]
+    },
+    {
+      "id": "70a16cafe898713e37c31472efa5e9ea3942801b",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453661,
+          "body": "<!-- regenloop-ship:review:round-1:f-e81e8ec43249 -->\n**non-blocking** — §5f's mutation-proof prose names \"the pre-round code at HEAD~1\" as the natural mutation, contradicting the section's own baseline discipline (the fence comment records HEAD~1 broke on multi-commit rounds; the round base is $ROUND_BASE).\n\n**Evidence:** On a two-commit round, mutating HEAD~1 mutates mid-round code, not the pre-round state — at the exact step that certifies the round green.\n\n**Suggested fix:** Reference $ROUND_BASE (`git show \"$ROUND_BASE\":<path>`).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:45.386Z"
+        },
+        {
+          "id": 3756324447,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 726 still says \"mutate what it guards (the pre-round code at `HEAD~1` is the natural mutation)\", contradicting the section's own baseline comment at line 655. No `$ROUND_BASE` reference was introduced in that sentence.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:28:59.425Z"
+        }
+      ]
+    },
+    {
+      "id": "63997552e52038b522ecfd7c80df38ad9aca4c60",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453682,
+          "body": "<!-- regenloop-ship:review:round-1:f-c44ba1d74341 -->\n**non-blocking** — §9's divergence rule needs \"the tip §5h's check certified against\" for the AHEAD=0 case, but §5h never records that tip: it prints nothing on no-movement, shell state does not survive, and §9's fetch overwrites the ref the value lived in. The comparison's left-hand operand exists nowhere.\n\n**Evidence:** AHEAD=0 at §5h, target advances during the CI wait, and at §9 the instructed divergence check cannot be executed as written — proceed-unflagged or improvised.\n\n**Suggested fix:** Either §5h prints the certified tip on AHEAD=0 (an orchestrator-carried fact), or §9 recomputes divergence directly: `git rev-list --count HEAD..\"$REMOTE/$TARGET\"` > 0 means unabsorbed movement, no carried baseline needed.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:46.549Z"
+        },
+        {
+          "id": 3756324708,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 1172 still references \"the tip its check certified against\", but §5h prints nothing on the no-movement path and §9 has no `git rev-list --count HEAD..\"$REMOTE/$TARGET\"` recompute. The comparison's left-hand operand still does not exist.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:29:10.313Z"
+        },
+        {
+          "id": 3756476089,
+          "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_1172_1193)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:27.232Z"
+        },
+        {
+          "id": 3756476557,
+          "body": "Fixed in commit 1c83341: §9 recomputes divergence at dispatch — `AHEAD=\"$(git rev-list --count HEAD..\"$REMOTE/$TARGET\")\"` with an observable echo — so no carried baseline exists to be missing.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:06:54.625Z"
+        }
+      ]
+    },
+    {
+      "id": "bc1bfcb4d59cc990d5a3aef29fa62ec259305d32",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453698,
+          "body": "<!-- regenloop-ship:review:round-1:f-0e5a12380a17 -->\n**non-blocking** — `AHEAD` counts `$BASE..$REMOTE/$TARGET` (since the fork point) but the echo and prose interpret it as \"not absorbed by this branch\" — that set is `HEAD..`. They diverge once the branch has absorbed anything.\n\n**Evidence:** Re-running ship on a branch that previously absorbed the target reports movement when everything is absorbed, runs a no-op merge, then doctrine item 5 mandates a full verification restart plus a MAX_ROUNDS charge on identical state — to exhaustion.\n\n**Suggested fix:** `AHEAD=\"$(git rev-list --count HEAD..\"$REMOTE/$TARGET\")\"` (matches the echo's caption verbatim).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:47.506Z"
+        },
+        {
+          "id": 3756324182,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 934 still reads `AHEAD=\"$(git rev-list --count \"$BASE\"..\"$REMOTE/$TARGET\")\"` while the echo below captions it as commits \"not absorbed by this branch\". The suggested `HEAD..` form appears nowhere.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:28:54.467Z"
+        },
+        {
+          "id": 3756476092,
+          "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_934_942)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:27.446Z"
+        },
+        {
+          "id": 3756476638,
+          "body": "Fixed in commit 1c83341: `AHEAD` now counts `HEAD..\"$REMOTE/$TARGET\"` — exactly the unabsorbed set the caption names — instead of the fork-point `$BASE..` set. The prose records why `HEAD` is the operand, and an uncountable target is a loud stop rather than a silent zero.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:06:56.581Z"
+        }
+      ]
+    },
+    {
+      "id": "2aa3aa8717018f48561a78cfcbe84d743dc023ef",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453721,
+          "body": "<!-- regenloop-ship:review:round-1:f-9676a707b445 -->\n**non-blocking** — The §5h fence's last line `[ \"$AHEAD\" -gt 0 ] && echo ...` returns rc 1 on the normal no-movement path. Everywhere else rc 1 is a deliberate hard stop; here the happy path exits with the failure code and no message.\n\n**Evidence:** An executor checking the block's exit status reads \"Exit code 1\" with no reason on the most common outcome.\n\n**Suggested fix:** `if [ \"$AHEAD\" -gt 0 ]; then echo ...; fi`.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:48.371Z"
+        },
+        {
+          "id": 3756324098,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe fence still ends `[ \"$AHEAD\" -gt 0 ] && echo \"target moved: ...\"` at line 935, so the happy path exits 1 with no message. The suggested `if ... then ... fi` form is absent.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:28:51.306Z"
+        },
+        {
+          "id": 3756476095,
+          "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_935_942)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:27.642Z"
+        },
+        {
+          "id": 3756476695,
+          "body": "Fixed in commit 1c83341: the fence's last line is an `if` form, so the no-movement path exits 0; an empty `AHEAD` (unresolvable target) is now a loud `exit 1` mirroring the §9 `TARGET_HEAD` guard.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:06:58.482Z"
+        }
+      ]
+    },
+    {
+      "id": "464c80d399eca4e1e39cb85bc0cc69e3d0ee8886",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453743,
+          "body": "<!-- regenloop-ship:review:round-1:f-53ba74e1415c -->\n**note** — \"All three exit 1 arms in that block\" routes only the card-specific stops; the block contains ~8 exit-1 arms (resolver/record/base) the sentence leaves unrouted, so the pinned claim \".worktrees/ship-review-$IID is never orphaned\" is falsified by the block's own earlier arms.\n\n**Suggested fix:** \"All `exit 1` arms in that block — including the shared resolver/record/base arms —\".",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:49.342Z"
+        },
+        {
+          "id": 3756324208,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 836 still opens \"All three `exit 1` arms in that block\", but the surrounding block contains more exit-1 arms than the three card-specific stops named. The suggested \"including the shared resolver/record/base arms\" wording was not adopted.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:28:56.140Z"
+        }
+      ]
+    },
+    {
+      "id": "edfd199c0f7ea2e8b485614920518c3fe57261c6",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453761,
+          "body": "<!-- regenloop-ship:review:round-1:f-5a25876ccb18 -->\n**note** — `check-staleness` is repo-wide while the trigger is branch-scoped: a card already stale at the fork point fails here, forcing this branch's fix vehicle to repair a card it never touched.\n\n**Suggested fix:** One sentence: a stale card whose anchor this branch did not touch is a posted operator note, not this branch's fix round.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:50.310Z"
+        },
+        {
+          "id": 3756324643,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 832 still runs `check-staleness \"$REPO_ROOT\"` unconditionally with `|| exit 1`, so a card stale at the fork point still forces this branch's fix round. No carve-out sentence was added to SKILL.md.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:29:06.996Z"
+        },
+        {
+          "id": 3756476849,
+          "body": "Fixed in commit 1c83341: §5g now records the carve-out — a card already stale at the fork point, whose anchor this branch never touched, is a posted operator note, not this branch's fix round.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:07:00.285Z"
+        }
+      ]
+    },
+    {
+      "id": "2e486d05245c3b93766c8f744caa4c8d3dd7639b",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453788,
+          "body": "<!-- regenloop-ship:review:round-1:f-d1275ddbd067 -->\n**note** — \"Pinned by 8 new classes (~20 total)\" — the file has 31 classes (23 pre-existing on origin/main + 8 new). \"~20\" is wrong on the natural reading.\n\n**Suggested fix:** \"(31 total)\".",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:51.290Z"
+        },
+        {
+          "id": 3756324069,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe card line still reads \"Pinned by 8 new `test_regenloop_ship_surface.py` classes (~20 total).\" at line 26 — the suggested \"(31 total)\" replacement is not present.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:28:49.634Z"
+        }
+      ]
+    },
+    {
+      "id": "e0f0d1f14c99b2a050f177a8420cd1faa2cf91ca",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453816,
+          "body": "<!-- regenloop-ship:review:round-1:f-5a6acbe0edc6 -->\n**note** — `assertNotIn(\"before the content commits\", ...)` turns red on a same-meaning, rule-affirming rewording. The NotIn asserts the absence of a wording, not of a meaning.\n\n**Suggested fix:** Drop the assertNotIn or target a phrase that cannot occur in a correct statement.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:52.164Z"
+        },
+        {
+          "id": 3756324150,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`self.assertNotIn(\"before the content commits\", self.slice)` is still at line 1541 and would go red on a same-meaning rewording. It was neither dropped nor retargeted.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:28:52.814Z"
+        }
+      ]
+    },
+    {
+      "id": "88234a116efbb2fe95cc32d27069fc63adb347a1",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453839,
+          "body": "<!-- regenloop-ship:review:round-1:f-786d5ba18206 -->\n**note** — Doctrine item 5's restart list omits §5g's card verification, and with the new BASE = absorbed tip, the knowledge-diff trigger excludes target-side card changes the merge just absorbed.\n\n**Suggested fix:** Add \"§5g's card verification re-runs (against the original fork base for the knowledge trigger)\" to item 5.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:53.161Z"
+        },
+        {
+          "id": 3756324602,
+          "body": "This concern appears unaddressed in the latest changes.\n\nItem 5 (lines 959-965) names §5g's whole-branch gate, §8's CI re-wait and §9's merge-check, but never §5g's card verification, and carries no \"against the original fork base for the knowledge trigger\" qualifier. The suggested sentence was not added.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:29:05.054Z"
+        }
+      ]
+    },
+    {
+      "id": "a65585aec77abf1bbcc58e7e464325055329c3b5",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453863,
+          "body": "<!-- regenloop-ship:review:round-1:f-a096c578440e -->\n**non-blocking (security)** — Same site as F1: the §9 target-head fetch is unguarded; a stale remote-tracking ref can be presented to the merge-check as freshly derived. The §5h twin carries the guard and its pin.\n\n**Suggested fix:** Mirror §5h's guard in §9 and pin it in TestShipMergeCheckInputs.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:54.058Z"
+        },
+        {
+          "id": 3729554465,
+          "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22#8afb403e15d0fe587da6c0f666334b900aa1d7fc_1167_1167)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:39:08.978Z"
+        }
+      ]
+    },
+    {
+      "id": "b3a7b1ecd9e91db96eb114295b230577674629e6",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453903,
+          "body": "<!-- regenloop-ship:review:round-1:f-804c6fe50f15 -->\n**non-blocking (security)** — The movement detector measures AHEAD against a BASE no fence updates after an absorption, so AHEAD > 0 is permanent post-absorption and the doctrine re-enters until MAX_ROUNDS exhaustion (over-verification, never under-verification). Same root as F6.\n\n**Suggested fix:** Persist the absorbed tip (record `base_sha` update or SHIP_TARGET_TIP) so the re-check measures movement since the last absorption.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:54.981Z"
+        },
+        {
+          "id": 3756324353,
+          "body": "This concern appears unaddressed in the latest changes.\n\nNo `SHIP_TARGET_TIP` and no `base_sha` update appears anywhere in the new §5h or §9 text, so the re-check still measures against a BASE no fence refreshes after an absorption. The over-verification loop to MAX_ROUNDS remains possible.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:28:57.783Z"
+        },
+        {
+          "id": 3756476103,
+          "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_934_942)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:28.304Z"
+        },
+        {
+          "id": 3756476946,
+          "body": "Fixed in commit 1c83341: resolved by removal rather than persistence — the `HEAD..` measure is truthful after every absorption, so no absorbed tip needs to survive §5h in a variable or file; §9 recomputes the same measure at dispatch.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:07:02.083Z"
+        }
+      ]
+    },
+    {
+      "id": "c810738dd44fa5be9051e411499ef5527442870e",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729453981,
+          "body": "<!-- regenloop-ship:review:round-1:f-9ae34a77f6fd -->\n**non-blocking (security)** — The detached-ops idiom (Popen from inside a script) is invisible to the PreToolUse merge-guard hook — the sole mechanical rule-1 enforcement — and leaves the output log path unspecified (a log under $REPO_ROOT gets swept into a round commit by §5e's git add -A).\n\n**Suggested fix:** Pin the idiom's mechanics: logs under $MAIN_ROOT/regenloop/local/ (gitignored, outside add -A), and spell the detached command out in the visible Bash call so hooks screen the actual command line.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:55.973Z"
+        },
+        {
+          "id": 3756324508,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 185 still says only \"its output logged to a file and polled\" — it names no location under `$MAIN_ROOT/regenloop/local/` and does not require the detached command to be spelled out in the visible Bash call. Both halves of the suggested fix are absent.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:29:01.174Z"
+        },
+        {
+          "id": 3756476105,
+          "body": "changed this line in [version 4 of the diff](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435#8afb403e15d0fe587da6c0f666334b900aa1d7fc_185_187)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:28.509Z"
+        },
+        {
+          "id": 3756476982,
+          "body": "Fixed in commit 1c83341: the detached command must be spelled out in full in the visible Bash call (so the PreToolUse merge-guard hook screens the actual command line), and the log is pinned to $MAIN_ROOT/regenloop/local/ — created if missing, gitignored, outside §5e's `git add -A` reach.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:07:03.909Z"
+        }
+      ]
+    },
+    {
+      "id": "a2d07b3f2fd425ab1c3d899168fa3289f7544105",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729454020,
+          "body": "<!-- regenloop-ship:review:round-1:f-ab1eb6421908 -->\n**note (security)** — Three smaller observations, all fail-closed: word-splitting in the card loop (paths asserted space-free, not enforced); INIT resolves in-repo so card verification is executed by the code under review (mirrors the documented gate_runner decision); the standalone TARGET fallback uses `grep -x` (BRE) and `head -1` (arbitrary pick).\n\n**Suggested fix:** None required for merge; `grep -v -F -x` and an anchored --list selection if touched.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-25T03:53:56.963Z"
+        },
+        {
+          "id": 3756324572,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe card loop still word-splits (`for CARD in $CARD_CHANGES`, line 828) and the TARGET fallback still uses `grep -v -x \"$BRANCH\" | head -1` (lines 121, 335, 923, 1157). The `grep -v -F -x` and anchored `--list` suggestions were not applied, though these lines are new in this MR.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T11:29:02.793Z"
+        }
+      ]
+    },
+    {
+      "id": "f1a334735d186f70244ad2f9d89e266958ae6857",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3729454056,
+          "body": "<!-- regenloop-ship:review:round-1 -->\n### Review round 1\n\n**2 blocking, 8 non-blocking, 6 notes** across 2 reviewers (mr-code-reviewer, mr-security-reviewer). Files read beyond the diff: full post-image SKILL.md (1270 lines), all 31 test classes, scripts/regenloop_init.py, hooks/mr_merge_guard.py, resolve_plugin_path.sh, gates.toml, spec + plan docs, all 29 cards hash-checked. Security: secrets sweep clean; prompt-injection pass clean; posture — strengthens pre-promotion checks more than it widens attack surface. The two blocking findings are consistency gaps in the new §9 movement machinery and a merge-introduced CHANGELOG duplication.\n\n### Could not be anchored to a diff line\n\nGitLab rejects an inline thread whose line is not part of this MR's diff — usually because the finding concerns a line the MR did not change. Reported here instead so nothing is lost:\n\n- **`skills/regenloop-ship/SKILL.md:24`** — **non-blocking** — §1 rule 1 reads \"Never merge, and never approve\" (unscoped) while §5h step 1 now commands merging the target into the branch. §11 was rescoped to \"Merging the MR\" for exactly this; the top invariant was left contradicting a step the skill instructs.\n\n**Evidence:** A literal executor can cite rule 1 and refuse the absorption, or learn rule 1's blanket phrasing admits unstated exceptions.\n\n**Suggested fix:** Scope rule 1's first sentence (\"Never merge the MR, and never approve\") or append the parenthetical clarifying §5h's reversible target back-merge is not that action.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-25T03:53:57.782Z"
+        },
+        {
+          "id": 3756324669,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 24 of the skill still reads \"1. **Never merge, and never approve.**\" unscoped, and no diff hunk touches §1. Only the §11 rescoping — which the record itself already notes as done — appears in the diff.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T11:29:08.613Z"
+        },
+        {
+          "id": 3756477019,
+          "body": "Fixed in commit 1c83341: §1 rule 1 is scoped — \"Never merge the MR, and never approve it\" — with §5h's target absorption named as a different act; consistent with §11 and with hooks/mr_merge_guard.py (whose docstring citation was also re-quoted).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-29T13:07:05.769Z"
+        }
+      ]
+    },
+    {
+      "id": "23ddf68727a07abff8aa613ef8b1f05bdd544c30",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729554499,
+          "body": "added 1 commit\n\n<ul><li>f512ff2c - review fixes (round 1)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981308052&start_sha=7122702ad29e91e626304c6293c1bf6ef661bc22)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:39:09.329Z"
+        }
+      ]
+    },
+    {
+      "id": "4fb18b89d644f185fb8a5d09c4a6163069938729",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729557966,
+          "body": "<!-- regenloop-ship:fix:round-1 -->\n### Round 1 fix summary — commit `f512ff2`\n\n- `skills/regenloop-ship/SKILL.md:1167-1169` — §9's fetch guarded (§5h-mirrored loud stop on fetch failure + empty-`$TARGET_HEAD` stop); refusal message distinct from §5h's so each pin binds its own fence.\n- `tests/test_regenloop_ship_surface.py:1602-1609` — `TestShipMergeCheckInputs::test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head` added; asserts the guarded form, the refusal message, the empty-head stop.\n- `CHANGELOG.md:104-117` — deleted: the 14-line verbatim duplicate of `[Unreleased]` that merge `ad019b5` had placed inside the tagged `[1.2.0]` section; `[Unreleased]` copy retained verbatim.\n\n`mutation-proven: test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head — fails when the §9 fetch guard is removed` (red against the unguarded fence → guard stripped post-fix → red → restored byte-verified, sha256 equal → green).\n\nRe-gate (§5f): fast tier, base `7122702` → **green** — python-test pass, validate pass, lint pass; 3 gates executed; coverage clean; no meta-config change. Full surface file 151 passed / 327 subtests. Pre-push gates re-ran green (455s) before the push landed (`7122702..f512ff2`).\n\nBoth round-1 blocking findings are dispositioned **Fixed** on their threads. The 8 non-blocking findings and 6 notes ride as notes per rule 6 — listed in the MR description for the human's judgement.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:40:29.810Z"
+        }
+      ]
+    },
+    {
+      "id": "14c4056d38d39a63361803687032ae9ffb1f080b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729558509,
+          "body": "<!-- regenloop-ship:gates:round-1 -->\n### Gate — round 1 re-gate (base `7122702`, fast tier)\n\n**verdict: green** at head `f512ff2` — python-test pass, validate pass, lint pass; 3 gates executed (`--require-evidence` satisfied), coverage: no unmatched, no fenced files; `meta_config_changed` empty.\n\nMutation-proof for the round's newly added test: `mutation-proven: test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head — fails when the §9 fetch guard is removed`.\n\nPre-push gates re-ran green at the same head before the push (wall 455s). Push transport needed three attempts (one silent launcher death, one remote-side SSH disconnect — `send-pack: unexpected disconnect`); the third completed cleanly. No `--no-verify` was used at any point.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:40:46.843Z"
+        }
+      ]
+    },
+    {
+      "id": "06f9ac7f57f962dde21485709bfc6ed0d4df5d5a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729581276,
+          "body": "added 1 commit\n\n<ul><li>e4b55616 - chore(knowledge): refresh ship and tests anchors after round-1 fixes</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1981318743&start_sha=f512ff2ceef662ac50c0b4e31bc3d79a58fffe1b)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:51:44.450Z"
+        }
+      ]
+    },
+    {
+      "id": "65cad8a0eec9eba7d3b0ce07c46f0c31f578a6d5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729587636,
+          "body": "changed the description",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T04:54:23.303Z"
+        }
+      ]
+    },
+    {
+      "id": "b13a963f683a200e4670216734dba697d8d2bbe8",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729598483,
+          "body": "marked this merge request as **ready**",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T05:00:44.896Z"
+        }
+      ]
+    },
+    {
+      "id": "8665b0292c30e5537c16bbfc54b9a2335733caea",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3729626633,
+          "body": "<!-- regenloop-ship:check:final -->\n## Merge check — SAFE_TO_MERGE\n\n**Why this is good to merge**\nBoth blocking findings are fixed and independently re-verified: F1's §9 fetch guard is present with an §9-specific refusal message and a pin scoped to §9's slice only (checker ran it: 4 passed; full module 151 passed / 327 subtests); F2's duplicate is deleted with the `[1.2.0]` section byte-identical to the `v1.2.0` tag and `[Unreleased]` appearing exactly once. Fix-commit integrity holds (`f512ff2` = exactly the two fixes + pin; the two later commits are card-anchor lines only). No fenced path touched anywhere in the diff. Target divergence mechanically zero at check time (`merge-base(e4b5561, 795a01a)` = `795a01a` = target head). All 19 discussions audited: every finding dispositioned, nothing silently dropped, no human threads unanswered (none exist). Gates green, CI success at exactly `e4b5561` including Secret-Detection; cards valid and staleness clean (checker re-ran both).\n\n**Why it might not be**\nF5 is the sharpest residual — §9's no-movement divergence baseline is recorded nowhere, so in a future run where the target advances during the CI wait the instructed check is unexecutable as written (moot here: divergence verified zero; fix before the next ship run). F6/S2's `AHEAD` counts since-fork rather than unabsorbed — over-verification only, cannot bite this MR. The final full-tier gate ran at `f512ff2`, not the exact head `e4b5561` (delta = 4 card lines; CI, card verification, and the checker's own full-module run all cover the head). All 14 note-severity concerns remain live in the code as recorded — each verified as fail-closed, hygiene, or over-verifying, none misclassified. The two blocking threads are answered but unresolved on GitLab — resolution is the human's, by design.\n\n**What would change this:** evidence that a note is load-bearing for a consumer run (specifically F5 producing an actual stale-target merge-check) → fix in a follow-up MR before the next ship run; a new human comment on !59 after this check; main advancing past `795a01a` before merge (re-derive the head at merge time — §5h's guard covers it).\n\n| Finding | Source | Verdict |\n|---|---|---|\n| F1 §9 unguarded fetch | loop | APPLIED (f512ff2; pin re-run by checker) |\n| F2 CHANGELOG duplicate in tagged 1.2.0 | loop | APPLIED (f512ff2; byte-verified vs tag) |\n| S1 (F1's security twin) | loop | APPLIED (with F1) |\n| F3, F4, F5, F6/S2, F7, F8, F9, F10, F11, F12, S3, S4 | loop | NOT_APPLIED — note dispositions, accurately recorded; each verified fail-closed / hygiene / over-verifying |\n| Fix + gate summaries | loop | APPLIED (all factual claims reproduced) |\n\n**Not checked:** no local secret-scanner gate (CI Secret-Detection at `e4b5561` is the only automated secret scan — success, verdict-only, job logs not inspected); no Python type-checker gate (ruff correctness-only is the backstop); ui/e2e gates not fired (no such files in diff); SKILL.md fence semantics are executor prose — pinned and `bash -n`'d but not executed end-to-end; pre-existing operator follow-ups (cockpit/scripts card budgets, 8 INDEX desync rows) inherited from main, out of scope.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T05:11:12.531Z"
+        }
+      ]
+    },
+    {
+      "id": "3f405182bbf26fbce223ba3d13c41424255145ca",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756216265,
+          "body": "/omnicheck",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T10:43:31.601Z"
+        }
+      ]
+    },
+    {
+      "id": "9d19a9482b7603250f05f3c281c929d99d974872",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756325293,
+          "body": "## Follow-up Check — MR !59\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 6 |\n| ✗ Not Applied | 13 |\n| ? Needs Human | 1 |\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| `#2e486d0` | regenloop/knowledge/cards/regenloop-ship.md:26 | Card says \"~20 total\" test classes; the file has 31 |\n| `#2aa3aa8` | skills/regenloop-ship/SKILL.md:935 | §5h's last line returns rc 1 on the normal no-movement path |\n| `#e0f0d1f` | tests/test_regenloop_ship_surface.py:1541 | assertNotIn pins a wording, not a meaning |\n| `#bc1bfcb` | skills/regenloop-ship/SKILL.md:934 | AHEAD counts since the fork point, not unabsorbed commits |\n| `#464c80d` | skills/regenloop-ship/SKILL.md:836 | \"All three exit 1 arms\" leaves the block's other arms unrouted |\n| `#b3a7b1e` | skills/regenloop-ship/SKILL.md:934 | AHEAD stays positive forever post-absorption; nothing persists the absorbed tip |\n| `#70a16ca` | skills/regenloop-ship/SKILL.md:726 | §5f mutation prose names HEAD~1 instead of the $ROUND_BASE discipline |\n| `#c810738` | skills/regenloop-ship/SKILL.md:185 | Detached-ops idiom has no pinned log path and no visible command line |\n| `#a2d07b3` | skills/regenloop-ship/SKILL.md:828 | Card-loop word-splitting and the grep -x TARGET fallback are unchanged |\n| `#88234a1` | skills/regenloop-ship/SKILL.md:959 | Doctrine item 5's restart list omits §5g's card verification |\n| `#edfd199` | skills/regenloop-ship/SKILL.md:832 | Repo-wide check-staleness runs unconditionally on a branch-scoped trigger |\n| `#f1a3347` | general | Round-1 review record's unanchorable finding: §1 rule 1's \"Never merge\" is unscoped |\n| `#6399755` | skills/regenloop-ship/SKILL.md:1172 | §9's AHEAD=0 divergence baseline is named but produced nowhere |\n\nThe two blocking findings were re-verified as fixed in the current diff: the §9 target fetch carries the loud-stop guard and empty-`$TARGET_HEAD` stop (`skills/regenloop-ship/SKILL.md:1167-1169`), pinned by `TestShipMergeCheckInputs::test_a_failed_fetch_is_a_loud_stop_not_a_stale_target_head`, and the duplicated `[1.2.0]` CHANGELOG block is gone at head `e4b5561` — that deletion nets to zero against the diff base because the duplicate originated on the branch side, so it is verified in-repo rather than in the diff hunks.\n\nThe thirteen findings above remain outstanding in the code as written. Each was verified directly against head `e4b5561`; they are recorded here as follow-ups rather than as a barrier to this MR, since all thirteen were triaged non-blocking or note severity in round 1.\n\nOne thread (`#3f4051`, general) is a bare command invocation with no finding attached and is left for a human to disposition.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T11:29:37.797Z"
+        }
+      ]
+    },
+    {
+      "id": "0ee1b9f3376a42a6d2380596a7d441b591082aee",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756476094,
+          "body": "mentioned in commit 1c8334113cd05f976c6e77d677948bbe6e3978f6",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:27.593Z"
+        }
+      ]
+    },
+    {
+      "id": "70653646992cb6564434ae072446b321c6e51444",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756476113,
+          "body": "added 2 commits\n\n<ul><li>1c833411 - fix: resolve tier-1/tier-2 review findings from the !59 follow-up check</li><li>e6a4ffd0 - chore(knowledge): refresh ship, tests, and hooks anchors after the follow-up fixes</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992120170&start_sha=e4b55616f01c17c5fc887d926ecdf8c85318b435)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:06:28.911Z"
+        }
+      ]
+    },
+    {
+      "id": "13c440348cb41e4d8f11173962cfa6127254952a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756500827,
+          "body": "enabled an automatic merge when all merge checks for e6a4ffd09f807e80e0b8d391d5de08ff3ab8c2bd pass",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:20:11.869Z"
+        }
+      ]
+    },
+    {
+      "id": "632a56f4c81445ed9b4d3eb5c074a2666ce1881b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756501094,
+          "body": "canceled the automatic merge",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:20:23.190Z"
+        }
+      ]
+    },
+    {
+      "id": "b09923f5a77fa31d955cb9d0cf979624f0e48f0b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756582207,
+          "body": "mentioned in commit 6b007563c8d15ee4e11b558f2a414d45c53e5381",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T14:16:45.937Z"
+        }
+      ]
+    },
+    {
+      "id": "1a1f2a4ed14a0667296d2dfef164713266bebc04",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756582243,
+          "body": "added 37 commits\n\n<ul><li>e6a4ffd0...c90a419f - 36 commits from branch <code>main</code></li><li>6b007563 - merge: origin/main into loop/implement-regenloop-ship-improvements (resolve MR !59 conflicts)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/59/diffs?diff_id=1992150108&start_sha=e6a4ffd09f807e80e0b8d391d5de08ff3ab8c2bd)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T14:16:47.905Z"
+        }
+      ]
+    },
+    {
+      "id": "66d8d49346f964b1559854ffd7a501e78daf2364",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756706523,
+          "body": "mentioned in commit a189f1b8d000270a62c746d25b6397cd7096ad95",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T15:32:38.059Z"
+        }
+      ]
+    },
+    {
+      "id": "89f40d82e5b5ec3f2077b5b460f90ca85530bac7",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3770297549,
+          "body": "mentioned in commit e10b2ae42782b516f15c5ec99225430ff14a5293",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-09-01T15:16:50.078Z"
+        }
+      ]
+    },
+    {
+      "id": "3a1090898fd27dca78e96d145f4d0c5fa95b6c61",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3770299486,
+          "body": "mentioned in merge request !63",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-09-01T15:17:12.958Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "6b007563c8d15ee4e11b558f2a414d45c53e5381",
+      "short_id": "6b007563",
+      "title": "merge: origin/main into loop/implement-regenloop-ship-improvements (resolve MR !59 conflicts)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-29T19:00:54.000+05:30"
+    },
+    {
+      "id": "e6a4ffd09f807e80e0b8d391d5de08ff3ab8c2bd",
+      "short_id": "e6a4ffd0",
+      "title": "chore(knowledge): refresh ship, tests, and hooks anchors after the follow-up fixes",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-29T18:18:11.000+05:30"
+    },
+    {
+      "id": "1c8334113cd05f976c6e77d677948bbe6e3978f6",
+      "short_id": "1c833411",
+      "title": "fix: resolve tier-1/tier-2 review findings from the !59 follow-up check",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-29T18:17:03.000+05:30"
+    },
+    {
+      "id": "e4b55616f01c17c5fc887d926ecdf8c85318b435",
+      "short_id": "e4b55616",
+      "title": "chore(knowledge): refresh ship and tests anchors after round-1 fixes",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T10:21:01.000+05:30"
+    },
+    {
+      "id": "f512ff2ceef662ac50c0b4e31bc3d79a58fffe1b",
+      "short_id": "f512ff2c",
+      "title": "review fixes (round 1)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T09:34:44.000+05:30"
+    },
+    {
+      "id": "7122702ad29e91e626304c6293c1bf6ef661bc22",
+      "short_id": "7122702a",
+      "title": "chore(knowledge): refresh anchors after the origin/main merge",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T08:43:18.000+05:30"
+    },
+    {
+      "id": "ad019b553607710f483a826fe42231049473bf7d",
+      "short_id": "ad019b55",
+      "title": "Merge remote-tracking branch 'origin/main' into loop/implement-regenloop-ship-improvements",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T08:30:03.000+05:30"
+    },
+    {
+      "id": "c011f8f03b232b0f322ca577846be838540685ea",
+      "short_id": "c011f8f0",
+      "title": "docs(knowledge): refresh anchors for paths touched by the fix round",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T07:30:58.000+05:30"
+    },
+    {
+      "id": "fed56df86b91ac31881903ff2f55828aed5ba4cd",
+      "short_id": "fed56df8",
+      "title": "docs(claudedocs): track the ship-improvements implementation plan",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T07:30:12.000+05:30"
+    },
+    {
+      "id": "01453c8cd7cea50841c1adab3c5d74ab81f06e67",
+      "short_id": "01453c8c",
+      "title": "docs(knowledge): claudedocs count ~61->~75; ship card pin-classes wording",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T07:29:55.000+05:30"
+    },
+    {
+      "id": "77f71fbaf122e4fdb57ea11d3a2b1a28c9a1355d",
+      "short_id": "77f71fba",
+      "title": "fix(ship): holistic round — §5g exits route to §7/§10, §9 AHEAD=0 baseline, unique brief pin, spec sync",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T07:28:24.000+05:30"
+    },
+    {
+      "id": "94366fe993a6d82b7d8dc5d53fe90c641f05334e",
+      "short_id": "94366fe9",
+      "title": "docs(knowledge): ship card absorbs the six new invariants in compressed form (no facts dropped)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T06:38:50.000+05:30"
+    },
+    {
+      "id": "913f7a880ba870bd7e31e75867cddb040b1d61ee",
+      "short_id": "913f7a88",
+      "title": "docs(knowledge): refresh anchors after the content commits; INDEX synced",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T06:18:48.000+05:30"
+    },
+    {
+      "id": "e2d5126fbaff306ab6615ba9652d59fd32a4d870",
+      "short_id": "e2d5126f",
+      "title": "fix(knowledge): restore the 500-token budget on the merge-regressed claudedocs/tests cards",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T06:17:50.000+05:30"
+    },
+    {
+      "id": "3d4fba007a78f593b469134777c10bed2390ed2b",
+      "short_id": "3d4fba00",
+      "title": "docs(changelog): regenloop-ship widened admission + preconditions under [Unreleased]",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T06:10:39.000+05:30"
+    },
+    {
+      "id": "57721799e254cad1290903b8706a8873bd7c8ef7",
+      "short_id": "57721799",
+      "title": "docs(heal): record the MR !55 round-2 vacuous-guard incident",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T06:10:11.000+05:30"
+    },
+    {
+      "id": "49e8f39eb0dacd4fc51eae7415ff84b7c9e7c7d6",
+      "short_id": "49e8f39e",
+      "title": "fix(ship): §5g card trigger excludes deletions (--diff-filter=d) and names them",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T06:09:41.000+05:30"
+    },
+    {
+      "id": "9087f3352e5d932998e7326337d745af7573527e",
+      "short_id": "9087f335",
+      "title": "feat(ship): R5 detached long-ops + R6 §9 movement-aware merge-check inputs + 3 anti-pattern rows; scope §11 Merging to the MR",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T05:34:04.000+05:30"
+    },
+    {
+      "id": "58e874d4dfbfb354c1c77e7986845e8f5f597d1d",
+      "short_id": "58e874d4",
+      "title": "feat(ship): R4 — §5g conditional card verification (validate, staleness, anchors-after-commits, own fix vehicle) + guard §5h fetch",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T04:01:56.000+05:30"
+    },
+    {
+      "id": "408cf4eddc0deaad89251fb312cfae2867f85905",
+      "short_id": "408cf4ed",
+      "title": "feat(ship): R3 — §5f mutation-proof precondition for newly added tests (fail-once, byte-verified restore, characterization escape)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T03:35:36.000+05:30"
+    },
+    {
+      "id": "b17b0d56aed0545666badf0dbc49644dc40db256",
+      "short_id": "b17b0d56",
+      "title": "feat(ship): R2 — §5h target-movement check + bounded absorption doctrine (never rebase, regenerate, re-verify)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T03:12:01.000+05:30"
+    },
+    {
+      "id": "80db25e83b0883f9da3483239ffc814f43710df0",
+      "short_id": "80db25e8",
+      "title": "test(ship): TestShipFenceSyntax — bash -n every SKILL.md fence, known-bad proof, deletion floor",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T02:48:51.000+05:30"
+    },
+    {
+      "id": "546d10e6cbcb89a339a883f1202fb90c683af52d",
+      "short_id": "546d10e6",
+      "title": "feat(ship): admit any non-default branch at Step 0 + standalone base disclosure",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T02:00:24.000+05:30"
+    },
+    {
+      "id": "5e8a287bc3c9f6b53242852960b9c86930f62d6f",
+      "short_id": "5e8a287b",
+      "title": "docs(spec): precise fence-harness coverage claim — ship §2 harness exists, all-fences coverage is new",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T01:48:58.000+05:30"
+    },
+    {
+      "id": "9fcb5768c9b5e083883d17a679ae46eba5193700",
+      "short_id": "9fcb5768",
+      "title": "docs(spec): fold critic resolutions into the ship-improvements design — real fence harness, new admission pin, bounded movement recheck, committed-blob anchor hash",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T01:42:08.000+05:30"
+    },
+    {
+      "id": "c8a4b3f719ea8b946202cc2f03127f129d3dcc3b",
+      "short_id": "c8a4b3f7",
+      "title": "docs(design): regenloop-ship improvement design (admission, movement doctrine, mutation-proof, card verify)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-25T00:39:53.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [],
+    "approved": true,
+    "approvals_required": 0,
+    "approved_by_raw": [],
+    "error": null
+  }
+}

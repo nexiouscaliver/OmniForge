@@ -1,0 +1,595 @@
+{
+  "meta": {
+    "iid": 1067,
+    "title": "feat(geo): add Grok, DeepSeek and Meta AI as swap-only engines (CLEO-138)",
+    "state": "merged",
+    "author_username": "parikhvidit87410",
+    "created_at": "2026-08-01T07:27:10.826Z",
+    "updated_at": "2026-08-08T15:50:43.016Z",
+    "merged_at": "2026-08-08T15:50:41.906Z",
+    "labels": [],
+    "source_branch": "feat/grok-deepseek-engines",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067",
+    "sha": "dec0fa51d098423a149fcd9ff76293dc6ddc2dd0",
+    "merge_commit_sha": "3f69ef6d5d72ec9e72f514d397a6c9986249ff3f",
+    "diff_refs": {
+      "base_sha": "cf1531bde9bcf118be1a3d72e0a291406e64e729",
+      "head_sha": "dec0fa51d098423a149fcd9ff76293dc6ddc2dd0",
+      "start_sha": "d9bcdf99dd30b4fe88c4f41eeb504c97b5d9ac04"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3632142438,
+      "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nAdds three new swap-only GEO engines (Grok, DeepSeek, Meta AI) following the existing `bing_aio` pattern, plus a refactor unifying the engine-gating logic across 10 call sites. The code itself is careful and well-executed — the refactor is genuinely complete, credentials are handled cleanly, and the \"flags ship OFF\" safety claim holds. The concerns below are about verification and process, not exploitable security issues: the green pipeline doesn't actually exercise this MR's changed code or tests, the stated test count is overstated, and Meta AI's documented US-only restriction isn't enforced in code — only by remembering not to flip the flag for the wrong reason.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 1 |\n| Important | 3 |\n| Minor | 2 |\n\n### Strengths\n- The `_bing_aio_selectable()` → `_flag_gated_engine_types()` refactor is genuinely complete across all 10 original call sites, verified with no gaps.\n- Rollout sequencing is safe by design: engines seed as `status='active'` but every path is flag-gated OFF by default, avoiding a DB-ahead-of-runner window.\n- Credential handling is clean — all three new API keys sourced via env vars, never hardcoded or logged; citation rendering inherits existing XSS/SSRF-safe handling.\n\n### Key Concerns\n- **Critical:** No CI job actually runs `test_geo_new_engines.py` or `test_engine_slots.py` — the claimed \"928 passed, 13 failed\" is an unverified local/manual run, not something CI confirms.\n- **Important:** The description's \"30 tests\" claim is overstated (actual: 24) — a second data point that the description's verification claims need double-checking.\n- **Important:** Meta AI's US-only restriction is documented but not code-enforced — see inline thread for detail.\n\n### Security\nNo exploitable vulnerabilities found — access control, credentials, injection, and XSS/SSRF all check out clean. One low-severity note (Meta AI regional enforcement, folded into the Important findings above) is a business/compliance gap, not a security vulnerability.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 6 findings above threshold*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-01T09:49:26.480Z"
+    },
+    {
+      "id": 3632142590,
+      "body": "**Important** — Meta AI's US-only restriction is enforced by discipline, not code\n\n**What:** The design doc says Meta AI's flag stays off because the Meta Model API is a \"US-only public preview\" and offering it to EU/APAC sites \"would produce failed runs.\" But `compute_eligible_engine_types()` never takes a `country` parameter — `GEO_META_AI_SELECTABLE` is a single global boolean, even though `geo_site_config.country` already exists and is used elsewhere (`geo_runner/core/eligibility.py`) for cohort routing.\n\n**Why it matters:** The moment this flag flips — which the doc frames as \"the only step to go live\" — every site on every plan tier globally becomes eligible to swap in Meta AI, including exactly the EU/APAC sites the doc warns will fail. The safety is currently \"remember not to flip it wrong,\" not enforced anywhere in code.\n\n**Recommendation:**\n```python\n# Add a country check alongside the flag, e.g. in compute_eligible_engine_types\n# or validate_engine_swap, gated on geo_site_config.country for meta_ai specifically.\n```\nAlternatively, if regional restriction is intended to stay a process control, update the code comment on `GEO_META_AI_SELECTABLE` to say so explicitly — the current comment implies more safety than exists.\n\nConfidence: 90/100 | Found by: Codebase Reviewer (important), Security Reviewer (minor, corroborating) — cross-correlated, kept at higher severity",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-01T09:49:37.934Z"
+    },
+    {
+      "id": 3632566107,
+      "body": "added 1 commit\n\n<ul><li>d16ad9c1 - fix(geo): enforce Meta AI&#39;s US-only restriction in code + cap output (CLEO-138 review)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1936997435&start_sha=fb5f635935dc74b13016f8b56f3d51644a251ed0)",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-01T14:32:44.109Z"
+    },
+    {
+      "id": 3637212288,
+      "body": "added 2 commits\n\n<ul><li>5276a404 - feat(geo): gate Grok and Meta AI by plan tier (CLEO-138)</li><li>4d9e74d4 - fix(geo): strip DeepSeek&#39;s search preamble from the answer (CLEO-138)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1938991860&start_sha=d16ad9c151d2ba002632964199c24abcc8ed38a9)",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-03T14:29:09.881Z"
+    },
+    {
+      "id": 3649429881,
+      "body": "mentioned in merge request !1073",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-05T18:55:28.890Z"
+    },
+    {
+      "id": 3660523357,
+      "body": "added 1 commit\n\n<ul><li>88391450 - feat(geo): ship DeepSeek + Grok, hold Meta AI back, fix Grok&#39;s API shape (CLEO-138)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1949848017&start_sha=4d9e74d4fabed1ece801f1038e7c5c3c10148989)",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T23:10:45.766Z"
+    },
+    {
+      "id": 3660554852,
+      "body": "added 654 commits\n\n<ul><li>88391450...cf1531bd - 653 commits from branch <code>staging-phase</code></li><li>43852fb3 - Merge branch &#39;staging-phase&#39; into feat/grok-deepseek-engines</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1949865994&start_sha=88391450f0ea01cd45656224487b899259c8d247)",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T23:36:19.686Z"
+    },
+    {
+      "id": 3660606196,
+      "body": "mentioned in commit 11e4efd91bebad32017b6afa63f6e03b4c6f420b",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T00:21:22.111Z"
+    },
+    {
+      "id": 3660606199,
+      "body": "mentioned in commit 31ac42b1999e46071fd2bd78bf13edc3f6df93d4",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T00:21:22.081Z"
+    },
+    {
+      "id": 3661384017,
+      "body": "### New env required in staging\n\n```\nDEEPSEEK_API_KEY      DeepSeek (Anthropic-compatible endpoint)\nXAI_API_KEY           Grok / xAI\n```\n\nOptional overrides (defaults in code, only set to deviate): XAI_GEO_MODEL default grok-4.3 XAI_API_BASE_URL default https://api.x.ai/v1 DEEPSEEK_GEO_MODEL default deepseek-v4-pro DEEPSEEK_ANTHROPIC_BASE_URL default https://api.deepseek.com/anthropic GEO_RESPONSES_MAX_OUTPUT_TOKENS default 2000\n\nFeature flags — both default False, flip to enable: FEATURE_GEO_DEEPSEEK_SELECTABLE=true FEATURE_GEO_GROK_SELECTABLE=true\n\nAlso needs `deepseek` and `grok` entries in the /geo/ratelimits SSM parameter, or the runner falls back to conservative code defaults. Runner image must be redeployed to pick up the engine changes.",
+      "author_username": "parikhvidit87410",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T09:59:47.232Z"
+    },
+    {
+      "id": 3661384339,
+      "body": "changed the description",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T10:00:11.762Z"
+    },
+    {
+      "id": 3661389185,
+      "body": "changed the description",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T10:07:08.342Z"
+    },
+    {
+      "id": 3661957780,
+      "body": "added 1 commit\n\n<ul><li>fc80100c - fix(geo): surface Grok/DeepSeek across every engine display (CLEO-138)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1950302773&start_sha=43852fb3631250d631a9c13866011952adf5c590)",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T14:07:04.678Z"
+    },
+    {
+      "id": 3662041291,
+      "body": "approved this merge request",
+      "author_username": "jainex",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T14:35:26.171Z"
+    },
+    {
+      "id": 3662097990,
+      "body": "added 2 commits\n\n<ul><li>c58bcdba - feat(aws): wire XAI_API_KEY secret into prod and staging task definitions</li><li>dec0fa51 - Merge origin/feat/grok-deepseek-engines</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1950333462&start_sha=fc80100cbc05e9fc7e40ed74d70e950b2bfdc11c)",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T15:04:13.242Z"
+    },
+    {
+      "id": 3662098693,
+      "body": "reset approvals from @jainex by pushing to the branch",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T15:04:29.212Z"
+    },
+    {
+      "id": 3662262076,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T15:48:52.123Z"
+    },
+    {
+      "id": 3662262654,
+      "body": "## Follow-up Check — MR !1067\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 2 |\n\nThe Meta AI US-only restriction is now code-enforced (country-gated allowlist + tests), addressing the earlier concern even though the thread wasn't marked resolved.\n\nTwo items remain open for human judgement rather than automatic verification:\n- The overview verdict thread: the Critical point that no CI job runs `test_geo_new_engines.py` / `test_engine_slots.py` still has no corresponding pipeline change in this diff.\n- The staging env var note: consistent with the diff, but provisioning the `/geo/ratelimits` SSM entries and redeploying the runner image are ops steps outside the diff.\n\nMR approved.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T15:49:10.541Z"
+    },
+    {
+      "id": 3662265751,
+      "body": "mentioned in commit 3f69ef6d5d72ec9e72f514d397a6c9986249ff3f",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T15:50:42.638Z"
+    },
+    {
+      "id": 3682193274,
+      "body": "mentioned in commit 145bbe3e0b863e72f5f6e38fc469db93b4392c4c",
+      "author_username": "parikhvidit87410",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-13T11:44:24.683Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "18ac1ec3f8f9984bb064236958a1615885da58b9",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3632142438,
+          "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nAdds three new swap-only GEO engines (Grok, DeepSeek, Meta AI) following the existing `bing_aio` pattern, plus a refactor unifying the engine-gating logic across 10 call sites. The code itself is careful and well-executed — the refactor is genuinely complete, credentials are handled cleanly, and the \"flags ship OFF\" safety claim holds. The concerns below are about verification and process, not exploitable security issues: the green pipeline doesn't actually exercise this MR's changed code or tests, the stated test count is overstated, and Meta AI's documented US-only restriction isn't enforced in code — only by remembering not to flip the flag for the wrong reason.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 1 |\n| Important | 3 |\n| Minor | 2 |\n\n### Strengths\n- The `_bing_aio_selectable()` → `_flag_gated_engine_types()` refactor is genuinely complete across all 10 original call sites, verified with no gaps.\n- Rollout sequencing is safe by design: engines seed as `status='active'` but every path is flag-gated OFF by default, avoiding a DB-ahead-of-runner window.\n- Credential handling is clean — all three new API keys sourced via env vars, never hardcoded or logged; citation rendering inherits existing XSS/SSRF-safe handling.\n\n### Key Concerns\n- **Critical:** No CI job actually runs `test_geo_new_engines.py` or `test_engine_slots.py` — the claimed \"928 passed, 13 failed\" is an unverified local/manual run, not something CI confirms.\n- **Important:** The description's \"30 tests\" claim is overstated (actual: 24) — a second data point that the description's verification claims need double-checking.\n- **Important:** Meta AI's US-only restriction is documented but not code-enforced — see inline thread for detail.\n\n### Security\nNo exploitable vulnerabilities found — access control, credentials, injection, and XSS/SSRF all check out clean. One low-severity note (Meta AI regional enforcement, folded into the Important findings above) is a business/compliance gap, not a security vulnerability.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 6 findings above threshold*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-01T09:49:26.480Z"
+        }
+      ]
+    },
+    {
+      "id": "18794ac114daae3a77bbff63fc0aa28ae3440273",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3632142590,
+          "body": "**Important** — Meta AI's US-only restriction is enforced by discipline, not code\n\n**What:** The design doc says Meta AI's flag stays off because the Meta Model API is a \"US-only public preview\" and offering it to EU/APAC sites \"would produce failed runs.\" But `compute_eligible_engine_types()` never takes a `country` parameter — `GEO_META_AI_SELECTABLE` is a single global boolean, even though `geo_site_config.country` already exists and is used elsewhere (`geo_runner/core/eligibility.py`) for cohort routing.\n\n**Why it matters:** The moment this flag flips — which the doc frames as \"the only step to go live\" — every site on every plan tier globally becomes eligible to swap in Meta AI, including exactly the EU/APAC sites the doc warns will fail. The safety is currently \"remember not to flip it wrong,\" not enforced anywhere in code.\n\n**Recommendation:**\n```python\n# Add a country check alongside the flag, e.g. in compute_eligible_engine_types\n# or validate_engine_swap, gated on geo_site_config.country for meta_ai specifically.\n```\nAlternatively, if regional restriction is intended to stay a process control, update the code comment on `GEO_META_AI_SELECTABLE` to say so explicitly — the current comment implies more safety than exists.\n\nConfidence: 90/100 | Found by: Codebase Reviewer (important), Security Reviewer (minor, corroborating) — cross-correlated, kept at higher severity",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-01T09:49:37.934Z"
+        }
+      ]
+    },
+    {
+      "id": "90407a0ff2122fffd95a4dba7bf90d8e17308b51",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3632566107,
+          "body": "added 1 commit\n\n<ul><li>d16ad9c1 - fix(geo): enforce Meta AI&#39;s US-only restriction in code + cap output (CLEO-138 review)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1936997435&start_sha=fb5f635935dc74b13016f8b56f3d51644a251ed0)",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-01T14:32:44.109Z"
+        }
+      ]
+    },
+    {
+      "id": "5ad5a17de4179b6b662c5d102f2b4bdd13ef1324",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3637212288,
+          "body": "added 2 commits\n\n<ul><li>5276a404 - feat(geo): gate Grok and Meta AI by plan tier (CLEO-138)</li><li>4d9e74d4 - fix(geo): strip DeepSeek&#39;s search preamble from the answer (CLEO-138)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1938991860&start_sha=d16ad9c151d2ba002632964199c24abcc8ed38a9)",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-03T14:29:09.881Z"
+        }
+      ]
+    },
+    {
+      "id": "b9b43e92f62fe4ba31f9ee3e938e2dd6f762d60a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3649429881,
+          "body": "mentioned in merge request !1073",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-05T18:55:28.890Z"
+        }
+      ]
+    },
+    {
+      "id": "6afd4532ff5968bf457800b2623f011dd9a306e8",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3660523357,
+          "body": "added 1 commit\n\n<ul><li>88391450 - feat(geo): ship DeepSeek + Grok, hold Meta AI back, fix Grok&#39;s API shape (CLEO-138)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1949848017&start_sha=4d9e74d4fabed1ece801f1038e7c5c3c10148989)",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T23:10:45.766Z"
+        }
+      ]
+    },
+    {
+      "id": "bdc3a5d56377b80077491118917221f4dad9293d",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3660554852,
+          "body": "added 654 commits\n\n<ul><li>88391450...cf1531bd - 653 commits from branch <code>staging-phase</code></li><li>43852fb3 - Merge branch &#39;staging-phase&#39; into feat/grok-deepseek-engines</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1949865994&start_sha=88391450f0ea01cd45656224487b899259c8d247)",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T23:36:19.686Z"
+        }
+      ]
+    },
+    {
+      "id": "57d7f490c8f8ce1827a69d4484cf979e52c21421",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3660606199,
+          "body": "mentioned in commit 31ac42b1999e46071fd2bd78bf13edc3f6df93d4",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T00:21:22.081Z"
+        }
+      ]
+    },
+    {
+      "id": "9b74cc438625483503feedc1e9c36159aee8a94b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3660606196,
+          "body": "mentioned in commit 11e4efd91bebad32017b6afa63f6e03b4c6f420b",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T00:21:22.111Z"
+        }
+      ]
+    },
+    {
+      "id": "95a334329ab2a8e19d52d3bd15d07b89740d4237",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3661384017,
+          "body": "### New env required in staging\n\n```\nDEEPSEEK_API_KEY      DeepSeek (Anthropic-compatible endpoint)\nXAI_API_KEY           Grok / xAI\n```\n\nOptional overrides (defaults in code, only set to deviate): XAI_GEO_MODEL default grok-4.3 XAI_API_BASE_URL default https://api.x.ai/v1 DEEPSEEK_GEO_MODEL default deepseek-v4-pro DEEPSEEK_ANTHROPIC_BASE_URL default https://api.deepseek.com/anthropic GEO_RESPONSES_MAX_OUTPUT_TOKENS default 2000\n\nFeature flags — both default False, flip to enable: FEATURE_GEO_DEEPSEEK_SELECTABLE=true FEATURE_GEO_GROK_SELECTABLE=true\n\nAlso needs `deepseek` and `grok` entries in the /geo/ratelimits SSM parameter, or the runner falls back to conservative code defaults. Runner image must be redeployed to pick up the engine changes.",
+          "author_username": "parikhvidit87410",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T09:59:47.232Z"
+        }
+      ]
+    },
+    {
+      "id": "72786e4f3ebe6fdc2da6d0edc6038e0cc621c2d2",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3661384339,
+          "body": "changed the description",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T10:00:11.762Z"
+        }
+      ]
+    },
+    {
+      "id": "bf11fde335178c92e16cba7cd6bae3479770dcc5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3661389185,
+          "body": "changed the description",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T10:07:08.342Z"
+        }
+      ]
+    },
+    {
+      "id": "3123c64635f4df8987a97c417f6aad2b5069e32a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3661957780,
+          "body": "added 1 commit\n\n<ul><li>fc80100c - fix(geo): surface Grok/DeepSeek across every engine display (CLEO-138)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1950302773&start_sha=43852fb3631250d631a9c13866011952adf5c590)",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T14:07:04.678Z"
+        }
+      ]
+    },
+    {
+      "id": "16e9f82e900b08d814b95bec15432c39474a2516",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662041291,
+          "body": "approved this merge request",
+          "author_username": "jainex",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T14:35:26.171Z"
+        }
+      ]
+    },
+    {
+      "id": "397bc3a7685bb7c5e97e29eeb624a5ebdf986a8b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662097990,
+          "body": "added 2 commits\n\n<ul><li>c58bcdba - feat(aws): wire XAI_API_KEY secret into prod and staging task definitions</li><li>dec0fa51 - Merge origin/feat/grok-deepseek-engines</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1067/diffs?diff_id=1950333462&start_sha=fc80100cbc05e9fc7e40ed74d70e950b2bfdc11c)",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T15:04:13.242Z"
+        }
+      ]
+    },
+    {
+      "id": "5548d655c1e77b115cea8e9299c41e5e0191faf9",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662098693,
+          "body": "reset approvals from @jainex by pushing to the branch",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T15:04:29.212Z"
+        }
+      ]
+    },
+    {
+      "id": "59dfdd3fc9ab24b56d96d234b8573e5b83c54643",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662262076,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T15:48:52.123Z"
+        }
+      ]
+    },
+    {
+      "id": "31a04a0ebb6191aebbe2b91c2a17835b2efd57cb",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662262654,
+          "body": "## Follow-up Check — MR !1067\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 2 |\n\nThe Meta AI US-only restriction is now code-enforced (country-gated allowlist + tests), addressing the earlier concern even though the thread wasn't marked resolved.\n\nTwo items remain open for human judgement rather than automatic verification:\n- The overview verdict thread: the Critical point that no CI job runs `test_geo_new_engines.py` / `test_engine_slots.py` still has no corresponding pipeline change in this diff.\n- The staging env var note: consistent with the diff, but provisioning the `/geo/ratelimits` SSM entries and redeploying the runner image are ops steps outside the diff.\n\nMR approved.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T15:49:10.541Z"
+        }
+      ]
+    },
+    {
+      "id": "a5b4364899bac776acb73f6a86bdbf3e8ceaf45e",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662265751,
+          "body": "mentioned in commit 3f69ef6d5d72ec9e72f514d397a6c9986249ff3f",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T15:50:42.638Z"
+        }
+      ]
+    },
+    {
+      "id": "2f67879b114457b56256b37baabdba74f64e1d29",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3682193274,
+          "body": "mentioned in commit 145bbe3e0b863e72f5f6e38fc469db93b4392c4c",
+          "author_username": "parikhvidit87410",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-13T11:44:24.683Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "dec0fa51d098423a149fcd9ff76293dc6ddc2dd0",
+      "title": "Merge origin/feat/grok-deepseek-engines",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-08T20:33:43.000+05:30"
+    },
+    {
+      "id": "c58bcdba4368282c4921731b8a670be7ab1c8b29",
+      "title": "feat(aws): wire XAI_API_KEY secret into prod and staging task definitions",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-08T20:30:32.000+05:30"
+    },
+    {
+      "id": "fc80100cbc05e9fc7e40ed74d70e950b2bfdc11c",
+      "title": "fix(geo): surface Grok/DeepSeek across every engine display (CLEO-138)",
+      "author_name": "vidit parikh",
+      "created_at": "2026-08-08T19:33:49.000+05:30"
+    },
+    {
+      "id": "43852fb3631250d631a9c13866011952adf5c590",
+      "title": "Merge branch 'staging-phase' into feat/grok-deepseek-engines",
+      "author_name": "vidit parikh",
+      "created_at": "2026-08-08T05:01:59.000+05:30"
+    },
+    {
+      "id": "88391450f0ea01cd45656224487b899259c8d247",
+      "title": "feat(geo): ship DeepSeek + Grok, hold Meta AI back, fix Grok's API shape (CLEO-138)",
+      "author_name": "vidit parikh",
+      "created_at": "2026-08-08T04:36:03.000+05:30"
+    },
+    {
+      "id": "4d9e74d4fabed1ece801f1038e7c5c3c10148989",
+      "title": "fix(geo): strip DeepSeek's search preamble from the answer (CLEO-138)",
+      "author_name": "vidit parikh",
+      "created_at": "2026-08-03T19:49:46.000+05:30"
+    },
+    {
+      "id": "5276a4042498042367dbd30c8345c135851a65da",
+      "title": "feat(geo): gate Grok and Meta AI by plan tier (CLEO-138)",
+      "author_name": "vidit parikh",
+      "created_at": "2026-08-03T19:49:35.000+05:30"
+    },
+    {
+      "id": "d16ad9c151d2ba002632964199c24abcc8ed38a9",
+      "title": "fix(geo): enforce Meta AI's US-only restriction in code + cap output (CLEO-138 review)",
+      "author_name": "vidit parikh",
+      "created_at": "2026-08-01T20:01:22.000+05:30"
+    },
+    {
+      "id": "fb5f635935dc74b13016f8b56f3d51644a251ed0",
+      "title": "feat(geo): add Grok, DeepSeek and Meta AI as swap-only engines (CLEO-138)",
+      "author_name": "vidit parikh",
+      "created_at": "2026-07-30T21:15:44.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-08T15:48:52.039Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

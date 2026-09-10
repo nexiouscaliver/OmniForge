@@ -1,0 +1,46 @@
+{
+  "repo": "omniforge",
+  "iid": 11,
+  "title": "fix(gateway): read webhook changes from payload top level — draft marked Ready never re-triggered review",
+  "runs": [
+    {
+      "timestamp": "2026-08-29T10:13:43.870Z",
+      "trigger": "/omnicheck by shahilkadia at 10:01:02 (note 3756113180)",
+      "head_at_run": "36966e45bf856f79428303f0cb164407bb7f4dfe (commits 68b4969 + 36966e4 pushed 09:42)",
+      "base_sha": "2f1be68ed3bdc4aba7d32dacfefce4eacdce84f4",
+      "gate": "APPROVED",
+      "gate_evidence": "meta.labels = [omniforge::check-approved]; summary note 3756142245 (0/3/0/0 — 'All flagged findings have been addressed'); merged 10:30:41",
+      "per_thread": [
+        {
+          "thread_id": "#d757abe (verification step describes impossible response body)",
+          "anchor": "server.py:3485 / MR description",
+          "omnicheck_verdict": "SILENTLY_APPLIED",
+          "ground_truth": "APPLIED — description rewritten to the real contract (202 body without trigger key); corroborated by code: label only in the enqueued task dict",
+          "judgment": "CORRECT_APPLY (description-level; cross-checked against code behavior)",
+          "hypothesis": null,
+          "evidence": "author reply 3756077950; omnicheck verification row"
+        },
+        {
+          "thread_id": "#42b71a3 (or-truthiness conflates absent/empty changes)",
+          "anchor": "server.py:3488",
+          "omnicheck_verdict": "SILENTLY_APPLIED",
+          "ground_truth": "APPLIED — changes = payload.get('changes'); if changes is None: fallback (server.py:3488-3490); handler-boundary pin test_update_with_empty_top_level_changes_is_ignored_by_the_handler at tests/test_triggers.py:390",
+          "judgment": "CORRECT_APPLY",
+          "hypothesis": null,
+          "evidence": "git show 36966e45:server.py:3488-3490; test_triggers.py:390-397"
+        },
+        {
+          "thread_id": "#b77721a (exact-count pin in CI config)",
+          "anchor": ".gitlab-ci.yml:61",
+          "omnicheck_verdict": "SILENTLY_APPLIED",
+          "ground_truth": "APPLIED — tests/EXPECTED_TEST_COUNT fixture (830) + scripts/check_test_count.py wired at .gitlab-ci.yml:61; hardcoded 'Ran 821 tests' grep gone",
+          "judgment": "CORRECT_APPLY",
+          "hypothesis": null,
+          "evidence": "git show 36966e45:tests/EXPECTED_TEST_COUNT (=830); .gitlab-ci.yml:45-46,61"
+        }
+      ],
+      "overall": "CORRECT — APPROVED matches ground truth; all 3 threads verified applied at run-time head, each with code + pin evidence. Run also correctly handled a description-only fix (no code to point at) and disclosed a branch-name residual without counting it. 12-minute run, clean.",
+      "root_causes": []
+    }
+  ]
+}

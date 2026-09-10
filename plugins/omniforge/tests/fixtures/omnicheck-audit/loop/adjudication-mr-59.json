@@ -1,0 +1,168 @@
+{
+ "repo": "loop-plugin",
+ "iid": 59,
+ "title": "loop/implement regenloop ship improvements",
+ "runs": [
+  {
+   "timestamp": "2026-08-29T11:29:37.797Z",
+   "summary_note": 3756325293,
+   "trigger_note": 3756216265,
+   "head_at_run": "e4b55616f01c17c5fc887d926ecdf8c85318b435",
+   "base": "795a01a2d7a54352027eff9b56ed685f6ca89925",
+   "gate": "REJECTED",
+   "gate_evidence": "meta.labels=['omniforge::check-rejected'] (persisting); 13 NOT_APPLIED + 1 NEEDS_HUMAN -> REJECTED per fail-closed design",
+   "per_thread": [
+    {
+     "thread_id": "#2e486d0",
+     "anchor": "regenloop/knowledge/cards/regenloop-ship.md:26",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED (fix absent at run head)",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "card line at e4b55616 still reads 'Pinned by 8 new classes (~20 total)'"
+    },
+    {
+     "thread_id": "#2aa3aa8",
+     "anchor": "skills/regenloop-ship/SKILL.md:935",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "fence last line at e4b55616 still '[ \"$AHEAD\" -gt 0 ] && echo' (rc-1 happy path); fixed later in 1c833411"
+    },
+    {
+     "thread_id": "#e0f0d1f",
+     "anchor": "tests/test_regenloop_ship_surface.py:1541",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "assertNotIn('before the content commits') present at e4b55616:1541"
+    },
+    {
+     "thread_id": "#bc1bfcb",
+     "anchor": "skills/regenloop-ship/SKILL.md:934",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "AHEAD still counts $BASE..REMOTE/TARGET at e4b55616:934; fixed in 1c833411"
+    },
+    {
+     "thread_id": "#464c80d",
+     "anchor": "skills/regenloop-ship/SKILL.md:836",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "'All three exit 1 arms' wording present at e4b55616:836"
+    },
+    {
+     "thread_id": "#b3a7b1e",
+     "anchor": "skills/regenloop-ship/SKILL.md:934",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "grep SHIP_TARGET_TIP = 0 hits at e4b55616; no absorbed-tip persistence"
+    },
+    {
+     "thread_id": "#70a16ca",
+     "anchor": "skills/regenloop-ship/SKILL.md:726",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "'pre-round code at HEAD~1 is the natural mutation' still at e4b55616:726"
+    },
+    {
+     "thread_id": "#c810738",
+     "anchor": "skills/regenloop-ship/SKILL.md:185",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "detached-ops idiom names no log location at e4b55616:185; fixed in 1c833411"
+    },
+    {
+     "thread_id": "#a2d07b3",
+     "anchor": "skills/regenloop-ship/SKILL.md:828",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "'for CARD in $CARD_CHANGES' word-split at e4b55616:828; grep -x fallbacks unchanged"
+    },
+    {
+     "thread_id": "#88234a1",
+     "anchor": "skills/regenloop-ship/SKILL.md:959",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "doctrine item 5 at e4b55616:959-965 names no card verification / fork-base qualifier"
+    },
+    {
+     "thread_id": "#edfd199",
+     "anchor": "skills/regenloop-ship/SKILL.md:832",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "unconditional 'check-staleness $REPO_ROOT || exit 1' at e4b55616:832"
+    },
+    {
+     "thread_id": "#f1a3347",
+     "anchor": "general (unanchorable)",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "SKILL.md:24 at e4b55616 still '1. **Never merge, and never approve.**' unscoped; no diff hunk touches S1"
+    },
+    {
+     "thread_id": "#6399755",
+     "anchor": "skills/regenloop-ship/SKILL.md:1172",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "'the tip its check certified against' at e4b55616:1172; S5h prints nothing on no-movement; fixed in 1c833411"
+    },
+    {
+     "thread_id": "F1-thread (02003f8c)",
+     "anchor": "skills/regenloop-ship/SKILL.md:1167",
+     "omnicheck_verdict": "SILENTLY_APPLIED (inferred; 6 SA not itemised)",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "fetch guard + empty-TARGET_HEAD stop present at e4b55616:1167-1169 (git show verified)"
+    },
+    {
+     "thread_id": "F2-thread (20df9f14)",
+     "anchor": "CHANGELOG.md:104",
+     "omnicheck_verdict": "SILENTLY_APPLIED (inferred)",
+     "ground_truth": "ADDRESSED (in-repo)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "single [1.2.0] section at e4b55616; deletion nets to zero vs diff base 795a01a2 exactly as summary explains"
+    },
+    {
+     "thread_id": "#3f4051",
+     "anchor": "general",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "NOT-A-FINDING (the /omnicheck trigger comment)",
+     "judgment": "MISSED_CALL",
+     "hypothesis": "H3",
+     "evidence": "determinable non-finding; on !60 the identical trigger note was explicitly excluded from the table"
+    }
+   ],
+   "overall": "CORRECT",
+   "overall_note": "13 genuine non-blocking/note findings unaddressed at run head -> REJECTED is outcome-correct, but severity-blind: summary itself says 'follow-ups rather than a barrier' while the gate label says check-rejected. Author then fixed 8 of 13 in 1c833411 and merged 4h later (human override).",
+   "root_causes": [
+    "H3 (fail-closed over-rejection flavor: non-blocking triage ignored by gate; NEEDS_HUMAN on the trigger comment itself)",
+    "H5-flavored label/summary tension (no parser disagreement: label matches table)"
+   ]
+  }
+ ]
+}
