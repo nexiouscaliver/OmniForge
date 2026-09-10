@@ -263,6 +263,24 @@ def classify_run(threads, verifications=None):
     return findings, artifacts
 
 
+def apply_truncation_guard(findings, truncated_files):
+    """Flag unverified findings anchored in diff regions the cap cut.
+
+    Audit fix 5: a thread whose anchor file was truncated away can never be
+    verified from the fetched diff — it stays open (fail-closed) and carries
+    the stated truncation reason so the report says WHY it is unverified
+    instead of silently reading "no relevant change". Findings that already
+    carry a verification result are not retro-flagged.
+    """
+    cut = set(truncated_files or [])
+    for f in findings:
+        if (f.get("file_path") in cut
+                and not f.get("reason", "").startswith("verification:")):
+            f["reason"] = ("needs_human: diff truncated before this file's "
+                           "region (MAX_DIFF_LINES/MAX_DIFF_CHARS)")
+    return findings
+
+
 def gate(findings):
     """Deterministic gate over classified findings.
 

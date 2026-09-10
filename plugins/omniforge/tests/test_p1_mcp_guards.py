@@ -245,17 +245,14 @@ class TestFetchMrDataTruncation:
         diff = _big_diff()
 
         def side_effect(args, cwd=None, timeout=60, env=None):
-            a = args[:3]
-            if a[:2] == ["glab", "auth"]:
+            if args[:3] == ["glab", "auth", "status"]:
                 return _make_result(0, stdout="ok")
-            if a[:2] == ["glab", "mr", "view"]:
+            if args[:3] == ["glab", "mr", "view"]:
                 if "-F" in args and "json" in args:
                     return _make_result(0, _mr_json(head_sha="feedface"))
                 return _make_result(0, stdout="")  # comments
-            if a[:2] == ["glab", "mr", "diff"]:
+            if args[:3] == ["glab", "mr", "diff"]:
                 return _make_result(0, stdout=diff)
-            if args[0] == "git":
-                return _make_result(0, stdout="")
             return _make_result(0, stdout="")
 
         mock_run.side_effect = side_effect
@@ -272,14 +269,13 @@ class TestFetchMrDataTruncation:
         repo = _make_repo(tmp_path)
 
         def side_effect(args, cwd=None, timeout=60, env=None):
-            a = args[:3]
-            if a[:2] == ["glab", "auth"]:
+            if args[:3] == ["glab", "auth", "status"]:
                 return _make_result(0, stdout="ok")
-            if a[:2] == ["glab", "mr", "view"]:
+            if args[:3] == ["glab", "mr", "view"]:
                 if "-F" in args and "json" in args:
                     return _make_result(0, _mr_json())
                 return _make_result(0, stdout="")
-            if a[:2] == ["glab", "mr", "diff"]:
+            if args[:3] == ["glab", "mr", "diff"]:
                 return _make_result(0,
                     stdout="diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n"
                            "@@ -1,1 +1,2 @@\n ctx\n+one\n")

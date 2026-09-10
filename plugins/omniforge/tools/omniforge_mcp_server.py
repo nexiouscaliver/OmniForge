@@ -305,6 +305,21 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
     diff_text, diff_truncated = truncate_diff_if_needed(raw_diff, diff_lines)
     diff_line_map = parse_diff_line_map(raw_diff)
 
+    # Truncation guard (audit fix 5): when the cap cut the diff, name the
+    # files whose regions did not survive, so threads anchored there can be
+    # flagged needs-human with a stated reason instead of silently unseen.
+    # A file counts as cut when its section lost hunks or added lines — the
+    # hunk header alone surviving the cut is not completeness.
+    truncated_files = []
+    if diff_truncated:
+        kept_map = parse_diff_line_map(diff_text)
+        for path, info in diff_line_map.items():
+            kept = kept_map.get(path)
+            if (kept is None
+                    or len(kept.get("hunks", [])) < len(info.get("hunks", []))
+                    or len(kept.get("added_lines", [])) < len(info.get("added_lines", []))):
+                truncated_files.append(path)
+
     return {
         "success": True,
         "mr_id": mr_id,
@@ -319,10 +334,12 @@ async def _fetch_mr_data(mr_id: str, repo_root: str) -> dict:
         "diff_line_count": diff_lines,
         "diff_too_large": diff_lines > MAX_DIFF_LINES,
         "diff_truncated": diff_truncated,
+        "truncated_files": truncated_files,
         "diff_line_map": diff_line_map,
         "commits": parse_commits(commits_r.stdout),
         "files_changed": files_changed,
         "labels": metadata.get("labels", []),
+        "head_sha": (metadata.get("diff_refs") or {}).get("head_sha", ""),
         "assignees": [a.get("username", "") for a in metadata.get("assignees", [])],
         "reviewers": [r.get("username", "") for r in metadata.get("reviewers", [])],
     }
@@ -496,6 +513,8 @@ async def _get_mr_diff_refs(mr_id: str, repo_root: str) -> dict:
         "head_sha": diff_refs.get("head_sha", ""),
         "start_sha": diff_refs.get("start_sha", ""),
         "iid": str(metadata.get("iid", mr_id)),
+        "labels": metadata.get("labels", []) or [],
+        "state": metadata.get("state", ""),
     }
 
 
@@ -819,6 +838,13 @@ async def _fetch_mr_discussions(mr_id: str, repo_root: str) -> dict:
             "type": "inline" if is_inline else "general",
             "file_path": position.get("new_path"),
             "line_number": position.get("new_line"),
+            # Old-side anchor + the sha the thread was positioned at, so
+            # re-anchoring through a later delta is arithmetic instead of
+            # guesswork (audit fix 4). Old-side threads carry only
+            # old_path/old_line; anchor_sha falls back to "" for generals.
+            "old_path": position.get("old_path"),
+            "old_line": position.get("old_line"),
+            "anchor_sha": position.get("head_sha") or "",
             "body": first_note.get("body", ""),
             "author": first_note.get("author", {}).get("username", ""),
             "created_at": first_note.get("created_at", ""),
@@ -1021,7 +1047,8 @@ def _validate_sha(sha: str) -> str:
     return sha
 
 
-async def _approve_mr(mr_id: str, repo_root: str, sha: str = "") -> dict:
+async def _approve_mr(mr_id: str, repo_root: str, sha: str = "",
+                      checked_sha: str = "") -> dict:
     """Approve a GitLab merge request.
 
     When the OMNICHECK_BOT_TOKEN environment variable is set, the single approval
@@ -1031,11 +1058,20 @@ async def _approve_mr(mr_id: str, repo_root: str, sha: str = "") -> dict:
     sha: the caller-provided sha if given, else the MR's resolved HEAD sha. If
     neither is available the call is refused — an unpinned approval would not go
     stale on new commits, contradicting the tool's contract.
+
+    Guards (audit fix 2, fail-closed — a guard that cannot run also refuses):
+    - unresolved resolvable threads exist -> refuse (unresolved_threads)
+    - the MR lacks the omniforge::reviewed label -> refuse
+      (missing_reviewed_label): the bot approval must never be the thing that
+      certifies an MR OmniForge did not review
+    - checked_sha (the head the verification ran against) differs from the
+      live head -> refuse (head_moved)
     """
     try:
         mr_id = validate_mr_id(mr_id)
         repo_root = validate_repo_root(repo_root)
         sha = _validate_sha(sha)
+        checked_sha = _validate_sha(checked_sha)
     except ValueError as e:
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
@@ -1060,6 +1096,69 @@ async def _approve_mr(mr_id: str, repo_root: str, sha: str = "") -> dict:
                 f"provided. Re-fetch the MR or pass an explicit sha."
             ),
             "error_type": "no_head_sha",
+        }
+
+    # Guard: the bot approval may only certify an MR OmniForge reviewed.
+    labels = diff_refs.get("labels", []) or []
+    if "omniforge::reviewed" not in labels:
+        return {
+            "success": False,
+            "error": (
+                f"Refusing to approve MR !{mr_id}: the omniforge::reviewed label "
+                f"is missing. Run the OmniForge review first; this approval must "
+                f"never be what certifies an unreviewed MR."
+            ),
+            "error_type": "missing_reviewed_label",
+        }
+
+    # Guard: no approval past unresolved resolvable threads.
+    disc_r = await run_exec(
+        ["glab", "api", f"projects/:fullpath/merge_requests/{iid}/discussions",
+         "--paginate"],
+        cwd=repo_root, timeout=120,
+    )
+    if disc_r.returncode != 0:
+        return {
+            "success": False,
+            "error": (
+                f"Refusing to approve MR !{mr_id}: could not verify thread "
+                f"state ({disc_r.stderr.strip()[:200]})."
+            ),
+            "error_type": "guard_check_failed",
+        }
+    try:
+        raw_discussions = json.loads(disc_r.stdout) if disc_r.stdout.strip() else []
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": f"Refusing to approve MR !{mr_id}: could not parse thread state.",
+            "error_type": "guard_check_failed",
+        }
+    unresolved = sum(
+        1 for d in raw_discussions
+        if d.get("resolvable") and not d.get("resolved")
+    )
+    if unresolved:
+        return {
+            "success": False,
+            "error": (
+                f"Refusing to approve MR !{mr_id}: {unresolved} unresolved "
+                f"resolvable thread(s) remain. Resolve or address them first."
+            ),
+            "error_type": "unresolved_threads",
+            "unresolved_count": unresolved,
+        }
+
+    # Guard: the approval must be for the head the verification saw.
+    if checked_sha and checked_sha != head_sha:
+        return {
+            "success": False,
+            "error": (
+                f"Refusing to approve MR !{mr_id}: head moved since the check "
+                f"(checked {checked_sha[:12]}, live {str(head_sha)[:12]}). "
+                f"Re-run the verification at the new head."
+            ),
+            "error_type": "head_moved",
         }
 
     # Determine approver: bot when its token is configured, else current glab user
@@ -1187,7 +1286,7 @@ async def _fetch_pr_data(pr_id: str, repo_root: str) -> dict:
         [
             "gh", "pr", "view", pr_id, "--json",
             "title,body,headRefName,baseRefName,state,labels,assignees,"
-            "reviewRequests,comments,author",
+            "reviewRequests,comments,author,headRefOid",
         ],
         cwd=repo_root,
     )
@@ -1241,6 +1340,17 @@ async def _fetch_pr_data(pr_id: str, repo_root: str) -> dict:
     diff_text, diff_truncated = truncate_diff_if_needed(raw_diff, diff_lines)
     diff_line_map = parse_diff_line_map(raw_diff)
 
+    # Truncation guard, GitHub parity with _fetch_mr_data (audit fix 5).
+    truncated_files = []
+    if diff_truncated:
+        kept_map = parse_diff_line_map(diff_text)
+        for path, info in diff_line_map.items():
+            kept = kept_map.get(path)
+            if (kept is None
+                    or len(kept.get("hunks", [])) < len(info.get("hunks", []))
+                    or len(kept.get("added_lines", [])) < len(info.get("added_lines", []))):
+                truncated_files.append(path)
+
     return {
         "success": True,
         "pr_id": pr_id,
@@ -1255,10 +1365,12 @@ async def _fetch_pr_data(pr_id: str, repo_root: str) -> dict:
         "diff_line_count": diff_lines,
         "diff_too_large": diff_lines > MAX_DIFF_LINES,
         "diff_truncated": diff_truncated,
+        "truncated_files": truncated_files,
         "diff_line_map": diff_line_map,
         "commits": parse_commits(commits_text),
         "files_changed": files_changed,
         "labels": [l.get("name", "") for l in metadata.get("labels", [])],
+        "head_sha": metadata.get("headRefOid", "") or "",
         "assignees": [a.get("login", "") for a in metadata.get("assignees", [])],
         "reviewers": [r.get("login", "") for r in metadata.get("reviewRequests", [])],
     }
@@ -1851,7 +1963,8 @@ async def cleanup_omnifix_worktrees(mr_id: str, repo_root: str) -> str:
 
 
 @mcp_server.tool()
-async def approve_mr(mr_id: str, repo_root: str, sha: str = "") -> str:
+async def approve_mr(mr_id: str, repo_root: str, sha: str = "",
+                     checked_sha: str = "") -> str:
     """Approve a GitLab merge request.
 
     Approves as the OmniCheck bot when the OMNICHECK_BOT_TOKEN environment
@@ -1861,12 +1974,18 @@ async def approve_mr(mr_id: str, repo_root: str, sha: str = "") -> str:
     (the provided sha, or the MR HEAD sha resolved automatically) so it goes
     stale if new commits land; if no sha can be resolved the call is refused.
 
+    Guards (fail-closed): refuses when unresolved resolvable threads remain,
+    when the MR lacks the omniforge::reviewed label, or when checked_sha (the
+    head the verification ran against) differs from the live head.
+
     Args:
         mr_id: Merge request number (e.g., '136' or '!136')
         repo_root: Absolute path to the git repository root
         sha: Optional git commit SHA to pin the approval to (defaults to MR HEAD)
+        checked_sha: Optional head sha the verification ran against; a
+            mismatch with the live head refuses the approval
     """
-    result = await _approve_mr(mr_id, repo_root, sha)
+    result = await _approve_mr(mr_id, repo_root, sha, checked_sha)
     return json.dumps(result, indent=2)
 
 
