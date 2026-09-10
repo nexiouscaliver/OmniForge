@@ -90,6 +90,7 @@ Return a JSON array — one object per thread. Every thread from the input MUST 
 
 - **Every input thread must appear in the output.** Missing threads will be treated as `NEEDS_HUMAN`.
 - **Stay grounded in the diff.** Do not speculate about code not shown. If you cannot see evidence of a fix, use `NOT_APPLIED` or `NEEDS_HUMAN`.
+- **Truncated diffs fail open, not silent.** If the diff ends with a `[TRUNCATED: …]` marker, any thread whose file's changes are not visible in the diff shown to you is `NEEDS_HUMAN` with "truncated" in the reasoning — never `NOT_APPLIED` ("no relevant change" requires actually seeing that region; a region the cap cut away was never seen).
 - **Be specific in reasoning.** Name the file and line. Quote the relevant diff line if helpful.
 - **Do not suggest fixes.** You are an analyst. Return verdicts only.
 - **body_summary must be one sentence.** It is displayed to the user and included in nudge comments.
