@@ -398,3 +398,152 @@ class TestSToolRegistration:
         names = {t.name for t in tools}
         assert {"update_mr_labels", "post_mr_note",
                 "upload_project_file"} <= names
+
+
+# -- Review round 1: seam normalization + hardening ------------
+
+
+class TestSLabelSeamNormalization:
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s1_accepts_plan_lists_verbatim(self, mock_run, tmp_path):
+        # decision plans emit labels_add/labels_remove as LISTS; the helper
+        # must take them verbatim (joined), never TypeError
+        from omniforge_mcp_server import _update_mr_labels
+        repo = _make_repo(tmp_path)
+        mock_run.side_effect = [
+            _make_result(0, DIFF_REFS_JSON),
+            _make_result(0, UPDATED_MR_JSON),
+        ]
+        result = asyncio.run(_update_mr_labels(
+            "30",
+            add_labels=["omniforge-ui", "omniforge-screenshot-requested"],
+            remove_labels=["old-label"], repo_root=repo))
+        assert result["success"] is True
+        put_args = mock_run.call_args_list[1][0][0]
+        assert "add_labels=omniforge-ui,omniforge-screenshot-requested" in put_args
+        assert "remove_labels=old-label" in put_args
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s1_rejects_non_string_label_items(self, mock_run, tmp_path):
+        from omniforge_mcp_server import _update_mr_labels
+        repo = _make_repo(tmp_path)
+        result = asyncio.run(_update_mr_labels(
+            "30", add_labels=[42], repo_root=repo))
+        assert result["success"] is False
+        assert result["error_type"] == "validation_error"
+        assert mock_run.call_count == 0
+
+
+class TestSUploadHardening:
+    def test_s1_golden_body_bytes(self, tmp_path):
+        # byte-exact contract, not circular: exact literal for a known file
+        from omniforge_mcp_server import build_multipart_upload_body
+        img = tmp_path / "t.png"
+        img.write_bytes(b"png")
+        expected = (
+            b"--omniforge-upload-3f2a8c1d\r\n"
+            b'Content-Disposition: form-data; name="file"; filename="t.png"\r\n'
+            b"Content-Type: image/png\r\n"
+            b"\r\n"
+            b"png\r\n"
+            b"--omniforge-upload-3f2a8c1d--\r\n"
+        )
+        assert build_multipart_upload_body(str(img)) == expected
+
+    def test_s1_rejects_quote_in_filename(self, tmp_path):
+        from omniforge_mcp_server import build_multipart_upload_body
+        bad = tmp_path / 'weird";x=\r\n.png'
+        bad.write_bytes(b"png")
+        with pytest.raises(ValueError):
+            build_multipart_upload_body(str(bad))
+
+    def test_s1_rejects_control_chars_in_filename(self, tmp_path):
+        from omniforge_mcp_server import build_multipart_upload_body
+        bad = tmp_path / "bad\nname.png"
+        bad.write_bytes(b"png")
+        with pytest.raises(ValueError):
+            build_multipart_upload_body(str(bad))
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s1_relative_path_rejected(self, mock_run, tmp_path):
+        from omniforge_mcp_server import _upload_project_file
+        repo = _make_repo(tmp_path)
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"png")
+        result = asyncio.run(_upload_project_file("shot.png", repo))
+        assert result["success"] is False
+        assert result["error_type"] == "validation_error"
+        assert mock_run.call_count == 0
+
+
+# -- Review round 1: mocked end-to-end sequence ----------------
+
+
+class TestSSequence:
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s1_full_ask_reply_clear_sequence(self, mock_run, tmp_path):
+        """The no-network dry run: one MR walks ask -> author image reply
+        -> label clear, with every value crossing the seam asserted."""
+        import omni_ui_screenshot as flow
+        from omniforge_mcp_server import _post_mr_note, _update_mr_labels
+
+        repo = _make_repo(tmp_path)
+
+        # 1. detection: frontend MR
+        detection = flow.classify_frontend_change([
+            "src/admin/Console.tsx", "app/main.py", "README.md"])
+        assert detection["level"] == "strong"
+
+        # 2. review round 1 decides the ask
+        state = flow.new_state()
+        plan = flow.decide_review_ask(state, 1, detection)
+        assert plan["action"] == "ask"
+
+        # 3. the ask posts as a note; its discussion id is recorded
+        mock_run.side_effect = [
+            _make_result(0, DIFF_REFS_JSON),
+            _make_result(0, NOTE_JSON),
+        ]
+        note = asyncio.run(_post_mr_note(
+            "30", "UI change detected - please reply with a screenshot", repo))
+        assert note["success"] is True
+        state = flow.record_ask(state, 1, note["discussion_id"])
+        assert state["discussion_id"] == "abc-def-123"
+
+        # 4. labels cross the seam as plan lists, verbatim
+        mock_run.reset_mock()
+        mock_run.side_effect = [
+            _make_result(0, DIFF_REFS_JSON),
+            _make_result(0, UPDATED_MR_JSON),
+        ]
+        labeled = asyncio.run(_update_mr_labels(
+            "30", add_labels=plan["labels_add"],
+            remove_labels=plan["labels_remove"], repo_root=repo))
+        assert labeled["success"] is True
+
+        # 5. author replies on the recorded thread with an uploaded image
+        reply_body = "here: ![console](/uploads/h/console.png)"
+        assert flow.detect_image_reply(
+            state["discussion_id"], "abc-def-123", reply_body) is True
+
+        # 6. the reply is accepted; the requested label clears
+        accepted = flow.on_image_reply(state)
+        assert accepted["action"] == "image_accepted"
+        mock_run.reset_mock()
+        mock_run.side_effect = [
+            _make_result(0, DIFF_REFS_JSON),
+            _make_result(0, UPDATED_MR_JSON),
+        ]
+        cleared = asyncio.run(_update_mr_labels(
+            "30", add_labels=accepted["labels_add"],
+            remove_labels=accepted["labels_remove"], repo_root=repo))
+        assert cleared["success"] is True
+        put_args = mock_run.call_args_list[1][0][0]
+        assert "remove_labels=omniforge-screenshot-requested" in put_args
+
+        # 7. a later frontend push while posted re-arms exactly once/round
+        state = accepted["state"]
+        rearm = flow.decide_push_reask(state, 1, detection)
+        assert rearm["action"] == "reask"
+        assert rearm["state"]["discussion_id"] == "abc-def-123"
+        assert flow.decide_push_reask(rearm["state"], 1, detection)["action"] == "none"

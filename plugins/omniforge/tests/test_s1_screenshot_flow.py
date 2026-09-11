@@ -382,3 +382,53 @@ class TestSPushReask:
         snapshot = dict(state)
         decide_push_reask(state, 1, STRONG)
         assert state == snapshot
+
+
+# -- Review round 1: one-thread policy + round typing ----------
+
+
+class TestSOneThreadPolicy:
+    def test_s1_new_round_reask_goes_to_existing_thread(self):
+        state = record_ask(new_state(), 1, "disc-thread")
+        plan = decide_review_ask(state, 2, STRONG)
+        assert plan["action"] == "ask"
+        assert plan["post_as"] == "reply_on_recorded_thread"
+        assert plan["reason"] == "round_reask_existing_thread"
+
+    def test_s1_first_ask_is_a_new_thread(self):
+        plan = decide_review_ask(new_state(), 1, STRONG)
+        assert plan["action"] == "ask"
+        assert plan["post_as"] == "new_thread"
+
+    def test_s1_record_ask_preserves_original_thread(self):
+        state = record_ask(new_state(), 1, "disc-thread")
+        state = record_ask(state, 2, "disc-thread")  # engine posts a reply
+        assert state["discussion_id"] == "disc-thread"
+        assert state["asked_round"] == 2
+
+    def test_s1_record_ask_ignores_later_note_id_for_same_flow(self):
+        # if an engine mistakenly records a fresh note id while a thread is
+        # already recorded, the FIRST thread stays the identity
+        state = record_ask(new_state(), 1, "disc-first")
+        state = record_ask(state, 2, "disc-second")
+        assert state["discussion_id"] == "disc-first"
+
+    def test_s1_late_reply_on_original_thread_still_matches(self):
+        state = record_ask(new_state(), 1, "disc-first")
+        state = record_ask(state, 2, "disc-first")
+        body = "took a while: ![shot](/uploads/z/shot.png)"
+        assert detect_image_reply(state["discussion_id"], "disc-first", body) is True
+
+
+class TestSRoundTyping:
+    def test_s1_round_must_be_int(self):
+        with pytest.raises(ValueError):
+            decide_review_ask(new_state(), "2", STRONG)
+        with pytest.raises(ValueError):
+            decide_push_reask(new_state(), None, STRONG)
+        with pytest.raises(ValueError):
+            record_ask(new_state(), "1", "d")
+
+    def test_s1_negative_round_rejected(self):
+        with pytest.raises(ValueError):
+            decide_review_ask(new_state(), 0, STRONG)
