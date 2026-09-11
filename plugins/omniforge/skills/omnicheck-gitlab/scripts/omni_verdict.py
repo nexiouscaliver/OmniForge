@@ -47,6 +47,15 @@ _ARTIFACT_BODY_MARKERS = (
     "## OmniForge fix brief",    # paste-into-your-agent fix briefs
     "## Disposition summary",    # omnifix disposition roll-ups
     "🔄 **OmniForge review started**",
+    # the push sweep's OWN output (E3: found live on dogfood MR !29 — the
+    # report/breadcrumb notes returned as fetched threads on the NEXT
+    # sweep and were classified as findings). Prefix signatures, matched
+    # only at a line start, so a finding that QUOTES them mid-line stays
+    # a finding.
+    "**Push sweep report**",                 # the living report
+    "**Push check complete — head ",         # the per-sweep breadcrumb
+    "Push sweep at `",                       # a transition reply
+    "**⚠ Model leg unavailable this sweep",  # the degraded banner
 )
 
 _ROUND_SUMMARY_MARKER = re.compile(
