@@ -131,3 +131,42 @@ def classify_frontend_change(changed_files):
     else:
         level = "none"
     return {"level": level, "matched": matched, "weak_matched": weak_matched}
+
+
+# -- Ask-the-author flow state machine (stub - RED) ----------
+
+STATE_NONE = "none"
+STATE_REQUESTED = "requested"
+STATE_POSTED = "posted"
+
+
+def new_state():
+    raise NotImplementedError
+
+
+def validate_state(state):
+    raise NotImplementedError
+
+
+def decide_review_ask(state, round, detection, mr_state="opened", mr_draft=False):
+    raise NotImplementedError
+
+
+def record_ask(state, round, discussion_id):
+    raise NotImplementedError
+
+
+def note_has_upload_image(body):
+    raise NotImplementedError
+
+
+def detect_image_reply(recorded_discussion_id, event_discussion_id, note_body):
+    raise NotImplementedError
+
+
+def on_image_reply(state):
+    raise NotImplementedError
+
+
+def decide_push_reask(state, round, detection, mr_state="opened", mr_draft=False):
+    raise NotImplementedError

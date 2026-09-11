@@ -147,3 +147,238 @@ class TestSLabels:
     def test_s1_unknown_convention_rejected(self):
         with pytest.raises(ValueError):
             labels_for_convention("emoji")
+
+
+# -- Ask-author flow: state machine ---------------------------
+
+from omni_ui_screenshot import (
+    STATE_NONE,
+    STATE_POSTED,
+    STATE_REQUESTED,
+    decide_push_reask,
+    decide_review_ask,
+    detect_image_reply,
+    new_state,
+    note_has_upload_image,
+    on_image_reply,
+    record_ask,
+    validate_state,
+)
+
+STRONG = {"level": "strong", "matched": ["src/App.tsx"], "weak_matched": []}
+WEAK = {"level": "weak", "matched": [], "weak_matched": ["styles.css"]}
+NOT_FRONTEND = {"level": "none", "matched": [], "weak_matched": []}
+
+
+class TestSStateBasics:
+    def test_s1_new_state_shape(self):
+        state = new_state()
+        assert state == {
+            "screenshot_state": STATE_NONE,
+            "discussion_id": "",
+            "asked_round": None,
+            "reasked_round": None,
+        }
+
+    def test_s1_validate_state_rejects_unknown(self):
+        with pytest.raises(ValueError):
+            validate_state({"screenshot_state": "weird"})
+        with pytest.raises(ValueError):
+            validate_state({})
+
+    def test_s1_validate_state_accepts_known(self):
+        for value in (STATE_NONE, STATE_REQUESTED, STATE_POSTED):
+            validate_state({"screenshot_state": value})
+
+
+class TestSReviewAsk:
+    def test_s1_review_ask_first_round(self):
+        plan = decide_review_ask(new_state(), 1, STRONG)
+        assert plan["action"] == "ask"
+        assert plan["labels_add"] == [UI_LABEL, SCREENSHOT_REQUESTED_LABEL]
+        assert plan["labels_remove"] == []
+        assert plan["react"] is False
+
+    def test_s1_review_ask_draft_waits(self):
+        plan = decide_review_ask(new_state(), 1, STRONG, mr_draft=True)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "draft_wait"
+        assert plan["labels_add"] == []
+
+    @pytest.mark.parametrize("mr_state", ["merged", "closed", "locked"])
+    def test_s1_review_ask_terminal(self, mr_state):
+        plan = decide_review_ask(new_state(), 1, STRONG, mr_state=mr_state)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "mr_terminal"
+        assert plan["labels_add"] == []
+
+    def test_s1_review_ask_non_frontend_no_label_churn(self):
+        plan = decide_review_ask(new_state(), 1, NOT_FRONTEND)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "not_frontend"
+        assert plan["labels_add"] == [] and plan["labels_remove"] == []
+
+    def test_s1_review_ask_weak_mention_only(self):
+        plan = decide_review_ask(new_state(), 1, WEAK)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "weak_frontend_mention_only"
+        assert plan["labels_add"] == []
+
+    def test_s1_review_ask_once_per_round(self):
+        state = record_ask(new_state(), 1, "disc-abc")
+        plan = decide_review_ask(state, 1, STRONG)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "already_asked_this_round"
+
+    def test_s1_review_ask_new_round_allows_new_ask(self):
+        state = record_ask(new_state(), 1, "disc-abc")
+        plan = decide_review_ask(state, 2, STRONG)
+        assert plan["action"] == "ask"
+
+    def test_s1_review_ask_after_posted_none(self):
+        state = record_ask(new_state(), 1, "disc-abc")
+        state = on_image_reply(state)["state"]
+        plan = decide_review_ask(state, 2, STRONG)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "already_posted"
+
+    def test_s1_review_ask_does_not_mutate_input(self):
+        state = new_state()
+        snapshot = dict(state)
+        decide_review_ask(state, 1, STRONG)
+        assert state == snapshot
+
+    def test_s1_review_ask_invalid_state_raises(self):
+        with pytest.raises(ValueError):
+            decide_review_ask({"screenshot_state": "garbage"}, 1, STRONG)
+
+
+class TestSRecordAsk:
+    def test_s1_record_ask_stores_id_and_round(self):
+        state = record_ask(new_state(), 3, "disc-xyz")
+        assert state["screenshot_state"] == STATE_REQUESTED
+        assert state["discussion_id"] == "disc-xyz"
+        assert state["asked_round"] == 3
+
+
+class TestSImageReply:
+    @pytest.mark.parametrize("body,expected", [
+        ("![shot](/uploads/abc123/shot.png)", True),
+        ("here you go: ![render](https://gitlab.com/g/p/uploads/h/render.png)", True),
+        ("two: ![a](/uploads/x/a.png) and ![b](/uploads/y/b.png)", True),
+        ("[plain link](/uploads/a/b.png)", False),
+        ("![not an upload](/not-uploads/a.png)", False),
+        ("no markdown at all", False),
+        ("", False),
+    ])
+    def test_s1_note_has_upload_image(self, body, expected):
+        assert note_has_upload_image(body) is expected
+
+    def test_s1_detect_image_reply_matches_only_recorded_thread(self):
+        assert detect_image_reply("disc-1", "disc-1", "![s](/uploads/a/s.png)") is True
+        assert detect_image_reply("disc-1", "disc-2", "![s](/uploads/a/s.png)") is False
+        assert detect_image_reply("", "disc-1", "![s](/uploads/a/s.png)") is False
+        assert detect_image_reply("disc-1", "disc-1", "no image here") is False
+
+    def test_s1_on_image_reply_clears_label_reacts(self):
+        state = record_ask(new_state(), 1, "disc-1")
+        plan = on_image_reply(state)
+        assert plan["action"] == "image_accepted"
+        assert plan["labels_remove"] == [SCREENSHOT_REQUESTED_LABEL]
+        assert plan["labels_add"] == []
+        assert plan["react"] is True
+        assert plan["state"]["screenshot_state"] == STATE_POSTED
+        assert plan["state"]["discussion_id"] == "disc-1"
+
+    def test_s1_on_image_reply_idempotent(self):
+        state = record_ask(new_state(), 1, "disc-1")
+        posted = on_image_reply(state)["state"]
+        plan = on_image_reply(posted)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "already_posted"
+        assert plan["react"] is False
+
+    def test_s1_on_image_reply_does_not_mutate_input(self):
+        state = record_ask(new_state(), 1, "disc-1")
+        snapshot = dict(state)
+        on_image_reply(state)
+        assert state == snapshot
+
+
+class TestSPushReask:
+    def _posted_state(self):
+        state = record_ask(new_state(), 1, "disc-1")
+        return on_image_reply(state)["state"]
+
+    def test_s1_push_reask_after_posted(self):
+        state = self._posted_state()
+        plan = decide_push_reask(state, 1, STRONG)
+        assert plan["action"] == "reask"
+        assert plan["labels_add"] == [SCREENSHOT_REQUESTED_LABEL]
+        assert plan["labels_remove"] == []
+        assert plan["state"]["screenshot_state"] == STATE_REQUESTED
+        assert plan["state"]["discussion_id"] == "disc-1"
+        assert plan["state"]["reasked_round"] == 1
+
+    def test_s1_push_reask_capped_once_per_round(self):
+        state = self._posted_state()
+        state["reasked_round"] = 2
+        plan = decide_push_reask(state, 2, STRONG)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "reask_capped_this_round"
+        assert plan["state"]["screenshot_state"] == STATE_POSTED
+
+    def test_s1_push_reask_new_round_allows(self):
+        state = self._posted_state()
+        state["reasked_round"] = 1
+        plan = decide_push_reask(state, 2, STRONG)
+        assert plan["action"] == "reask"
+        assert plan["state"]["reasked_round"] == 2
+
+    def test_s1_push_non_frontend_no_churn(self):
+        state = self._posted_state()
+        plan = decide_push_reask(state, 1, NOT_FRONTEND)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "not_frontend"
+        assert plan["labels_add"] == []
+        assert plan["state"]["screenshot_state"] == STATE_POSTED
+
+    def test_s1_push_weak_no_churn(self):
+        state = self._posted_state()
+        plan = decide_push_reask(state, 1, WEAK)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "weak_frontend_mention_only"
+        assert plan["state"]["screenshot_state"] == STATE_POSTED
+
+    def test_s1_push_while_requested_none(self):
+        state = record_ask(new_state(), 1, "disc-1")
+        plan = decide_push_reask(state, 1, STRONG)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "awaiting_reply"
+        assert plan["state"]["screenshot_state"] == STATE_REQUESTED
+
+    def test_s1_push_state_none_no_action(self):
+        plan = decide_push_reask(new_state(), 1, STRONG)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "no_ask_outstanding"
+
+    def test_s1_push_draft_waits(self):
+        state = self._posted_state()
+        plan = decide_push_reask(state, 1, STRONG, mr_draft=True)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "draft_wait"
+        assert plan["state"]["screenshot_state"] == STATE_POSTED
+
+    @pytest.mark.parametrize("mr_state", ["merged", "closed"])
+    def test_s1_push_merged_terminal(self, mr_state):
+        state = self._posted_state()
+        plan = decide_push_reask(state, 1, STRONG, mr_state=mr_state)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "mr_terminal"
+        assert plan["state"]["screenshot_state"] == STATE_POSTED
+
+    def test_s1_push_reask_does_not_mutate_input(self):
+        state = self._posted_state()
+        snapshot = dict(state)
+        decide_push_reask(state, 1, STRONG)
+        assert state == snapshot
