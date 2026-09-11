@@ -205,6 +205,10 @@ def classify_thread(thread, verification=None):
         "id": thread.get("id", ""),
         "file_path": thread.get("file_path"),
         "line_number": thread.get("line_number"),
+        # the thread body rides along: the sweep's evidence packet uses it
+        # as the concern text (found live in the E3 dogfood run — an empty
+        # concern made the model answer "the concern text is empty")
+        "body": body,
         "disposition": None,
         "severity": extract_severity(body),
         "kind": extract_kind(body, thread.get("file_path")),
