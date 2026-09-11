@@ -64,6 +64,7 @@ SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS)
 import omni_fetch_mr          # noqa: E402  (sibling, never CWD-relative)
 import omni_glab_api          # noqa: E402
+import omni_delta             # noqa: E402  (P3: delta spec + overlay)
 
 SCHEMA = "omniforge-prepare/1"
 AGENTS = ("analyst", "codebase", "security")
@@ -101,6 +102,21 @@ def parse_args(argv=None):
     ap.add_argument("--prior-report", default=None,
                     help="prior findings JSON (array, or object with a "
                          "\"findings\" or \"prior_findings\" array)")
+    ap.add_argument("--delta-files", default=None, metavar="PATH",
+                    help="tier-1 delta review: JSON file naming the push's "
+                         "changed files (array, {\"files\": [...]}, or the "
+                         "sweep-result envelope). With --delta-base, a "
+                         "both-or-neither pair. The full-MR gather stays "
+                         "the anchor truth; the delta is applied as a "
+                         "file-set overlay — agents deep-dive only "
+                         "delta_files ∩ full-MR_files. NEVER a --since-sha "
+                         "gather (delta-relative line numbers mis-anchor "
+                         "threads).")
+    ap.add_argument("--delta-base", default=None, metavar="SHA",
+                    help="reviewed_head — the delta range base (the head "
+                         "the prior review covered); recorded in "
+                         "prepare.json and the reviewer briefs as the "
+                         "delta context")
     ap.add_argument("--verify-head", default=None, metavar="SHA",
                     help="compare gather.diff_refs.head_sha AFTER the full "
                          "gather; mismatch -> exit 4")
@@ -165,6 +181,20 @@ def _prior_report_stat(path):
     return stat
 
 
+def _delta_spec_stat(path):
+    """Dry-run stat for the delta spec (the --prior-report convention:
+    report the file, never judge the caller). valid_json means USABLE —
+    valid JSON AND a recognized shape (the load reason "ok")."""
+    stat = {"path": path, "exists": os.path.exists(path),
+            "valid_json": False, "files_count": None}
+    if stat["exists"]:
+        files, reason = omni_delta.load_delta_spec(path)
+        if reason == "ok":
+            stat["valid_json"] = True
+            stat["files_count"] = len(files)
+    return stat
+
+
 # ── dry-run plan ─────────────────────────────────────────────────────────
 
 def dry_run_plan(args):
@@ -184,6 +214,9 @@ def dry_run_plan(args):
     }
     if args.prior_report:
         plan["prior_report"] = _prior_report_stat(args.prior_report)
+    if args.delta_files is not None:
+        plan["delta"] = {"base_sha": args.delta_base,
+                         "spec": _delta_spec_stat(args.delta_files)}
     return plan
 
 
@@ -296,6 +329,11 @@ _DEPTH_SENTENCES = (
     "Cross-cutting: you still sweep ALL changed files at grep depth; "
     "full-file reads are your\nowned files only.")
 
+_DELTA_OWNER_INTRO = (
+    "Deep-dive owner (DELTA REVIEW — only files touched since "
+    "reviewed_head\n`%s`; the rest of this MR was reviewed at that head,\n"
+    "priors are authoritative, never re-adjudicated): these files:")
+
 _DISPATCH_NOTE = (
     "The orchestrator fills `{OWNED_FILES}` in the reference template "
     "with this brief's\n\"Owned files\" section above (owned list + both "
@@ -303,7 +341,7 @@ _DISPATCH_NOTE = (
     "assigned at dispatch (Phase 2).")
 
 
-def render_brief(agent, gather, partition, prior_count):
+def render_brief(agent, gather, partition, prior_count, delta=None):
     """Render one reviewer brief (section 2c template, byte-pinned by the
     hand-authored golden fixtures — the renderer was built to match THEM).
 
@@ -311,6 +349,13 @@ def render_brief(agent, gather, partition, prior_count):
     gather["fetched_at"], verbatim. No per-file diff content is ever
     rendered (binary-safe). `gather` carries the run's review_id (main()
     injects args.review_id before rendering).
+
+    `delta` (WP-P3): None renders today's briefs byte-identically; a dict
+    {"base_sha", "files"} switches the owned-files intro to the DELTA
+    REVIEW wording (priors authoritative) and adds the Delta scope stats
+    line. `partition` is the OVERLAID partition in that case — owned lists
+    already scoped to delta_files ∩ full-MR_files; anchors still come
+    from the full-MR gather (diff_line_map), never a delta-relative diff.
     """
     data = gather.get("data") or {}
     head_sha = (gather.get("diff_refs") or {}).get("head_sha") or ""
@@ -345,7 +390,8 @@ def render_brief(agent, gather, partition, prior_count):
         "",
         "## Owned files (deep-dive ownership)",
         "",
-        "Deep-dive owner: these files:",
+        (_DELTA_OWNER_INTRO % delta["base_sha"]) if delta
+        else "Deep-dive owner: these files:",
         "",
     ]
     if empty_mr:
@@ -388,22 +434,28 @@ def render_brief(agent, gather, partition, prior_count):
     if prior_count is not None:
         lines.append("- Prior review findings: %d — see prior report"
                      % prior_count)
+    if delta is not None:
+        lines.append("- Delta scope: %d of %d MR files deep-dived "
+                     "(delta base `%s`)"
+                     % (len(delta["files"]), files_total,
+                        delta["base_sha"]))
     lines += ["", "## Dispatch note", "", _DISPATCH_NOTE]
     return "\n".join(lines) + "\n"
 
 
 def build_prepare_json(review_id, project, mr_iid, head_sha, run_dir,
                        partition, prior_report, elapsed_ms,
-                       created_at=None):
-    """The 15-key prepare.json dict (exact key set, section 2c). Pure:
-    created_at defaults to wall-clock NOW but is injectable so tests can
-    normalize it."""
+                       created_at=None, delta=None):
+    """The 15-key prepare.json dict (exact key set, section 2c) — plus the
+    additive "delta" key, present ONLY in delta-review runs (WP-P3:
+    {"base_sha", "files"}). Pure: created_at defaults to wall-clock NOW
+    but is injectable so tests can normalize it."""
     run_dir = os.path.abspath(run_dir)
     paths = output_paths(run_dir)
     if created_at is None:
         created_at = datetime.datetime.now(
             datetime.timezone.utc).isoformat()
-    return {
+    doc = {
         "schema": SCHEMA,
         "created_at": created_at,
         "review_id": review_id,
@@ -424,6 +476,9 @@ def build_prepare_json(review_id, project, mr_iid, head_sha, run_dir,
         "prior_report": prior_report,
         "elapsed_ms": int(elapsed_ms),
     }
+    if delta is not None:
+        doc["delta"] = delta
+    return doc
 
 
 def build_receipt(run_dir, project, mr_iid, review_id, head_sha, partition,
@@ -508,6 +563,15 @@ def _wipe_run_dir(run_dir):
 def main(argv=None):
     args = parse_args(argv)
 
+    # WP-P3: the delta flags are a both-or-neither pair — checked before
+    # the dry-run branch so BOTH paths enforce it (a usage error, never a
+    # half-scoped run).
+    if (args.delta_files is None) != (args.delta_base is None):
+        print("omni_prepare: --delta-files and --delta-base are a "
+              "both-or-neither pair (delta review scoping needs the "
+              "reviewed_head base)", file=sys.stderr)
+        return 2
+
     if args.dry_run:
         print(json.dumps(dry_run_plan(args)))
         return 0
@@ -540,6 +604,16 @@ def main(argv=None):
             return 2
         prior_report_doc = {"path": args.prior_report,
                             "findings_count": prior_count}
+
+    # --delta-files: same discipline — in a REAL run a bad delta spec is
+    # FATAL usage (exit 2), checked before the wipe/fetch.
+    delta_files = None
+    if args.delta_files is not None:
+        delta_files, reason = omni_delta.load_delta_spec(args.delta_files)
+        if reason != "ok":
+            print("omni_prepare: --delta-files %s" % reason,
+                  file=sys.stderr)
+            return 2
 
     # R1 wipe: after preconditions, before the fetch (a failing exit-2/3
     # invocation must not destroy a prior run's artifacts)
@@ -609,13 +683,25 @@ def main(argv=None):
         return _fail_stage("internal", "cannot read partition: %s" % e)
 
     gather["review_id"] = args.review_id      # renderer injection
+
+    # WP-P3: the delta file-set overlay — applied AFTER partition.json is
+    # on disk (the subprocess wrote the FULL-MR truth; anchors come from
+    # the full-MR diff_line_map) and BEFORE the briefs/prepare.json, so
+    # only the deep-dive layer is scoped. NEVER a re-gather.
+    delta_doc = None
+    if delta_files is not None:
+        partition = omni_delta.apply_delta_overlay(partition, delta_files)
+        delta_doc = {"base_sha": args.delta_base,
+                     "files": omni_delta.scoped_files(partition)}
     elapsed_ms = int((time.monotonic() - started) * 1000)
     prepare_doc = build_prepare_json(
         review_id=args.review_id, project=args.project, mr_iid=args.iid,
         head_sha=head_sha, run_dir=run_dir, partition=partition,
-        prior_report=prior_report_doc, elapsed_ms=elapsed_ms)
+        prior_report=prior_report_doc, elapsed_ms=elapsed_ms,
+        delta=delta_doc)
     outputs = [(os.path.join(run_dir, "briefs", AGENT_FILES[a]),
-                render_brief(a, gather, partition, prior_count))
+                render_brief(a, gather, partition, prior_count,
+                             delta=delta_doc))
                for a in AGENTS]
     outputs.append((paths["prepare_json"],
                     json.dumps(prepare_doc, indent=2, ensure_ascii=False)

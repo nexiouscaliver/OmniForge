@@ -78,7 +78,9 @@ Optional flags: `[--prior-report <path>]` on re-reviews, when the prior run's di
 prior-out artifact is still present (`/tmp/omni_mr{id}_prior_findings.json` — Phase 7
 removes it after completed runs) — and `[--verify-head <prior head>]`
 ONLY when a prior run recorded one (the `head_sha` from that run's `prepare.json`);
-`[--dry-run]` validates the invocation only (see the exit codes below). (If
+`[--delta-files <path>]` + `[--delta-base <sha>]` together on tier-1 delta reviews
+(see "Delta review runs" below); `[--dry-run]` validates the invocation only (see
+the exit codes below). (If
 `${CLAUDE_PLUGIN_ROOT}` is not set in the current context, construct the script path from
 this skill's own base directory plus `scripts/omni_prepare.py`.)
 
@@ -145,6 +147,48 @@ When `diff_line_count` in `/tmp/omni_run_{id}/gather.json` is high (>3000 lines)
 5. **Clean up temp files in Phase 7** alongside worktree cleanup.
 
 This approach reduces agent context usage by 50-80% on large MRs while preserving full review quality.
+
+### Delta review runs (tier-1 push re-check)
+
+When a push adds substantial NEW work after a completed review and the sweep's residual
+inventory trips the delta threshold (rev-3 defaults: >3 residual files, >50 added lines,
+any new non-test file, or a manifest/CI/migration shape; per-project overrides via the
+sweep's `--threshold-config` / `OMNIFORGE_DELTA_THRESHOLD`), the delta review is a
+NORMAL omnireview run whose Phase 1 carries two extra flags — never a different flow:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_prepare.py" \
+  --project {project} --iid {id} --review-id {id} --run-dir /tmp/omni_run_{id} \
+  --prior-report /tmp/omni_mr{id}_prior_findings.json \
+  --delta-files {delta spec JSON} --delta-base {reviewed_head}
+```
+
+- **Anchoring rule (load-bearing):** the full-MR gather stays the anchor truth —
+  `diff_line_map` comes from the FULL MR diff and thread anchors use full-MR line
+  numbers, always. NEVER re-gather with `--since-sha` or any delta-relative diff:
+  delta-relative line numbers silently mis-anchor threads (wrong
+  `position[new_line]`, then `400 line_code` batch aborts). The delta is applied as a
+  FILE-SET OVERLAY at the prepare/partition layer: agents deep-dive only
+  `delta_files ∩ full-MR_files` (the briefs' Owned files), the cross-cutting sweep
+  still covers ALL changed files, and the on-disk `partition.json` keeps the full-MR
+  ownership.
+- `--delta-files` + `--delta-base` are a both-or-neither pair; in a real run a bad
+  delta spec is fatal exit 2 (the `--prior-report` discipline). `prepare.json`
+  records the scope (`delta.base_sha` + the scoped file list) and the reviewer briefs
+  carry the DELTA REVIEW wording.
+- **Priors are authoritative, never re-adjudicated:** always pass `--prior-report`
+  (retrospective digest; open priors are replied on their recorded threads, resolved
+  priors never re-posted). Attach the delta commit range
+  `git log --oneline {delta-base}..{head}` to the Phase 3 dispatch context.
+- New findings post as anchored threads in a round addendum (the posting guide's
+  summary template, headed as the delta round over `{delta-base}..{head}`);
+  association of new findings to moved priors rides the existing Jaccard machinery in
+  `omni_consolidate.py --prior`.
+- Caps and ancestry are the dispatcher's job (consumed here, never computed): ONE
+  delta review per push batch, a daily cap, and never on non-ancestor
+  (rebased/force-pushed) deltas. On completion the engine's run-completion ledger
+  write promotes `reviewed_head := head` itself — the plugin never writes engine
+  state.
 
 ### Fallback: improvised path (omni_prepare exit 1 or script absent)
 

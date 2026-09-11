@@ -470,26 +470,92 @@ def compute_transitions(verdicts, last_verdicts):
     return out
 
 
-def residual_threshold(residual):
-    """The E3-default tier-1 triage flag (rev-3 step 7 defaults): >3 files,
-    >50 added lines, any non-test/docs content, or a manifest/CI/migration
-    shape trips it. Computed from the aggregate inventory (the shapes set
-    is a union — 'code' in it means unreviewed code content exists, a
-    conservative superset of 'any new non-test file'); per-project
-    overrides are P3's scope."""
+DEFAULT_THRESHOLD_CONFIG = {
+    "files_min": 3,            # trip when residual file count > files_min
+    "additions_min": 50,       # trip when residual additions > additions_min
+    "non_test_content": True,  # trip on code/migration shapes ("any new
+                               # non-test file", conservatively: any
+                               # unreviewed non-test/docs content)
+    "manifest_ci": True,       # trip on manifest/CI shapes
+}
+
+
+def validate_threshold_config(obj):
+    """Validate a per-project threshold override: a JSON object whose keys
+    are a subset of DEFAULT_THRESHOLD_CONFIG with matching types (int
+    knobs non-negative and never bools; bool knobs never ints). Returns
+    the validated dict; raises ValueError naming the offender otherwise."""
+    if not isinstance(obj, dict):
+        raise ValueError("threshold config must be a JSON object")
+    out = {}
+    for key, value in obj.items():
+        if key not in DEFAULT_THRESHOLD_CONFIG:
+            raise ValueError(
+                "unknown threshold key %r (allowed: %s)"
+                % (key, ", ".join(sorted(DEFAULT_THRESHOLD_CONFIG))))
+        default = DEFAULT_THRESHOLD_CONFIG[key]
+        if isinstance(default, bool):
+            if not isinstance(value, bool):
+                raise ValueError("threshold key %r must be a boolean"
+                                 % key)
+        else:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError("threshold key %r must be an integer"
+                                 % key)
+            if value < 0:
+                raise ValueError(
+                    "threshold key %r must be >= 0" % key)
+        out[key] = value
+    return out
+
+
+def threshold_config_from_spec(spec, env_value=None):
+    """Resolve the effective threshold override: the --threshold-config
+    value (inline JSON or @file) REPLACES the env value — never merged.
+    Returns None (defaults) when both are absent; raises ValueError on
+    anything malformed. Env note: the seam dispatcher's allowlist env does
+    NOT carry OMNIFORGE_DELTA_THRESHOLD — dispatchers pass the flag."""
+    raw = spec if spec is not None else env_value
+    if raw is None:
+        return None
+    if raw.startswith("@"):
+        try:
+            with open(raw[1:], encoding="utf-8") as fh:
+                raw = fh.read()
+        except OSError as e:
+            raise ValueError("cannot read threshold config: %s" % e)
+    try:
+        obj = json.loads(raw)
+    except ValueError as e:
+        raise ValueError("threshold config is not valid JSON: %s" % e)
+    return validate_threshold_config(obj)
+
+
+def residual_threshold(residual, config=None):
+    """The tier-1 triage flag (rev-3 step 7 defaults): >3 files, >50 added
+    lines, any non-test/docs content, or a manifest/CI/migration shape
+    trips it. Computed from the aggregate inventory (the shapes set is a
+    union — 'code' in it means unreviewed code content exists, a
+    conservative superset of 'any new non-test file'). P3: every knob is
+    overridable per project via `config` (validated by
+    validate_threshold_config; None = the shipped defaults)."""
+    cfg = dict(DEFAULT_THRESHOLD_CONFIG)
+    if config is not None:
+        cfg.update(validate_threshold_config(config))
     residual = residual or {}
     files = residual.get("files") or []
     shapes = set(residual.get("shapes") or [])
-    if len(files) > 3:
-        return True, "%d residual files > 3" % len(files)
+    if len(files) > cfg["files_min"]:
+        return True, "%d residual files > %d" % (len(files),
+                                                 cfg["files_min"])
     try:
-        if int(residual.get("additions", 0)) > 50:
-            return True, "residual additions > 50"
+        if int(residual.get("additions", 0)) > cfg["additions_min"]:
+            return True, "residual additions > %d" % cfg["additions_min"]
     except (TypeError, ValueError):
         pass
-    if shapes & {"code", "migration"}:
+    if cfg["non_test_content"] and shapes & {"code", "migration"}:
         return True, "non-test residual content present"
-    if shapes & {"manifest", "ci"}:
+    if cfg["manifest_ci"] and shapes & {"manifest", "ci"}:
         return True, "manifest/CI residual present"
     return False, ""
 
@@ -785,9 +851,27 @@ def main(argv=None):
     ap.add_argument("--ledger", default="",
                     help="engine mr-state ledger path (READ-ONLY: skip "
                          "guards, sweep number, transitions, publish hint)")
+    ap.add_argument("--threshold-config", default=None, metavar="JSON|@FILE",
+                    help="per-project delta-threshold override (inline "
+                         "JSON or @file; keys files_min/additions_min/"
+                         "non_test_content/manifest_ci). REPLACES the "
+                         "OMNIFORGE_DELTA_THRESHOLD env fallback — never "
+                         "merged. The seam dispatcher's allowlist env does "
+                         "not carry the env var: dispatchers pass the flag.")
     ap.add_argument("--out-report", default="")
     ap.add_argument("--out-breadcrumb", default="")
     args = ap.parse_args(argv or sys.argv[1:])
+
+    # P3: resolve the threshold override FIRST — a malformed config is
+    # fatal (exit 2) before any sweep work, never silently defaulted.
+    try:
+        threshold_override = threshold_config_from_spec(
+            args.threshold_config,
+            None if args.threshold_config is not None
+            else os.environ.get("OMNIFORGE_DELTA_THRESHOLD"))
+    except ValueError as e:
+        print("omni_sweep: --threshold-config %s" % e, file=sys.stderr)
+        return 2
 
     # Ledger consumption (E3 seam): read-ONLY, every unreadable shape
     # degrades with ledger_error=True — the sweep itself never dies on it.
@@ -846,8 +930,9 @@ def main(argv=None):
                     and not isinstance(note_id, bool)
                     else {"action": "create", "note_id": None}),
         "residual_decision": (lambda mr: {"threshold_met": mr[0],
-                                          "reason": mr[1]})(
-            residual_threshold(result["residual"])),
+                                          "reason": mr[1],
+                                          "config": threshold_override})(
+            residual_threshold(result["residual"], threshold_override)),
     })
     if ledger_error:
         result["ledger_error"] = True

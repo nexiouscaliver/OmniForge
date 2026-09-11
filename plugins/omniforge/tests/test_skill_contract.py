@@ -457,7 +457,7 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("--since-sha", delta)
         self.assertIn("never", delta.lower())
         self.assertIn("anchor", delta.lower())
-        self.assertIn("priors are authoritative", delta)
+        self.assertIn("Priors are authoritative", delta)
         self.assertIn("never re-adjudicated", delta)
         self.assertIn("round addendum", delta)
         self.assertIn("--prior-report", delta)

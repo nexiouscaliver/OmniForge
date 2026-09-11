@@ -208,8 +208,8 @@ class SweepMainThresholdTests(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             with mock.patch.dict(os.environ, env or {}, clear=False):
                 rc = omni_sweep.main(argv)
-        return rc, json.loads(
-            [l for l in out.getvalue().splitlines() if l.strip()][-1])
+        # the sweep result prints multi-line (indent=1): whole-stdout parse
+        return rc, json.loads(out.getvalue())
 
     def test_p3_main_threshold_config_flag_overrides_default(self):
         with tempfile.TemporaryDirectory() as td:

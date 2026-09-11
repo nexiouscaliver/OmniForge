@@ -319,7 +319,7 @@ class PrepareDeltaRunTests(unittest.TestCase):
         paths = [p for _, p in log]
         for needle in ("/diffs", "/discussions", "/commits", "/versions",
                        "/notes", "/merge_requests/" + MR):
-            self.assertTrue(any(n in p for p in paths), needle)
+            self.assertTrue(any(needle in p for p in paths), needle)
 
     def test_p3_delta_spec_object_shape_accepted(self):
         rc, so, se, run_dir, _ = self._run_delta(
