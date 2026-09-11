@@ -155,11 +155,11 @@ above).
 
 ## Interpretation choices flagged for the operator
 
-- "One ask per review round" is implemented as a CAP (never more than one
-  ask event per round), not as an automatic re-ask each round: while an
-  ask is unanswered the flow does not nag on review rounds alone — but a
-  NEW round DOES allow one more ask (as a reply on the same thread) if the
-  operator wants cadence; the push-driven re-arm is the primary re-ask.
+- "One ask per review round" is implemented as a CAP plus a cadence: each
+  NEW review round emits at most one ask — as a REPLY on the single
+  recorded thread while an ask is outstanding (never a second thread); the
+  push-driven re-arm is an additional, separately-capped re-ask path on the
+  same thread.
 - The weak vocabulary includes css-family extensions and package.json
   (rev-3 doc names them alongside path hints); weak is mention-only, so
   nothing labels/asks on it tonight or in wave 5's current contract.

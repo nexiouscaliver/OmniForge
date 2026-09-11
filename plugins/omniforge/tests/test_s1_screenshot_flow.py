@@ -432,3 +432,20 @@ class TestSRoundTyping:
     def test_s1_negative_round_rejected(self):
         with pytest.raises(ValueError):
             decide_review_ask(new_state(), 0, STRONG)
+
+
+class TestSReaskPlanShape:
+    def test_s1_push_rearm_carries_post_as(self):
+        state = record_ask(new_state(), 1, "disc-1")
+        posted = on_image_reply(state)["state"]
+        plan = decide_push_reask(posted, 2, STRONG)
+        assert plan["post_as"] == "reply_on_recorded_thread"
+
+    def test_s1_requested_with_empty_thread_id_opens_new_thread(self):
+        # ledger drift fallback: requested state with no recorded thread
+        # must not block the ask; it opens a fresh thread
+        drifted = {"screenshot_state": STATE_REQUESTED, "discussion_id": "",
+                   "asked_round": None, "reasked_round": None}
+        plan = decide_review_ask(drifted, 1, STRONG)
+        assert plan["action"] == "ask"
+        assert plan["post_as"] == "new_thread"

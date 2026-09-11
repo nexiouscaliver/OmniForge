@@ -322,7 +322,8 @@ def decide_push_reask(state, round, detection, mr_state="opened",
         re_armed["screenshot_state"] = STATE_REQUESTED
         re_armed["reasked_round"] = round
         return _plan("reask", "frontend_push_rearm", re_armed,
-                     labels_add=(SCREENSHOT_REQUESTED_LABEL,))
+                     labels_add=(SCREENSHOT_REQUESTED_LABEL,),
+                     post_as="reply_on_recorded_thread")
     if state["screenshot_state"] == STATE_REQUESTED:
         return _plan("none", "awaiting_reply", state)
     return _plan("none", "no_ask_outstanding", state)
