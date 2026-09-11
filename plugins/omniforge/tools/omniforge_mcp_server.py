@@ -3,9 +3,11 @@
 
 import asyncio
 import json
+import mimetypes
 import os
 import re
 import shutil
+import tempfile
 
 # ── Constants ──────────────────────────────────────────────
 
@@ -959,6 +961,278 @@ async def _resolve_discussion(
         "discussion_id": discussion_id,
         "resolved": resolved,
         "action": "discussion_resolved" if resolved else "discussion_unresolved",
+    }
+
+
+# ── S1 Screenshot Flow Helpers ────────────────────
+
+# GitLab project uploads platform limit (docs.gitlab.com): 100 MiB.
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+# Fixed multipart boundary for upload bodies: deterministic so the body and
+# the Content-Type header can be verified byte-for-byte. build_multipart_
+# upload_body refuses file content containing it (would corrupt the part
+# framing).
+MULTIPART_BOUNDARY = "omniforge-upload-3f2a8c1d"
+
+
+def multipart_content_type() -> str:
+    """The Content-Type header matching MULTIPART_BOUNDARY."""
+    return f"multipart/form-data; boundary={MULTIPART_BOUNDARY}"
+
+
+def build_multipart_upload_body(file_path: str) -> bytes:
+    """Build the multipart/form-data body for POST /projects/:id/uploads.
+
+    The installed glab (1.6x) has no --form flag and serializes --field
+    values as JSON strings, so multipart cannot be expressed through it
+    directly. The body is built here and sent raw via `glab api --input`
+    with an explicit Content-Type header carrying the same boundary.
+    """
+    filename = os.path.basename(file_path)
+    if not filename or re.search(r'[\x00-\x1f\x7f"]', filename):
+        # the name lands inside a MIME header; quotes/newlines would break
+        # part framing (header injection into the request body)
+        raise ValueError(
+            "file name contains quotes or control characters; refusing to "
+            "build the multipart body")
+    with open(file_path, "rb") as fh:
+        content = fh.read()
+    if MULTIPART_BOUNDARY.encode() in content:
+        raise ValueError(
+            "file content contains the multipart boundary; refusing to "
+            "build an ambiguous body")
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    head = (
+        f"--{MULTIPART_BOUNDARY}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+        f"Content-Type: {content_type}\r\n\r\n"
+    ).encode()
+    tail = f"\r\n--{MULTIPART_BOUNDARY}--\r\n".encode()
+    return head + content + tail
+
+
+async def _update_mr_labels(mr_id: str, add_labels: str = "",
+                            remove_labels: str = "", repo_root: str = "") -> dict:
+    """Add and/or remove MR labels in ONE PUT.
+
+    Uses the merge request API's add_labels/remove_labels params directly
+    (auto-create semantics, no label pre-creation, no GET-merge-PUT race).
+    """
+    def _normalize_labels(labels, arg_name):
+        """Accept a comma-separated string OR the list a decision plan
+        emits; anything else is a validation error, never a TypeError."""
+        if labels is None:
+            return ""
+        if isinstance(labels, str):
+            return validate_labels(labels)
+        if isinstance(labels, (list, tuple)):
+            for item in labels:
+                if not isinstance(item, str):
+                    raise ValueError(
+                        f"{arg_name} list items must be strings; got: "
+                        f"{item!r}")
+            return validate_labels(",".join(labels))
+        raise ValueError(
+            f"{arg_name} must be a comma-separated string or a list of "
+            f"strings; got: {type(labels).__name__}")
+
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+        add_labels = _normalize_labels(add_labels, "add_labels")
+        remove_labels = _normalize_labels(remove_labels, "remove_labels")
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not add_labels and not remove_labels:
+        return {
+            "success": False,
+            "error": "No labels given: pass add_labels and/or remove_labels.",
+            "error_type": "validation_error",
+        }
+
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs or not diff_refs.get("success"):
+        return {
+            "success": False,
+            "error": diff_refs.get("error", f"Could not fetch MR !{mr_id}.") if diff_refs else f"Could not fetch MR !{mr_id}.",
+            "error_type": diff_refs.get("error_type", "mr_not_found") if diff_refs else "mr_not_found",
+        }
+    iid = diff_refs["iid"]
+
+    args = [
+        "glab", "api", f"projects/:fullpath/merge_requests/{iid}",
+        "--method", "PUT",
+    ]
+    if add_labels:
+        args.extend(["--raw-field", f"add_labels={add_labels}"])
+    if remove_labels:
+        args.extend(["--raw-field", f"remove_labels={remove_labels}"])
+
+    r = await run_exec(args, cwd=repo_root)
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to update labels: {r.stderr}",
+            "error_type": "label_update_failed",
+        }
+    try:
+        updated = json.loads(r.stdout) if r.stdout.strip() else {}
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Failed to parse MR response after label update.",
+            "error_type": "parse_error",
+        }
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "iid": iid,
+        "labels": updated.get("labels", []),
+        "added": add_labels,
+        "removed": remove_labels,
+        "action": "labels_updated",
+    }
+
+
+async def _post_mr_note(mr_id: str, body: str, repo_root: str) -> dict:
+    """Post a top-level MR note via the API, returning note + discussion ids.
+
+    The returned discussion_id is the durable thread identity the S1
+    screenshot reply detection matches author replies against.
+    """
+    try:
+        mr_id = validate_mr_id(mr_id)
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not body or not body.strip():
+        return {"success": False, "error": "Note body is empty.", "error_type": "validation_error"}
+
+    diff_refs = await _get_mr_diff_refs(mr_id, repo_root)
+    if not diff_refs or not diff_refs.get("success"):
+        return {
+            "success": False,
+            "error": diff_refs.get("error", f"Could not fetch MR !{mr_id}.") if diff_refs else f"Could not fetch MR !{mr_id}.",
+            "error_type": diff_refs.get("error_type", "mr_not_found") if diff_refs else "mr_not_found",
+        }
+    iid = diff_refs["iid"]
+
+    r = await run_exec(
+        [
+            "glab", "api",
+            f"projects/:fullpath/merge_requests/{iid}/notes",
+            "--method", "POST",
+            "--raw-field", f"body={body}",
+        ],
+        cwd=repo_root,
+    )
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to post note: {r.stderr}",
+            "error_type": "post_failed",
+        }
+    try:
+        note = json.loads(r.stdout) if r.stdout.strip() else {}
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Failed to parse note response.",
+            "error_type": "parse_error",
+        }
+
+    return {
+        "success": True,
+        "mr_id": mr_id,
+        "note_id": note.get("id"),
+        "discussion_id": note.get("discussion_id", ""),
+        "action": "note_posted",
+    }
+
+
+async def _upload_project_file(file_path: str, repo_root: str) -> dict:
+    """Upload a file to the project via POST /projects/:id/uploads.
+
+    Returns the response markdown (embeddable verbatim in notes), url and
+    full_url. Multipart is built locally (glab 1.6x cannot express it) and
+    sent raw via `glab api --input` with the matching Content-Type header.
+    The body file is temporary and always removed.
+    """
+    try:
+        repo_root = validate_repo_root(repo_root)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    if not file_path or not os.path.isabs(file_path):
+        return {
+            "success": False,
+            "error": f"file_path must be absolute: {file_path}",
+            "error_type": "validation_error",
+        }
+    if not os.path.isfile(file_path):
+        return {
+            "success": False,
+            "error": f"File not found: {file_path}",
+            "error_type": "validation_error",
+        }
+    if os.path.getsize(file_path) > MAX_UPLOAD_BYTES:
+        return {
+            "success": False,
+            "error": (
+                f"File exceeds the {MAX_UPLOAD_BYTES} byte GitLab uploads "
+                f"limit: {file_path}"
+            ),
+            "error_type": "validation_error",
+        }
+    try:
+        body = build_multipart_upload_body(file_path)
+    except ValueError as e:
+        return {"success": False, "error": str(e), "error_type": "validation_error"}
+
+    tmp_name = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+                prefix="omni-upload-", suffix=".multipart", delete=False) as tmp:
+            tmp_name = tmp.name  # captured first: a failed write must not leak
+            tmp.write(body)
+        r = await run_exec(
+            [
+                "glab", "api", "projects/:fullpath/uploads",
+                "--method", "POST",
+                "--input", tmp_name,
+                "-H", multipart_content_type(),
+            ],
+            cwd=repo_root, timeout=300,
+        )
+    finally:
+        if tmp_name and os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+
+    if r.returncode != 0:
+        return {
+            "success": False,
+            "error": f"Failed to upload file: {r.stderr}",
+            "error_type": "upload_failed",
+        }
+    try:
+        payload = json.loads(r.stdout) if r.stdout.strip() else {}
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Failed to parse upload response.",
+            "error_type": "parse_error",
+        }
+
+    return {
+        "success": True,
+        "markdown": payload.get("markdown", ""),
+        "url": payload.get("url", ""),
+        "full_url": payload.get("full_url", ""),
+        "action": "file_uploaded",
     }
 
 
@@ -1944,6 +2218,57 @@ async def resolve_discussion(
         repo_root: Absolute path to the git repository root
     """
     result = await _resolve_discussion(mr_id, discussion_id, resolved, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def update_mr_labels(mr_id: str, repo_root: str,
+                           add_labels: str = "",
+                           remove_labels: str = "") -> str:
+    """Add and/or remove labels on a GitLab merge request in a single call.
+
+    Uses add_labels/remove_labels semantics (labels auto-create on add; no
+    GET-merge-PUT race). Pass comma-separated label names.
+
+    Args:
+        mr_id: Merge request number
+        repo_root: Absolute path to the git repository root
+        add_labels: Comma-separated labels to add (may be new labels)
+        remove_labels: Comma-separated labels to remove
+    """
+    result = await _update_mr_labels(mr_id, add_labels, remove_labels, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def post_mr_note(mr_id: str, body: str, repo_root: str) -> str:
+    """Post a top-level note on a GitLab MR and return its discussion id.
+
+    The discussion id is the durable thread identity to record when asking
+    an author for something (e.g. a rendered-UI screenshot); replies are
+    matched on it.
+
+    Args:
+        mr_id: Merge request number
+        body: Note text (markdown supported)
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _post_mr_note(mr_id, body, repo_root)
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def upload_project_file(file_path: str, repo_root: str) -> str:
+    """Upload a file to the project (GitLab uploads API) and return markdown.
+
+    The returned markdown embeds the upload verbatim and can be included in
+    notes. Sized to GitLab's 100 MiB uploads limit.
+
+    Args:
+        file_path: Absolute path to the file to upload
+        repo_root: Absolute path to the git repository root
+    """
+    result = await _upload_project_file(file_path, repo_root)
     return json.dumps(result, indent=2)
 
 
