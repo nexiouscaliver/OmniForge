@@ -1,0 +1,145 @@
+{
+ "repo": "cleo",
+ "iid": 1108,
+ "title": "feat: GEO query lifecycle redesign ... (reapply of !1104)",
+ "runs": [
+  {
+   "timestamp": "2026-08-07T16:06:21.403Z",
+   "gate": "APPROVED",
+   "head_at_run": "8f6395554774",
+   "bot_approval": "2026-08-07T16:05:40.282Z",
+   "merged": "2026-08-07T16:09:07.781Z",
+   "fc_counts": {
+    "applied": 0,
+    "silently_applied": 3,
+    "not_applied": 10,
+    "needs_human": 1
+   },
+   "per_thread": [
+    {
+     "thread_id": "3f34c178 Critical migration",
+     "anchor": "db/migrations",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "moved: prod/152_geo_query_category.sql added, root 137 gone",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git diff --name-status 600105da...8f63955"
+    },
+    {
+     "thread_id": "5020a3c6 90-day fetch no projection",
+     "anchor": "geo_query_window.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "fix present: load_only(...) in _rows_by_query_day (commit 9a21b731)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git show 9a21b731 lines 19-34"
+    },
+    {
+     "thread_id": "e3cbed35 LLM task unbounded",
+     "anchor": "geo_service_v2.py",
+     "omnicheck_verdict": "NEEDS_HUMAN('bounded=True added but session still open')",
+     "ground_truth": "bounded=True fix IS present (diff line 5289-5293) + pooled-session mgmt in 9a21b731; residual design concern genuine",
+     "judgment": "PARTIALLY_DETERMINABLE",
+     "hypothesis": "H3",
+     "evidence": "diff grep bounded=True"
+    },
+    {
+     "thread_id": "ad99e350 alerting not migrated",
+     "anchor": "geo_alert_detectors.py",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: file untouched in diff",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git diff --name-only | grep alert -> empty"
+    },
+    {
+     "thread_id": "8291ab18 staleness bound",
+     "anchor": "_latest_scored_snapshot",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: no staleness bound added",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "grep stale/_latest_scored_snapshot -> absent"
+    },
+    {
+     "thread_id": "dfeb4f06 no dedicated test file",
+     "anchor": "geo_outcome_rules",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: tests/geo_lifecycle/test_geo_outcome_rules.py not created",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "name-only grep test_geo_outcome -> empty"
+    },
+    {
+     "thread_id": "9 unnamed-tier floor",
+     "anchor": "geo_run_tier_service.py",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: promoted_on still start-of-transition-day (line 371), no +1 day",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git show 8f63955:geo_run_tier_service.py:369-372"
+    },
+    {
+     "thread_id": "68206a9 showIcons dead",
+     "anchor": "GeoExportDropdown.tsx",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: prop defined (4 refs) never passed at call sites",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git grep -c showIcons at head"
+    },
+    {
+     "thread_id": "c02b85a CSV orphaned",
+     "anchor": "geoExportFormatter.ts",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: formatActiveTabToCsv/formatFoundationalTabToCsv zero importers",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git grep at head: only definitions"
+    },
+    {
+     "thread_id": "bbb4d4b dead mock module",
+     "anchor": "AIReadiness/mockData.ts",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: mockData.ts still present",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git grep USE_MOCK_DATA at head"
+    },
+    {
+     "thread_id": "2924a13 comment->deleted card",
+     "anchor": "CitationsView.tsx",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: 3 refs to 'Citation Source Mix card' remain (153,393,1272)",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git grep CitationSourceMix at head"
+    },
+    {
+     "thread_id": "3179c96 source-text assertions",
+     "anchor": "tests",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "correct: getsource assertions still abundant (test_both_execution_paths.py 15 etc.)",
+     "judgment": "CORRECT",
+     "hypothesis": null,
+     "evidence": "git grep -c getsource at head"
+    },
+    {
+     "thread_id": "b3254f8 stale comment",
+     "anchor": "comment",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "not independently located verbatim; sibling verdicts all correct so classification credible",
+     "judgment": "UNVERIFIED (minor)",
+     "hypothesis": null,
+     "evidence": "grep 'deliberate difference' empty at head"
+    }
+   ],
+   "overall": "FALSE_APPROVE",
+   "overall_note": "Every per-thread verdict was correct, yet the gate APPROVED with 10 NOT_APPLIED (2 Important: alerting-migration gap, staleness bound) + 1 NEEDS_HUMAN, summary section literally titled 'Outstanding Findings (not blocking this approval)'; merged 3 min after approval.",
+   "root_causes": [
+    "H5-class: verdict/gate APPROVED despite NOT_APPLIED>0 (documented semantics: NA->REJECTED)",
+    "OTHER: check self-declared findings 'not blocking' \u2014 policy override inside the report itself"
+   ]
+  }
+ ]
+}

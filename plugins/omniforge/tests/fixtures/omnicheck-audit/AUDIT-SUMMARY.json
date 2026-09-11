@@ -1,0 +1,57 @@
+{
+ "audit_date": "2026-09-06/07",
+ "corpus": {
+  "scan": "1294 cleo MRs + 63 loop MRs + 27 omniforge MRs (all updated>=2026-04-01, complete since omnicheck shipped 2026-04-16)",
+  "real_runs_audited": 46,
+  "no_real_run_false_positives": 38,
+  "per_thread_verdicts_judged": 353,
+  "per_thread_wrong_or_missed": 10
+ },
+ "gate_outcomes": {
+  "correct": 45,
+  "partial": 4,
+  "false_reject": 1,
+  "false_approve": 6,
+  "rubber_stamp_no_findings": 28,
+  "undeterminable": 2
+ },
+ "key_cases": {
+  "false_approve": [
+   "cleo !1398 (bot sole-approved 25h after unanswered Critical+7 Important, verifiably unaddressed)",
+   "cleo !1108 (approved with own table listing 10 unaddressed)",
+   "cleo !1172 (Critical deferred-to-backend-MR that never landed, resolved-trust H4)",
+   "cleo !1180",
+   "cleo !1184",
+   "cleo !1179 run2"
+  ],
+  "false_reject": [
+   "cleo !509 (H1: argued vs review-time file, impossible anchors)",
+   "cleo !356 partial (H1 net-zero-diff)"
+  ],
+  "h3_parked_open": [
+   "cleo !1306 (11 days, zero unaddressed code findings)",
+   "cleo !1447 ('nothing left unaddressed' yet rejected on 6 decision threads)"
+  ],
+  "rubber_stamp": [
+   "cleo !1450 (bot alone cleared approvals_required:4)",
+   "cleo !1397 (merged with 4 unresolved Important posted post-approval)",
+   "cleo !1360 (2 later Criticals never gated)"
+  ],
+  "post_merge_gates": [
+   "omniforge !5",
+   "loop !63",
+   "cleo !1357",
+   "!1360",
+   "!1446",
+   "!1452"
+  ]
+ },
+ "root_causes": {
+  "H1_anchor_staleness": "3 instances, all pre-Aug or drifted-head (cleo !356,!509,!1226); current era clean",
+  "H2_truncation": "0 manifested (latent: loop !62 diff 3.6x over 150k budget)",
+  "H3_needs_human_fail_closed": "DOMINANT reject-side complaint; ~8 MISSED_CALLs; 2 MRs parked open purely on decision threads",
+  "H4_resolved_trust": "cleo !1172 Critical; omniforge !3 post-resolution regression; benign disclosures counted Applied",
+  "H5_gate_semantics": "approve-despite-outstanding pattern (6 cleo runs); label vs table drift",
+  "OTHER": "rubber-stamp approvals satisfying human merge quota; post-merge runs; approvals never revalidated on later threads/head"
+ }
+}

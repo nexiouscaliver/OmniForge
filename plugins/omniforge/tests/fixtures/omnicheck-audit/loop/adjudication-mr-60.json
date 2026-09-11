@@ -1,0 +1,131 @@
+{
+ "repo": "loop-plugin",
+ "iid": 60,
+ "title": "feat: cockpit process-session escape (--detach/--stop)",
+ "runs": [
+  {
+   "timestamp": "2026-08-29T11:14:23.526Z",
+   "summary_note": 3756298363,
+   "trigger_note": 3756216030,
+   "head_at_run": "bba85faaf245468bdbdc2021704cef30bf45a18d",
+   "base": "795a01a2d7a54352027eff9b56ed685f6ca89925",
+   "gate": "REJECTED",
+   "gate_evidence": "meta.labels=['omniforge::check-rejected']; 8 NOT_APPLIED -> REJECTED",
+   "per_thread": [
+    {
+     "thread_id": "#3835455",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED (no reviewer assigned)",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "approvals.approvers=[] approved_by_raw=[] in evidence; maintainer-scope ask"
+    },
+    {
+     "thread_id": "#8865ded",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "commit subjects 288/260 chars with empty bodies (git log 43338d22, c064a85c)"
+    },
+    {
+     "thread_id": "#faa753d",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "fix-round commits (6a1ddcf2, bde92c48, 8166a6bb, 2c4a2b1b, bba85faa) never squashed at run head"
+    },
+    {
+     "thread_id": "#333e097",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "git diff 795a01a2...bba85fa = 14 files, 3011 insertions (exact match to claim)"
+    },
+    {
+     "thread_id": "#12566c4",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED (declined-with-disclosure)",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "H3-spirit",
+     "evidence": ".gitlab-ci.yml at bba85fa restricts SAST/secret_detection to default branch only; author reply note 3750651636 'Answered, not changed here'"
+    },
+    {
+     "thread_id": "#b8ae625",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "every commit scope is 'loop/cockpit-process-session-escape' (branch name)"
+    },
+    {
+     "thread_id": "#a3408e8",
+     "anchor": "tests/test_cockpit_invariants.py:576",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "absolute line pins re-annotated per round ('Line 220 as of T1', 'Line 238 as of 2026-08-28 audit round') at bba85fa"
+    },
+    {
+     "thread_id": "#b30c804",
+     "anchor": "general",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED (declined split)",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "client-reset error-lane work still in MR at run head"
+    },
+    {
+     "thread_id": "SA-sample-1",
+     "anchor": "commands/regenloop-ui.md:35-37",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "word-boundary ' --stop ' case route present at bba85fa"
+    },
+    {
+     "thread_id": "SA-sample-2",
+     "anchor": "scripts/regenloop_ui.py:859",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW at :859"
+    },
+    {
+     "thread_id": "SA-sample-3",
+     "anchor": "scripts/regenloop_ui.py",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "_cmdline_for_pid /proc-first primary at :1145; BrokenPipeError guards at :1035/:1065/:1095"
+    },
+    {
+     "thread_id": "SA-sample-4",
+     "anchor": "tests",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "test_detach_forwards_heartbeat_interval_to_child + test_detach_non_numeric_ready_timeout_fails_named (tests/test_cockpit_detach.py:488/:509) + test_stop_cap_exit1_message (tests/test_regenloop_ui.py:1272) all present"
+    }
+   ],
+   "overall": "CORRECT",
+   "overall_note": "All 8 NOT_APPLIED factually accurate; >=4 are maintainer-scope or decline-with-rationale items the gate counts identically to silent omissions. Trigger /omnicheck note correctly excluded (contrast !59). Merged 1h04m after run (human override).",
+   "root_causes": [
+    "H3-spirit (declined-with-disclosure treated as unaddressed by the gate; verdicts themselves correct)"
+   ]
+  }
+ ]
+}

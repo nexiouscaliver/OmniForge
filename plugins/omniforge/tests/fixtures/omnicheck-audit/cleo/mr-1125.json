@@ -1,0 +1,184 @@
+{
+  "meta": {
+    "iid": 1125,
+    "title": "feat(mcp): enable the connector in production",
+    "state": "merged",
+    "author_username": "Abhishek-2004-17",
+    "created_at": "2026-08-08T16:47:42.318Z",
+    "updated_at": "2026-08-08T17:31:45.670Z",
+    "merged_at": "2026-08-08T17:31:44.657Z",
+    "labels": [],
+    "source_branch": "feature/enable-mcp-connector-production",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1125",
+    "sha": "d7307da460c94831e5d731882e506d2569b450c4",
+    "merge_commit_sha": "d118878eb85ea4bc57794c6c8b2a875211bf1708",
+    "diff_refs": {
+      "base_sha": "cf1531bde9bcf118be1a3d72e0a291406e64e729",
+      "head_sha": "d7307da460c94831e5d731882e506d2569b450c4",
+      "start_sha": "3f69ef6d5d72ec9e72f514d397a6c9986249ff3f"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3662419581,
+      "body": "added 2 commits\n\n<ul><li>5acdbc55 - Fix prepush gate runner resolution</li><li>d7307da4 - test(mcp): update the deploy-config guard for production&#39;s flipped kill switch</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1125/diffs?diff_id=1950420790&start_sha=5089fdf6fd5ddbe3939aabf2b070f26ce82b4062)",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T17:14:45.735Z"
+    },
+    {
+      "id": 3662424616,
+      "body": "## Pipeline green — [#2744006946](https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/pipelines/2744006946)\n\n`mcp-connector-tests` initially failed — not a bug, a deliberate guard. `test_deploy_config.py` pinned production's `MCP_CONNECTOR_ENABLED` to the literal `\"false\"`, and the standalone assertion's own docstring said why: *\"production must not be serving MCP traffic until the pre-launch entitlement audit has run.\"* That audit is the same three items in this MR's Known Gaps.\n\nRather than edit the assertion straight through, I stopped and confirmed with the operator that the gaps are being accepted as risk rather than closed first. `d7307da46` updates both assertions and renames `test_production_is_disabled` → `test_production_is_enabled`, with a docstring recording the date, this MR, and the accepted gaps — so the guard still does its job on the *next* change to this value, and the next reader sees the reasoning rather than a literal that silently flipped.\n\nAll 10 jobs pass.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T17:18:11.363Z"
+    },
+    {
+      "id": 3662443599,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T17:29:58.538Z"
+    },
+    {
+      "id": 3662444536,
+      "body": "## Follow-up Check — MR !1125\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 0 |\n\nAll flagged findings have been addressed. MR approved.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T17:30:40.901Z"
+    },
+    {
+      "id": 3662445328,
+      "body": "mentioned in commit d118878eb85ea4bc57794c6c8b2a875211bf1708",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-08T17:31:45.430Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "1da1e1d770c92552c31379c474d7d6db108f2e2e",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662419581,
+          "body": "added 2 commits\n\n<ul><li>5acdbc55 - Fix prepush gate runner resolution</li><li>d7307da4 - test(mcp): update the deploy-config guard for production&#39;s flipped kill switch</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1125/diffs?diff_id=1950420790&start_sha=5089fdf6fd5ddbe3939aabf2b070f26ce82b4062)",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T17:14:45.735Z"
+        }
+      ]
+    },
+    {
+      "id": "485ca2c13d1bc6da84d4381eec6afec9d263179b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662424616,
+          "body": "## Pipeline green — [#2744006946](https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/pipelines/2744006946)\n\n`mcp-connector-tests` initially failed — not a bug, a deliberate guard. `test_deploy_config.py` pinned production's `MCP_CONNECTOR_ENABLED` to the literal `\"false\"`, and the standalone assertion's own docstring said why: *\"production must not be serving MCP traffic until the pre-launch entitlement audit has run.\"* That audit is the same three items in this MR's Known Gaps.\n\nRather than edit the assertion straight through, I stopped and confirmed with the operator that the gaps are being accepted as risk rather than closed first. `d7307da46` updates both assertions and renames `test_production_is_disabled` → `test_production_is_enabled`, with a docstring recording the date, this MR, and the accepted gaps — so the guard still does its job on the *next* change to this value, and the next reader sees the reasoning rather than a literal that silently flipped.\n\nAll 10 jobs pass.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T17:18:11.363Z"
+        }
+      ]
+    },
+    {
+      "id": "f764c956599d10b193c6159cc87759477ced87f6",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662443599,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T17:29:58.538Z"
+        }
+      ]
+    },
+    {
+      "id": "4ccd7014445c75f12a6f091224d7eedb96f64943",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662444536,
+          "body": "## Follow-up Check — MR !1125\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 0 |\n\nAll flagged findings have been addressed. MR approved.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T17:30:40.901Z"
+        }
+      ]
+    },
+    {
+      "id": "e1f1087eea94676249f6f35f9cee3e1b03006a60",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3662445328,
+          "body": "mentioned in commit d118878eb85ea4bc57794c6c8b2a875211bf1708",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-08T17:31:45.430Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "d7307da460c94831e5d731882e506d2569b450c4",
+      "title": "test(mcp): update the deploy-config guard for production's flipped kill switch",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-08T22:35:17.000+05:30"
+    },
+    {
+      "id": "5acdbc559cc752d0d8c6d72cffbf1a21421f28ec",
+      "title": "Fix prepush gate runner resolution",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-08T22:14:37.000+05:30"
+    },
+    {
+      "id": "5089fdf6fd5ddbe3939aabf2b070f26ce82b4062",
+      "title": "feat(mcp): enable the connector in production",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-08T22:05:30.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-08T17:29:58.428Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

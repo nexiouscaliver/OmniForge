@@ -1,0 +1,820 @@
+{
+  "meta": {
+    "iid": 1306,
+    "title": "fix(security): close unauthenticated API endpoints and disable public API docs by default",
+    "state": "opened",
+    "author_username": "Abhishek-2004-17",
+    "created_at": "2026-08-25T16:08:30.662Z",
+    "updated_at": "2026-08-26T18:04:54.439Z",
+    "merged_at": null,
+    "labels": [
+      "omniforge::check-rejected"
+    ],
+    "source_branch": "fix/api-auth-hardening",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306",
+    "sha": "01a2fb44c65c474a4a36269647a9874278ee5d3b",
+    "merge_commit_sha": null,
+    "diff_refs": {
+      "base_sha": "f6b450021e0196fce68f29eade518b8a39adee4a",
+      "head_sha": "01a2fb44c65c474a4a36269647a9874278ee5d3b",
+      "start_sha": "44fa064001c03cf32f10d88f56902832e1b25504"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "skipped"
+  },
+  "notes": [
+    {
+      "id": 3733170000,
+      "body": "approved this merge request",
+      "author_username": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T16:49:08.351Z"
+    },
+    {
+      "id": 3733179675,
+      "body": "unapproved this merge request",
+      "author_username": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T16:51:19.186Z"
+    },
+    {
+      "id": 3734381392,
+      "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1983558901&start_sha=f74b8d8ddef1ce773d3f84862effc0fc743705f1#7363e18d643eca8cd15eee13d8169304675e2d5c_24_22)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T20:52:30.364Z"
+    },
+    {
+      "id": 3734381405,
+      "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1983558901&start_sha=f74b8d8ddef1ce773d3f84862effc0fc743705f1#c147186a9ef5f5b8583796172cfb33e7a23fea49_257_259)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T20:52:30.590Z"
+    },
+    {
+      "id": 3734381426,
+      "body": "added 1 commit\n\n<ul><li>5f60233d - fix(security): address review findings on /files auth, referral email handling and docs flag</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1983558901&start_sha=f74b8d8ddef1ce773d3f84862effc0fc743705f1)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T20:52:30.965Z"
+    },
+    {
+      "id": 3734386745,
+      "body": "resolved all threads",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-25T20:53:21.265Z"
+    },
+    {
+      "id": 3737467812,
+      "body": "/omnireview",
+      "author_username": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T09:41:42.455Z"
+    },
+    {
+      "id": 3737467886,
+      "body": "🔄 **OmniForge review started** (trigger: comment by @shahilkadia) — typically 15–45 minutes.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T09:41:43.764Z"
+    },
+    {
+      "id": 3737592268,
+      "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis MR closes two genuinely exploitable unauthenticated surfaces — forged commission-bearing referral attributions, and unauthenticated reads from the shared `generated_files/` directory — and turns the public API docs off by default across code, both task definitions and both deploy jobs. The code substance is sound: all three review agents independently traced the prior round's findings and confirmed each is genuinely and completely fixed, the repo-wide `/files` consumer sweep found no caller left credential-less, and the new 309-line test suite is adversarial rather than decorative.\n\nThe objection is not the code — it is that **the final commit has been validated by nothing and reviewed by no one.** The pipeline on `5f60233d7` is `skipped`, MR pipelines never type-check the frontend at all, the description still describes only the first commit (and states a threat that was false when written), and the human approval was withdrawn before the follow-up landed.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 7 |\n| Minor | 7 |\n\n### Strengths\n\n- Identity on `attribute-signup` is taken solely from the verified JWT, and the test asserts body-supplied `auth0|victim` / `victim@example.com` can never reach the stored procedure — a real adversarial assertion, not a happy path.\n- The `/files` docstring honestly scopes the gate as \"authentication only, NOT per-user authorisation\" and names the follow-up, rather than implying the hole is fully closed.\n- The empty-email design is reasoned through, not lucky: `or \"\"` protects the NOT NULL column, and `sp_record_conversion` matches attributions by `auth0_user_id` (not email), so a degraded email costs only the partner-dashboard display and cannot lose a payout.\n- Secure-by-default propagated through every layer, with two independent fail-closed guards: the deploy jobs hard-fail on any surviving `PLACEHOLDER_*`, and pydantic rejects a non-boolean literal at startup. No path was found that silently re-enables the docs.\n- The follow-up commit message is an exemplary review-response record, restating each finding and mapping it to per-file actions.\n\n### Key Concerns\n\n**Verification gaps (all process, all cheap to close):**\n\n1. **The head commit has never run CI** (pipeline 7338 on `5f60233d7` is `skipped`; only 7330 on `f74b8d8dd` passed). The 416-insertion follow-up — the 309-line test file, both route modules, and both React components — has been executed by no one and nothing. Re-run the pipeline on HEAD and require it green. *Confidence 100.*\n2. **The frontend changes are validated by no CI job even when a pipeline does run.** `build_frontend` (the only job that runs `tsc`) is gated to tag pipelines only — `- if: '$CI_COMMIT_TAG =~ /^(v|f|c|s|sf)\\d+\\.\\d+\\.\\d+$/'` then `- when: never` (`.gitlab-ci.yml:4226`) — and `check-error-leaks` is `when: manual` with `allow_failure: true` (`.gitlab-ci.yml:326`). The ~100 lines of TypeScript here have been type-checked by nothing. Run `cd SEO && bun run build` locally and record the result. *Confidence 90.*\n3. **The description describes commit 1 only.** It says \"no frontend change is needed\" while the MR ships +100 lines of `.tsx`, and the test plan never records that `tests/test_public_endpoint_auth.py` was actually executed — its checked items are syntax checks plus two pre-existing suites that this MR does not modify. The one runtime-verification box is unchecked. For a change that gates auth on live endpoints, `ast.parse` is not evidence of behaviour. *Confidence 95.*\n4. **The stated threat model for the `/files` fix is false.** \"At least one generator (risk-memo PDFs, keyed by ticker+date) produces guessable filenames\" — but `risk_memo_pdf_generator.py` has appended `secrets.token_hex(16)` since commit `2900151c6` (2026-06-02), an ancestor of this MR's base, and `url_search_pdf_tool.py` uses `uuid4().hex`. Your own review round caught this and the docstring was corrected; the description was not. The gate is still justified as defence-in-depth (a filename is not a credential), but the description should say that. *Confidence 95.*\n5. **Commit 1 breaks all three frontend `/files` consumers, and only commit 2 repairs them.** `git show f74b8d8dd -- SEO/frontend/` is empty. With `squash: false`, the broken intermediate state lands verbatim in `staging-phase` — a `git bisect` hazard on a branch that deploys. Squash on merge, or rebase the frontend fix into the first commit. *Confidence 90.*\n6. **The MR is unapproved and the follow-up has had no human review.** @shahilkadia approved at 16:49 and unapproved at 16:51 — before the fix commit existed at 20:52. The threads were then resolved by the same bot that pushed the fix, one minute later, with no reviewer sign-off, and the original comment bodies are no longer retrievable. The 416-line follow-up needs fresh human eyes and a re-approval; the withdrawn approval must not be read as covering it. *Confidence 100 / 85.*\n\n**Design decisions needing a human call:**\n\n7. **Subscription gating may 403 the very callers this MR secures** — see the inline thread on `referral_routes.py`. `/files/` and `/api/v1/referral/` are absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES`, so an authenticated caller without an active `subscription_status` is rejected with 403 `no_active_subscription` before your new auth ever runs. This is *not* a regression (the middleware pre-dates the MR and the frontend already sent the Bearer token), but a brand-new referred signup — the entire target population of `attribute-signup` — may never reach the handler, and `auth0-provider-with-history.tsx` swallows the failure silently. The repo already documented and exempted the identical deadlock for `/api/v1/invitations/` (`main.py:1804-1816`). Worth one runtime check before merge. *Confidence 72.*\n\n### Security\n\nSecurity posture **improves** — this closes two real holes and leaves no path that silently re-enables the docs. Two residuals, both in inline threads: the `/files` gate is authentication-only on a cross-tenant directory (a disclosed and well-documented follow-up — but please confirm it is actually *tracked* somewhere, because nothing in the repo references it), and setting `DOCS_ENABLED=true` anywhere restores fully public unauthenticated docs with no second control.\n\nAudited clean: JWT verification (RS256/JWKS + `aud` + `iss` + `exp`, fail-closed when unconfigured, no audience mismatch between `getAccessTokenSilently()` and `verify_jwt_token`), path traversal (gate runs before sanitisation; `realpath` containment holds; no `{file_name}` multi-segment match), CORS (`allow_headers=[\"*\"]`, same-origin `VITE_FILES_BASE_URL`, token in memory not localStorage), no new dependencies, injection, or SSRF surface.\n\nOne out-of-band note: the `logger.warning(f\"...: {e}\")` added in `referral_routes.py` passes both the CI gate and `docs/engineering/error-handling.md` (which target response fields, and explicitly permit logging the detail) — but exception text does reach shipped logs, which sits in tension with \"neither do logs shipped downstream\" in CLAUDE.md. No change needed here; flagging it as a policy question for the team rather than an MR defect.\n\n### Process Notes\n\n- Scope: two separable changes under one title (endpoint auth vs. the docs kill switch); the description's own Problem section opens with \"Separately,\". Splitting would have let the well-scoped docs half merge while the auth half waited on runtime verification. *Confidence 75.*\n- The branch is 18 commits behind target, so even the green pipeline 7330 validated against an older tree.\n- \"Both GitLab CI/CD variables have been created\" is infrastructure state no reviewer can check from the diff — low risk, since both substitutions default to `'false'`, but worth linking the change record. *Confidence 100.*\n- The \"authentication audit of every live REST route\" claim is not evidenced in the MR. Spot-checks corroborate it (every other `referral_routes.py` endpoint uses `_get_authenticated_user`/`_require_admin`; `/metrics` and `/tool-metrics` are SSM-bearer-gated; remaining public routes are deliberate by design). Attaching the audit inventory would make completeness reviewable rather than trusted. *Confidence 80.*\n- UI-visible behaviour changed (Open now opens a fetched blob rather than navigating) with no before/after captures. *Confidence 95.*\n\n**6 inline threads posted** — detail and fixes are there.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 14 findings above threshold*",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T10:00:07.442Z"
+    },
+    {
+      "id": 3737593817,
+      "body": "**Important** — This gate lands with no working frontend consumers\n\n**What:** `git show f74b8d8dd -- SEO/frontend/` is empty. The first commit adds this JWT gate while all three frontend call paths were still credential-less — `PdfViewer.handleDownload` fetched with no headers, `handleOpen` was a plain `window.open` navigation, and `RegeneratePdf`'s WebViewer loaded `initialDoc`/`loadDocument` with no `customHeaders`. All three 401 against this line at that commit.\n\n**Why it matters:** With `squash: false`, the broken intermediate state lands verbatim in `staging-phase` history. At commit 1, PDF open, download and regenerate are all broken; at commit 2 they work again. That is a `git bisect` hazard on a branch that deploys — anyone bisecting a PDF regression onto `f74b8d8dd` will find a \"working\" commit that breaks the feature. Commit messages don't protect bisect.\n\n**Recommendation:** Squash on merge, or rebase the frontend fix into the first commit so target history never contains the broken state.\n\nConfidence: 90/100 | Found by: MR Analyst (OmniForge)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-26T10:00:28.764Z"
+    },
+    {
+      "id": 3737593871,
+      "body": "**Important** — Blob URL is revoked before the new tab can read it\n\n**What:** `window.open(blobUrl, '_blank')` returns as soon as the tab is opened, but the new tab fetches the blob URL asynchronously after the current task yields. `URL.revokeObjectURL(blobUrl)` runs synchronously on the very next line, destroying the mapping before the popup has necessarily fetched it.\n\n**Why it matters:** Intermittently produces a dead or blank tab when a user clicks Open. Firefox and Safari are the reliable failures; Chrome's grace period is an implementation detail rather than a contract, so it fails there too under load. The `handleDownload` path two functions up is fine — revoking right after `anchor.click()` is the established anchor-download pattern (`QueryRankingsExportButton.tsx:88-93`, `ExportPanel.tsx:74-80`) because the click consumes the URL synchronously. A navigation does not.\n\nThis is exactly the kind of thing only a runtime check catches, and the MR's test plan records that no runtime verification was performed.\n\n**Recommendation:**\n```ts\nwindow.open(blobUrl, '_blank');\n// The new tab fetches the blob asynchronously after this task yields —\n// revoking now races it and can leave a blank tab.\nsetTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);\n```\n(or revoke from the popup's `load` event if you open a `window` reference and can attach to it.)\n\nConfidence: 75/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-26T10:00:29.682Z"
+    },
+    {
+      "id": 3737594525,
+      "body": "**Important** — Subscription gating may 403 these callers before the new auth ever runs *(needs a human call)*\n\n**What:** `/api/v1/referral/` and `/files/` are both absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES` (`main.py:1802-1840`). Once `JWTUserRoleMiddleware` sets `user_id`, the gating middleware checks `app_metadata.subscription_status` and returns **403 `no_active_subscription`** for anything outside `active`/`trialing`/`past_due` — before this handler is entered.\n\n**Why it matters:** The primary caller of `attribute-signup` is a *brand-new referred signup*, who by definition has no subscription yet. If their `app_metadata` has no `subscription_status`, the request dies at the middleware and this fix never executes. The frontend swallows the failure (`fetch(...).catch(() => {})`), so attribution is silently dropped and the partner never sees the conversion.\n\nTo be clear this is **not a regression from this MR** — the middleware pre-dates it and `auth0-provider-with-history.tsx:205` already sent the Bearer token, so the 403 would have happened before too. It is flagged because the description asserts \"the frontend already sends a Bearer token on this call, so no frontend change is needed\", which is true but unverified end-to-end: it confirms the *header* is sent, not that the *request survives the middleware stack*. The codebase has already met and fixed this exact deadlock once — see the `/api/v1/invitations/` exemption at `main.py:1804-1816`, whose comment explains that \"an invitee is by definition someone who does NOT yet have a subscription\" and that gating it was a deadlock every genuinely new invitee hit.\n\n**Recommendation:** Verify once against a running backend that a freshly-created Auth0 user can reach this endpoint. If they 403, exempt the prefix — the comment on the invitations exemption explains why doing so does not weaken auth, and `_get_authenticated_user` still enforces the identity check this MR added. Either way, the new tests mount bare apps without the middleware stack, so this interaction is currently untested.\n\nConfidence: 72/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-26T10:00:38.836Z"
+    },
+    {
+      "id": 3737594999,
+      "body": "**Minor** — Cross-tenant residual: confirm the \"tracked follow-up\" is actually tracked\n\n**What:** This is an honest and correct scoping statement — thank you for writing it down rather than implying the hole is closed. But `generated_files/` is a single flat directory shared across all tenants, and both writers (`risk_memo_pdf_generator.py`, `url_search_pdf_tool.py`) resolve to the exact directory this router serves. Any authenticated user of any tenant can read any tenant's file whose name they learn.\n\n**Attack scenario:** A user authenticated to tenant A obtains a tenant B risk-memo URL — a ticker-keyed financial report — from a support ticket, a screenshot, a shared machine's browser history, or a referrer/log leak (all channels the docstring above correctly acknowledges). They then fetch it with their own perfectly valid token. Confidentiality rests entirely on 128-bit filename secrecy for the life of the file.\n\n**Why it matters:** Nothing in the repo references this follow-up — no issue, no `docs/engineering/` entry, no TODO beyond this docstring. \"Tracked\" in a docstring is not tracked; the next person to touch `file_serving.py` has no way to find it. The exposure window is bounded (the ECS task definition has `\"volumes\": []`, so the store is ephemeral per task), and the previous state was strictly worse, so this is a disclosed residual rather than a regression.\n\n**Recommendation:** Either link the tracking issue here, or record the decision in `docs/engineering/`. For the fix itself, record `(filename, user_id)` at generation time and check `payload[\"sub\"]` in `open_file`/`download_file` — using `build_user_id_candidates` from `api/utils/site_access_utils`, since rows may hold either the Auth0 `sub` or a derived `uuid5`. A cheaper interim: `website_report_*` filenames already embed a `session_id`, which could be checked against sessions the caller owns.\n\nConfidence: 80/100 | Found by: Security Reviewer (OmniForge)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-26T10:00:44.279Z"
+    },
+    {
+      "id": 3737595048,
+      "body": "**Minor** — New failure paths are invisible to the user\n\n**What:** Both new failure paths report via `console.error` only — this one in `handleOpen`, and the `getAccessTokenSilently` catch in `RegeneratePdf.tsx`.\n\n**Why it matters:** On a 401 or a token-refresh failure the user clicks Open and nothing visibly happens; the Regenerate modal renders an empty box. Since this MR is what introduces the possibility of these failures (the endpoints were previously open), the silent-failure path ships in the same change. Repo convention is sonner — `import { toast } from 'sonner'`, global `<Toaster />` already in `App.tsx` — and the neighbouring pattern is `toast.error(...)` on export failures (`QueryRankingsExportButton.tsx:96-99`).\n\n**Recommendation:**\n```ts\nimport { toast } from 'sonner';\n// ...\n} catch (error) {\n    console.error('Error opening the file', error);\n    toast.error('Could not open the report. Please try again.');\n}\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-26T10:00:45.275Z"
+    },
+    {
+      "id": 3737595116,
+      "body": "**Minor** — A single variable flip restores fully public, unauthenticated API docs\n\n**What:** The secure-by-default work here is thorough — code default, both task definitions, both deploy jobs with a `'false'` fallback, plus two independent fail-closed guards (the deploy jobs hard-fail on any surviving `PLACEHOLDER_*`, and pydantic rejects a non-boolean literal at startup). No path was found that re-enables the docs silently.\n\nThe residual is that when someone *deliberately* sets `DOCS_ENABLED=true`, `/docs`, `/redoc` and `/openapi.json` return to being fully public and unauthenticated. They are in `EXEMPT_PREFIXES` (`main.py:1820-1821`), so they bypass `SubscriptionGatingMiddleware` as well, and `openapi.json` would enumerate the entire REST surface including the admin routes.\n\n**Attack scenario:** Someone flips the variable to debug an environment and forgets; the next deploy republishes the full API schema to the internet with no auth and no alert. This is a misconfiguration-recovery gap, not a current exposure.\n\n**Recommendation:** If the docs ever need to be on in a deployed environment, give them a second control rather than relying on the flag alone — simplest is a dependency that rejects callers without an admin role in `request.state.user_roles`, or binding them to an internal-only listener. Keeping them dev-only and documenting that in `.env.template` (already done) is also a fine answer.\n\nConfidence: 70/100 | Found by: Security Reviewer (OmniForge)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-26T10:00:46.239Z"
+    },
+    {
+      "id": 3737676583,
+      "body": "/omnifix",
+      "author_username": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T10:15:50.865Z"
+    },
+    {
+      "id": 3737676697,
+      "body": "🔄 **OmniForge fix triage (proposal — nothing changes yet) started** (trigger: '/omnifix' by @shahilkadia) — typically 15–45 minutes.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T10:15:52.318Z"
+    },
+    {
+      "id": 3737724619,
+      "body": "## OmniFix fix proposal — MR !1306 (nothing has been changed yet)\n\nAll 6 unresolved review threads were triaged against the code at `5f60233d7` (4 parallel triage agents, grouped by file). Result: **3 VALID, 0 INVALID, 3 needing a human call.**\n\n### VALID — I will apply these three fixes on `/omnifix go`\n\n**1. `SEO/frontend/components/ui/PdfViewer.tsx:82` — blob URL revoked before the new tab can read it** (thread `b809efd7…`)\n`window.open(blobUrl, '_blank')` returns before the popup fetches the blob URL, and the synchronous `URL.revokeObjectURL(blobUrl)` on the very next line can win that race — a dead/blank tab, reliably on Firefox/Safari. No compensating control exists, and the codebase already defers revokes elsewhere (`ImprovePanel.tsx`, `ReportsList.tsx`, `ReportNotification.tsx`).\n**Fix:** replace the immediate revoke with `setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)` plus a one-line comment explaining the race. Nothing else in the function changes.\n\n**2. `SEO/frontend/components/ui/PdfViewer.tsx:84` + `RegeneratePdf.tsx:93` — new failure paths are invisible to the user** (thread `9fef4741…`)\nBoth catches this MR adds report via `console.error` only: a 401 on Open is a silent dead click, and a token-refresh failure renders an empty regenerate modal — on failure modes this MR itself introduces.\n**Fix:** add a sonner `toast.error(...)` (repo convention — `<Toaster />` is already mounted in `App.tsx`) to both catches, keeping the `console.error`: \"Could not open the report. Please try again.\" in `handleOpen`, and \"Could not load the document for regeneration.\" in the `RegeneratePdf` token catch.\n\n**3. `SEO/backend/api/routes/file_serving.py:32` — the \"tracked follow-up\" is not tracked anywhere** (thread `703b4531…`)\nNothing in the repo references the cross-tenant residual — no issue, no `docs/engineering/` entry, nothing beyond the docstring itself.\n**Fix:** add `docs/engineering/2026-08-26-files-endpoint-auth-residual.md` recording the accepted residual (authentication-only gate on the flat cross-tenant `generated_files/` store, ephemeral per ECS task, 128-bit filename secrecy as the remaining barrier) and the follow-up plan (filename→owner mapping recorded at generation time and checked in `open_file`/`download_file` via `build_user_id_candidates`, failing closed with 404), and point the `file_serving.py` docstring at it. The ownership enforcement itself is a schema change and remains a follow-up — the doc record is the minimal remedy the thread asks for.\n\nOn `/omnifix go` these land as a single conventional commit on `fix/api-auth-hardening`; I then push and reply on (and resolve) these three threads.\n\n### Not auto-fixable — need a human call (observations verified correct; no false positives)\n\n- **`file_serving.py:52` (thread `ea76cd27…`) — commit 1 breaks all three frontend `/files` consumers.** Verified: `f74b8d8dd` touches no frontend file, so PDF open/download/regenerate all 401 at that commit, and target history keeps merge commits (no squash), landing the broken intermediate state verbatim. But the remedy — squash on merge, or rebase the frontend fix into commit 1 — is a merge-strategy/history decision no ordinary commit can express. Recommendation: **merge with squash**.\n- **`referral_routes.py:245` (thread `7927f605…`) — subscription gating may 403 brand-new referred signups before the new auth runs.** Verified end-to-end in code: `/api/v1/referral/` is absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES`, `subscription_status` is only written post-checkout or by plan sync (so a fresh signup cannot have it), the frontend swallows the failure, and this is structurally identical to the documented `/api/v1/invitations/` deadlock. Not a regression from this MR. The remedy is verify-at-runtime-then-decide plus a scope decision (exact-path `/api/v1/referral/attribute-signup` vs prefix-wide, which would also un-gate the partner/admin routes). If you confirm the 403 live and tell me the scope, I can apply the exact-path exemption + focused test (mirroring `test_subscription_gate_invitation_exempt.py`) as a follow-up — not without that confirmation.\n- **`settings.py:69` (thread `505bd880…`) — a single `DOCS_ENABLED=true` flip restores fully public docs.** Verified, but the remedy the reviewer accepts as sufficient (keep dev-only, documented in `.env.template`) is already done by this MR. The stronger options (admin-role gate or internal-only listener) require remounting FastAPI's stock docs routes with auth and would reverse the deliberate `DOCS_ENABLED_STAGING` opt-in this MR provisions — a security-posture design decision, not an auto-fix.\n\nThese three threads stay open either way.\n\nReply `/omnifix go` on this MR to apply these fixes — I will push to the source branch and resolve the fixed threads.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T10:25:12.534Z"
+    },
+    {
+      "id": 3738098972,
+      "body": "/omnifix go",
+      "author_username": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:27:35.574Z"
+    },
+    {
+      "id": 3738099076,
+      "body": "🔄 **OmniForge fix application (pushing to the source branch) started** (trigger: '/omnifix go' by @shahilkadia) — a few minutes.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:27:37.207Z"
+    },
+    {
+      "id": 3738168428,
+      "body": "mentioned in commit 01a2fb44c65c474a4a36269647a9874278ee5d3b",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:40:13.882Z"
+    },
+    {
+      "id": 3738168497,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1984961300&start_sha=5f60233d72d7659545d038d297bcda11eeb080ac#db680e9c419d5aebe7c009be22d41d18442ea33b_82_83)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:40:14.974Z"
+    },
+    {
+      "id": 3738168513,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1984961300&start_sha=5f60233d72d7659545d038d297bcda11eeb080ac#7363e18d643eca8cd15eee13d8169304675e2d5c_32_32)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:40:15.220Z"
+    },
+    {
+      "id": 3738168535,
+      "body": "added 1 commit\n\n<ul><li>01a2fb44 - fix(review): defer blob revoke on open, surface /files auth failures, record...</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1984961300&start_sha=5f60233d72d7659545d038d297bcda11eeb080ac)",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:40:15.548Z"
+    },
+    {
+      "id": 3738169830,
+      "body": "Fixed in commit 01a2fb44c: the revoke in `handleOpen` now defers 60s instead of running synchronously after `window.open`, so the new tab can no longer lose the race for the blob URL.\n\n```ts\nwindow.open(blobUrl, '_blank');\n// The new tab fetches the blob asynchronously after this task yields —\n// revoking now races it and can leave a blank tab.\nsetTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);\n```\n\n`handleDownload`'s synchronous revoke is deliberately untouched — `anchor.click()` consumes the URL synchronously, so no race exists on that path. The deferred revoke matches the idiom already in `ImprovePanel.tsx:272`.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-26T11:40:34.333Z"
+    },
+    {
+      "id": 3738174316,
+      "body": "Fixed in commit 01a2fb44c: both failure paths now raise a sonner toast alongside the existing `console.error`, so a 401 on Open is no longer a silent dead click and a token-refresh failure no longer renders an empty regenerate modal.\n\n- `PdfViewer.tsx` `handleOpen` catch → `toast.error('Could not open the report. Please try again.')`\n- `RegeneratePdf.tsx` access-token catch → `toast.error('Could not load the document for regeneration.')`\n\nBoth keep the `console.error`. Sonner is the repo convention (`<Toaster />` mounted in `App.tsx`, ~740 existing `toast.error` call sites), the copy is static developer-authored text with no error interpolation, and both components already import nothing that conflicts. The `WebViewer` initialisation catch in `RegeneratePdf.tsx` was left alone — it is outside this finding's scope.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-26T11:41:17.333Z"
+    },
+    {
+      "id": 3738174472,
+      "body": "Fixed in commit 01a2fb44c: the residual is now actually tracked. Added `docs/engineering/2026-08-26-files-endpoint-auth-residual.md`, and the `get_current_user_id` docstring now points at it instead of asserting an untracked \"tracked follow-up\".\n\nThe record states the residual plainly (authentication-only gate on a flat cross-tenant `generated_files/` store; both generators resolve to the directory this router serves), the three conditions that currently bound it (128-bit suffix from `secrets.token_hex(16)` / 122 bits from `uuid4().hex` — a filename is not a credential; ephemeral per-task store since the ECS task definitions mount no volumes; strictly better than the prior no-identity-check state), and the open follow-up: a `(filename, owner_user_id)` mapping recorded at generation time and checked in `open_file`/`download_file`, failing closed with 404 rather than 403 so a denial does not confirm a filename's existence. The owner check is specified to resolve both stored user-id formats via `build_user_id_candidates` with `.in_(candidates)`, never `== user_id`.\n\nThe ownership enforcement itself remains a follow-up — it needs a numbered migration plus writes in both generators, so it is out of scope for this MR. The cheaper interim (`website_report_*` filenames already embed a `session_id`) is recorded too, with a note that only the live generation path embeds it and that the dormant sessionless branch in the same tool must be covered or removed first.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-26T11:41:19.540Z"
+    },
+    {
+      "id": 3738177328,
+      "body": "## OmniFix Summary — 6 findings processed\n\nCommit **01a2fb44c** pushed to `fix/api-auth-hardening` (`5f60233d7..01a2fb44c`, fast-forward, no drift). Applies the 3 fixes approved via `/omnifix go`.\n\n| Finding | File | Status |\n|---|---|---|\n| Blob URL revoked before the new tab can read it | `PdfViewer.tsx:82` | Fixed in 01a2fb44c — thread resolved |\n| New failure paths invisible to the user | `PdfViewer.tsx:84`, `RegeneratePdf.tsx:93` | Fixed in 01a2fb44c — thread resolved |\n| Cross-tenant residual: \"tracked follow-up\" not tracked anywhere | `file_serving.py:32` | Fixed in 01a2fb44c — thread resolved |\n| Commit 1 breaks all three frontend `/files` consumers | `file_serving.py:52` | **Skipped** — needs a human merge-strategy call |\n| Subscription gating may 403 referred signups before the new auth runs | `referral_routes.py:245` | **Skipped** — needs runtime confirmation + scope decision |\n| A single `DOCS_ENABLED=true` flip restores public docs | `settings.py:69` | **Skipped** — security-posture design decision |\n\n### What changed\n\n- **`PdfViewer.tsx` `handleOpen`** — the blob URL revoke now defers 60s instead of running synchronously after `window.open`, so the new tab can no longer lose the race for the URL (Firefox/Safari reliably, Chrome under load). `handleDownload`'s synchronous revoke is untouched; `anchor.click()` consumes the URL synchronously, so no race exists there.\n- **`PdfViewer.tsx` / `RegeneratePdf.tsx`** — both `/files` auth failure paths this MR introduced now raise a sonner `toast.error` alongside the existing `console.error`. Copy is static developer-authored text, no error interpolation.\n- **`docs/engineering/2026-08-26-files-endpoint-auth-residual.md`** (new) — records the accepted cross-tenant residual, the three conditions bounding it, and the open ownership-enforcement follow-up. The `get_current_user_id` docstring now points at it.\n\n### Verification\n\nFresh-eyes verification agent returned **APPROVED** — all three fixes scoped correctly, no out-of-scope edits, `git diff --check` clean, `ast.parse` on `file_serving.py` OK, every factual claim in the new doc fact-checked against the code (`secrets.token_hex(16)` at `risk_memo_pdf_generator.py:129`, `uuid4().hex` at `url_search_pdf_tool.py:106`, both writers resolving to the served `generated_files/` directory, `build_user_id_candidates` at `site_access_utils.py:10`, ECS task definitions mounting no volumes). The numeric separator `60_000` is safe — `tsconfig` target is ES2020 with downlevelled separators, and `60_000` already appears at `SEOCompetitors.tsx:184`.\n\nTwo non-blocking precision concerns it raised were addressed in the doc before commit: the random suffix is 128 bits for `token_hex(16)` but 122 bits for `uuid4().hex`, and only the live `website_report_*` path embeds a `session_id` (the dormant sessionless branch at `url_search_pdf_tool.py:1557` has no reachable caller — its sole caller passes `output_path` explicitly).\n\n**No test suite was runnable in the fixing environment** — no bun, node, `node_modules`, or Python venv, so `bun run build` (`tsc`), ESLint, and `pytest` did not execute. The `.tsx` changes rest on manual verification against codebase patterns. **`cd SEO && bun run build` should be run before merge** — CI does not type-check the frontend on MR pipelines, which is a gap the review already flagged.\n\n### The three skipped threads stay open\n\nEach was verified as a real observation; each needs a decision no ordinary commit can express:\n\n- **`file_serving.py:52`** — the remedy is squash-on-merge or a rebase of the frontend fix into commit 1. Recommend **squash on merge**.\n- **`referral_routes.py:245`** — needs a live 403 confirmation, then a scope call (exact-path `/api/v1/referral/attribute-signup` vs prefix-wide). Happy to apply the exact-path exemption + focused test as a follow-up once confirmed.\n- **`settings.py:69`** — the reviewer-accepted remedy (dev-only, documented) is already in this MR; anything stronger reverses the deliberate `DOCS_ENABLED_STAGING` opt-in.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T11:41:56.942Z"
+    },
+    {
+      "id": 3740422470,
+      "body": "/omnicheck",
+      "author_username": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T17:03:36.678Z"
+    },
+    {
+      "id": 3740788548,
+      "body": "🔄 **OmniForge findings check started** (trigger: '/omnicheck' by @shahilkadia) — typically 15–45 minutes.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T17:59:42.048Z"
+    },
+    {
+      "id": 3740809928,
+      "body": "## Follow-up Check — MR !1306\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 3 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 2 |\n\n### All findings\n\n| Status | Thread | File | Summary |\n|--------|--------|------|---------|\n| ✓ Applied | #b809efd | `SEO/frontend/components/ui/PdfViewer.tsx:82` | Blob URL revoked before the new tab could read it |\n| ✓ Applied | #9fef474 | `SEO/frontend/components/ui/PdfViewer.tsx:84` | New failure paths were invisible to the user |\n| ✓ Applied | #703b453 | `SEO/backend/api/routes/file_serving.py:32` | Cross-tenant residual was not tracked anywhere |\n| ✓ Silently Applied | #505bd88 | `SEO/backend/api/settings.py:69` | A single `DOCS_ENABLED=true` flip restores fully public docs |\n| ? Needs Human | #ea76cd2 | `SEO/backend/api/routes/file_serving.py:52` | Commit 1 lands the `/files` JWT gate with no working frontend consumers |\n| ? Needs Human | #7927f60 | `SEO/backend/api/routes/referral_routes.py:245` | Subscription gating may 403 brand-new referred signups before the new auth runs |\n\n### Needs Human Review\n\nThe three fixes from the last round are in and their threads are resolved. What remains cannot be closed by another commit on this branch — each needs a decision:\n\n- **#ea76cd2 — `file_serving.py:52`** — the branch is still three commits, and the first (`f74b8d8dd`) still touches no frontend file, so the intermediate state where PDF open, download and regenerate all 401 lands verbatim in `staging-phase` history — a `git bisect` hazard on a branch that deploys. The remedy is a merge-strategy choice, not a code change: merge with squash, or rebase the frontend fix into the first commit.\n- **#7927f60 — `referral_routes.py:245`** — `/api/v1/referral/` and `/files/` are still absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES` and this MR does not touch `main.py`. A freshly-created referred signup whose `app_metadata` has no `subscription_status` is still rejected with 403 `no_active_subscription` before `attribute-signup` runs, and the frontend swallows the failure, so the partner's conversion is silently dropped. Needs one confirmation against a running backend, then a scope call on the exemption (exact path `/api/v1/referral/attribute-signup` vs the whole prefix) — the `/api/v1/invitations/` exemption at `main.py` is the precedent for why exempting does not weaken auth.\n\n### Silently Applied\n\n- **#505bd88 — `settings.py:69`** — no second control was added: `main.py:2422-2424` still serves `/docs`, `/redoc` and `/openapi.json` unauthenticated when the flag is on, and `main.py` is untouched by this MR. What is present is the alternative the reviewer accepted as sufficient — docs default to off in both `ApiSettings` classes, in both task definitions and in both deploy jobs (`DOCS_ENABLED` and `DOCS_ENABLED_STAGING`, each falling back to `'false'`), with the keep-it-off guidance recorded in `.env.template`. The single-flip residual itself remains; the second control (admin-role dependency or internal-only listener) is still open if docs are ever enabled in a deployed environment.",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-26T18:04:54.330Z"
+    },
+    {
+      "id": 3756484729,
+      "body": "mentioned in merge request !1353",
+      "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T13:11:39.131Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "b3a07c026b670c62d256e3e712d2313a31545a1a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3733170000,
+          "body": "approved this merge request",
+          "author_username": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T16:49:08.351Z"
+        }
+      ]
+    },
+    {
+      "id": "55b48f6374cfdb2ced6d962d0c20b8fc343e895e",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3733179675,
+          "body": "unapproved this merge request",
+          "author_username": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T16:51:19.186Z"
+        }
+      ]
+    },
+    {
+      "id": "6c5ecd00f67a05a7f9f53db07ccfdc6501afc263",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3734381392,
+          "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1983558901&start_sha=f74b8d8ddef1ce773d3f84862effc0fc743705f1#7363e18d643eca8cd15eee13d8169304675e2d5c_24_22)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T20:52:30.364Z"
+        }
+      ]
+    },
+    {
+      "id": "22c8a00d0690fee97aee2eccad5b803cb73726ab",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3734381405,
+          "body": "changed this line in [version 2 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1983558901&start_sha=f74b8d8ddef1ce773d3f84862effc0fc743705f1#c147186a9ef5f5b8583796172cfb33e7a23fea49_257_259)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T20:52:30.590Z"
+        }
+      ]
+    },
+    {
+      "id": "a41f8f3334b3384d48a0e12195249f1bc22bd39f",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3734381426,
+          "body": "added 1 commit\n\n<ul><li>5f60233d - fix(security): address review findings on /files auth, referral email handling and docs flag</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1983558901&start_sha=f74b8d8ddef1ce773d3f84862effc0fc743705f1)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T20:52:30.965Z"
+        }
+      ]
+    },
+    {
+      "id": "fe2d26de7a929cee783164366d1d7e8bf7aa0a59",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3734386745,
+          "body": "resolved all threads",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-25T20:53:21.265Z"
+        }
+      ]
+    },
+    {
+      "id": "6b3e8bd1dce9234e4b21da80837daa2924853731",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3737467812,
+          "body": "/omnireview",
+          "author_username": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T09:41:42.455Z"
+        }
+      ]
+    },
+    {
+      "id": "eab3ea66d0a768c22ef2530a8e323c9237d09f31",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3737467886,
+          "body": "🔄 **OmniForge review started** (trigger: comment by @shahilkadia) — typically 15–45 minutes.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T09:41:43.764Z"
+        }
+      ]
+    },
+    {
+      "id": "dd65ba5d7304bd82ed2b024ba37371afb764fd32",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3737592268,
+          "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis MR closes two genuinely exploitable unauthenticated surfaces — forged commission-bearing referral attributions, and unauthenticated reads from the shared `generated_files/` directory — and turns the public API docs off by default across code, both task definitions and both deploy jobs. The code substance is sound: all three review agents independently traced the prior round's findings and confirmed each is genuinely and completely fixed, the repo-wide `/files` consumer sweep found no caller left credential-less, and the new 309-line test suite is adversarial rather than decorative.\n\nThe objection is not the code — it is that **the final commit has been validated by nothing and reviewed by no one.** The pipeline on `5f60233d7` is `skipped`, MR pipelines never type-check the frontend at all, the description still describes only the first commit (and states a threat that was false when written), and the human approval was withdrawn before the follow-up landed.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 7 |\n| Minor | 7 |\n\n### Strengths\n\n- Identity on `attribute-signup` is taken solely from the verified JWT, and the test asserts body-supplied `auth0|victim` / `victim@example.com` can never reach the stored procedure — a real adversarial assertion, not a happy path.\n- The `/files` docstring honestly scopes the gate as \"authentication only, NOT per-user authorisation\" and names the follow-up, rather than implying the hole is fully closed.\n- The empty-email design is reasoned through, not lucky: `or \"\"` protects the NOT NULL column, and `sp_record_conversion` matches attributions by `auth0_user_id` (not email), so a degraded email costs only the partner-dashboard display and cannot lose a payout.\n- Secure-by-default propagated through every layer, with two independent fail-closed guards: the deploy jobs hard-fail on any surviving `PLACEHOLDER_*`, and pydantic rejects a non-boolean literal at startup. No path was found that silently re-enables the docs.\n- The follow-up commit message is an exemplary review-response record, restating each finding and mapping it to per-file actions.\n\n### Key Concerns\n\n**Verification gaps (all process, all cheap to close):**\n\n1. **The head commit has never run CI** (pipeline 7338 on `5f60233d7` is `skipped`; only 7330 on `f74b8d8dd` passed). The 416-insertion follow-up — the 309-line test file, both route modules, and both React components — has been executed by no one and nothing. Re-run the pipeline on HEAD and require it green. *Confidence 100.*\n2. **The frontend changes are validated by no CI job even when a pipeline does run.** `build_frontend` (the only job that runs `tsc`) is gated to tag pipelines only — `- if: '$CI_COMMIT_TAG =~ /^(v|f|c|s|sf)\\d+\\.\\d+\\.\\d+$/'` then `- when: never` (`.gitlab-ci.yml:4226`) — and `check-error-leaks` is `when: manual` with `allow_failure: true` (`.gitlab-ci.yml:326`). The ~100 lines of TypeScript here have been type-checked by nothing. Run `cd SEO && bun run build` locally and record the result. *Confidence 90.*\n3. **The description describes commit 1 only.** It says \"no frontend change is needed\" while the MR ships +100 lines of `.tsx`, and the test plan never records that `tests/test_public_endpoint_auth.py` was actually executed — its checked items are syntax checks plus two pre-existing suites that this MR does not modify. The one runtime-verification box is unchecked. For a change that gates auth on live endpoints, `ast.parse` is not evidence of behaviour. *Confidence 95.*\n4. **The stated threat model for the `/files` fix is false.** \"At least one generator (risk-memo PDFs, keyed by ticker+date) produces guessable filenames\" — but `risk_memo_pdf_generator.py` has appended `secrets.token_hex(16)` since commit `2900151c6` (2026-06-02), an ancestor of this MR's base, and `url_search_pdf_tool.py` uses `uuid4().hex`. Your own review round caught this and the docstring was corrected; the description was not. The gate is still justified as defence-in-depth (a filename is not a credential), but the description should say that. *Confidence 95.*\n5. **Commit 1 breaks all three frontend `/files` consumers, and only commit 2 repairs them.** `git show f74b8d8dd -- SEO/frontend/` is empty. With `squash: false`, the broken intermediate state lands verbatim in `staging-phase` — a `git bisect` hazard on a branch that deploys. Squash on merge, or rebase the frontend fix into the first commit. *Confidence 90.*\n6. **The MR is unapproved and the follow-up has had no human review.** @shahilkadia approved at 16:49 and unapproved at 16:51 — before the fix commit existed at 20:52. The threads were then resolved by the same bot that pushed the fix, one minute later, with no reviewer sign-off, and the original comment bodies are no longer retrievable. The 416-line follow-up needs fresh human eyes and a re-approval; the withdrawn approval must not be read as covering it. *Confidence 100 / 85.*\n\n**Design decisions needing a human call:**\n\n7. **Subscription gating may 403 the very callers this MR secures** — see the inline thread on `referral_routes.py`. `/files/` and `/api/v1/referral/` are absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES`, so an authenticated caller without an active `subscription_status` is rejected with 403 `no_active_subscription` before your new auth ever runs. This is *not* a regression (the middleware pre-dates the MR and the frontend already sent the Bearer token), but a brand-new referred signup — the entire target population of `attribute-signup` — may never reach the handler, and `auth0-provider-with-history.tsx` swallows the failure silently. The repo already documented and exempted the identical deadlock for `/api/v1/invitations/` (`main.py:1804-1816`). Worth one runtime check before merge. *Confidence 72.*\n\n### Security\n\nSecurity posture **improves** — this closes two real holes and leaves no path that silently re-enables the docs. Two residuals, both in inline threads: the `/files` gate is authentication-only on a cross-tenant directory (a disclosed and well-documented follow-up — but please confirm it is actually *tracked* somewhere, because nothing in the repo references it), and setting `DOCS_ENABLED=true` anywhere restores fully public unauthenticated docs with no second control.\n\nAudited clean: JWT verification (RS256/JWKS + `aud` + `iss` + `exp`, fail-closed when unconfigured, no audience mismatch between `getAccessTokenSilently()` and `verify_jwt_token`), path traversal (gate runs before sanitisation; `realpath` containment holds; no `{file_name}` multi-segment match), CORS (`allow_headers=[\"*\"]`, same-origin `VITE_FILES_BASE_URL`, token in memory not localStorage), no new dependencies, injection, or SSRF surface.\n\nOne out-of-band note: the `logger.warning(f\"...: {e}\")` added in `referral_routes.py` passes both the CI gate and `docs/engineering/error-handling.md` (which target response fields, and explicitly permit logging the detail) — but exception text does reach shipped logs, which sits in tension with \"neither do logs shipped downstream\" in CLAUDE.md. No change needed here; flagging it as a policy question for the team rather than an MR defect.\n\n### Process Notes\n\n- Scope: two separable changes under one title (endpoint auth vs. the docs kill switch); the description's own Problem section opens with \"Separately,\". Splitting would have let the well-scoped docs half merge while the auth half waited on runtime verification. *Confidence 75.*\n- The branch is 18 commits behind target, so even the green pipeline 7330 validated against an older tree.\n- \"Both GitLab CI/CD variables have been created\" is infrastructure state no reviewer can check from the diff — low risk, since both substitutions default to `'false'`, but worth linking the change record. *Confidence 100.*\n- The \"authentication audit of every live REST route\" claim is not evidenced in the MR. Spot-checks corroborate it (every other `referral_routes.py` endpoint uses `_get_authenticated_user`/`_require_admin`; `/metrics` and `/tool-metrics` are SSM-bearer-gated; remaining public routes are deliberate by design). Attaching the audit inventory would make completeness reviewable rather than trusted. *Confidence 80.*\n- UI-visible behaviour changed (Open now opens a fetched blob rather than navigating) with no before/after captures. *Confidence 95.*\n\n**6 inline threads posted** — detail and fixes are there.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 14 findings above threshold*",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T10:00:07.442Z"
+        }
+      ]
+    },
+    {
+      "id": "ea76cd2776b9d174f83dc01c5d3f75e22b265e27",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3737593817,
+          "body": "**Important** — This gate lands with no working frontend consumers\n\n**What:** `git show f74b8d8dd -- SEO/frontend/` is empty. The first commit adds this JWT gate while all three frontend call paths were still credential-less — `PdfViewer.handleDownload` fetched with no headers, `handleOpen` was a plain `window.open` navigation, and `RegeneratePdf`'s WebViewer loaded `initialDoc`/`loadDocument` with no `customHeaders`. All three 401 against this line at that commit.\n\n**Why it matters:** With `squash: false`, the broken intermediate state lands verbatim in `staging-phase` history. At commit 1, PDF open, download and regenerate are all broken; at commit 2 they work again. That is a `git bisect` hazard on a branch that deploys — anyone bisecting a PDF regression onto `f74b8d8dd` will find a \"working\" commit that breaks the feature. Commit messages don't protect bisect.\n\n**Recommendation:** Squash on merge, or rebase the frontend fix into the first commit so target history never contains the broken state.\n\nConfidence: 90/100 | Found by: MR Analyst (OmniForge)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-26T10:00:28.764Z"
+        }
+      ]
+    },
+    {
+      "id": "b809efd7e696e8e7acab495cb2fe690b03457c76",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3737593871,
+          "body": "**Important** — Blob URL is revoked before the new tab can read it\n\n**What:** `window.open(blobUrl, '_blank')` returns as soon as the tab is opened, but the new tab fetches the blob URL asynchronously after the current task yields. `URL.revokeObjectURL(blobUrl)` runs synchronously on the very next line, destroying the mapping before the popup has necessarily fetched it.\n\n**Why it matters:** Intermittently produces a dead or blank tab when a user clicks Open. Firefox and Safari are the reliable failures; Chrome's grace period is an implementation detail rather than a contract, so it fails there too under load. The `handleDownload` path two functions up is fine — revoking right after `anchor.click()` is the established anchor-download pattern (`QueryRankingsExportButton.tsx:88-93`, `ExportPanel.tsx:74-80`) because the click consumes the URL synchronously. A navigation does not.\n\nThis is exactly the kind of thing only a runtime check catches, and the MR's test plan records that no runtime verification was performed.\n\n**Recommendation:**\n```ts\nwindow.open(blobUrl, '_blank');\n// The new tab fetches the blob asynchronously after this task yields —\n// revoking now races it and can leave a blank tab.\nsetTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);\n```\n(or revoke from the popup's `load` event if you open a `window` reference and can attach to it.)\n\nConfidence: 75/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-26T10:00:29.682Z"
+        },
+        {
+          "id": 3738168497,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1984961300&start_sha=5f60233d72d7659545d038d297bcda11eeb080ac#db680e9c419d5aebe7c009be22d41d18442ea33b_82_83)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:40:14.974Z"
+        },
+        {
+          "id": 3738169830,
+          "body": "Fixed in commit 01a2fb44c: the revoke in `handleOpen` now defers 60s instead of running synchronously after `window.open`, so the new tab can no longer lose the race for the blob URL.\n\n```ts\nwindow.open(blobUrl, '_blank');\n// The new tab fetches the blob asynchronously after this task yields —\n// revoking now races it and can leave a blank tab.\nsetTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);\n```\n\n`handleDownload`'s synchronous revoke is deliberately untouched — `anchor.click()` consumes the URL synchronously, so no race exists on that path. The deferred revoke matches the idiom already in `ImprovePanel.tsx:272`.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-26T11:40:34.333Z"
+        }
+      ]
+    },
+    {
+      "id": "7927f6053230c307ced7d6ebe0fcce88a68d7974",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3737594525,
+          "body": "**Important** — Subscription gating may 403 these callers before the new auth ever runs *(needs a human call)*\n\n**What:** `/api/v1/referral/` and `/files/` are both absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES` (`main.py:1802-1840`). Once `JWTUserRoleMiddleware` sets `user_id`, the gating middleware checks `app_metadata.subscription_status` and returns **403 `no_active_subscription`** for anything outside `active`/`trialing`/`past_due` — before this handler is entered.\n\n**Why it matters:** The primary caller of `attribute-signup` is a *brand-new referred signup*, who by definition has no subscription yet. If their `app_metadata` has no `subscription_status`, the request dies at the middleware and this fix never executes. The frontend swallows the failure (`fetch(...).catch(() => {})`), so attribution is silently dropped and the partner never sees the conversion.\n\nTo be clear this is **not a regression from this MR** — the middleware pre-dates it and `auth0-provider-with-history.tsx:205` already sent the Bearer token, so the 403 would have happened before too. It is flagged because the description asserts \"the frontend already sends a Bearer token on this call, so no frontend change is needed\", which is true but unverified end-to-end: it confirms the *header* is sent, not that the *request survives the middleware stack*. The codebase has already met and fixed this exact deadlock once — see the `/api/v1/invitations/` exemption at `main.py:1804-1816`, whose comment explains that \"an invitee is by definition someone who does NOT yet have a subscription\" and that gating it was a deadlock every genuinely new invitee hit.\n\n**Recommendation:** Verify once against a running backend that a freshly-created Auth0 user can reach this endpoint. If they 403, exempt the prefix — the comment on the invitations exemption explains why doing so does not weaken auth, and `_get_authenticated_user` still enforces the identity check this MR added. Either way, the new tests mount bare apps without the middleware stack, so this interaction is currently untested.\n\nConfidence: 72/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-26T10:00:38.836Z"
+        }
+      ]
+    },
+    {
+      "id": "703b4531f545a4fc4a2504a2c67de878c451f367",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3737594999,
+          "body": "**Minor** — Cross-tenant residual: confirm the \"tracked follow-up\" is actually tracked\n\n**What:** This is an honest and correct scoping statement — thank you for writing it down rather than implying the hole is closed. But `generated_files/` is a single flat directory shared across all tenants, and both writers (`risk_memo_pdf_generator.py`, `url_search_pdf_tool.py`) resolve to the exact directory this router serves. Any authenticated user of any tenant can read any tenant's file whose name they learn.\n\n**Attack scenario:** A user authenticated to tenant A obtains a tenant B risk-memo URL — a ticker-keyed financial report — from a support ticket, a screenshot, a shared machine's browser history, or a referrer/log leak (all channels the docstring above correctly acknowledges). They then fetch it with their own perfectly valid token. Confidentiality rests entirely on 128-bit filename secrecy for the life of the file.\n\n**Why it matters:** Nothing in the repo references this follow-up — no issue, no `docs/engineering/` entry, no TODO beyond this docstring. \"Tracked\" in a docstring is not tracked; the next person to touch `file_serving.py` has no way to find it. The exposure window is bounded (the ECS task definition has `\"volumes\": []`, so the store is ephemeral per task), and the previous state was strictly worse, so this is a disclosed residual rather than a regression.\n\n**Recommendation:** Either link the tracking issue here, or record the decision in `docs/engineering/`. For the fix itself, record `(filename, user_id)` at generation time and check `payload[\"sub\"]` in `open_file`/`download_file` — using `build_user_id_candidates` from `api/utils/site_access_utils`, since rows may hold either the Auth0 `sub` or a derived `uuid5`. A cheaper interim: `website_report_*` filenames already embed a `session_id`, which could be checked against sessions the caller owns.\n\nConfidence: 80/100 | Found by: Security Reviewer (OmniForge)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-26T10:00:44.279Z"
+        },
+        {
+          "id": 3738168513,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1984961300&start_sha=5f60233d72d7659545d038d297bcda11eeb080ac#7363e18d643eca8cd15eee13d8169304675e2d5c_32_32)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:40:15.220Z"
+        },
+        {
+          "id": 3738174472,
+          "body": "Fixed in commit 01a2fb44c: the residual is now actually tracked. Added `docs/engineering/2026-08-26-files-endpoint-auth-residual.md`, and the `get_current_user_id` docstring now points at it instead of asserting an untracked \"tracked follow-up\".\n\nThe record states the residual plainly (authentication-only gate on a flat cross-tenant `generated_files/` store; both generators resolve to the directory this router serves), the three conditions that currently bound it (128-bit suffix from `secrets.token_hex(16)` / 122 bits from `uuid4().hex` — a filename is not a credential; ephemeral per-task store since the ECS task definitions mount no volumes; strictly better than the prior no-identity-check state), and the open follow-up: a `(filename, owner_user_id)` mapping recorded at generation time and checked in `open_file`/`download_file`, failing closed with 404 rather than 403 so a denial does not confirm a filename's existence. The owner check is specified to resolve both stored user-id formats via `build_user_id_candidates` with `.in_(candidates)`, never `== user_id`.\n\nThe ownership enforcement itself remains a follow-up — it needs a numbered migration plus writes in both generators, so it is out of scope for this MR. The cheaper interim (`website_report_*` filenames already embed a `session_id`) is recorded too, with a note that only the live generation path embeds it and that the dormant sessionless branch in the same tool must be covered or removed first.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-26T11:41:19.540Z"
+        }
+      ]
+    },
+    {
+      "id": "9fef474126ac67714b757bd98cfd11f03fa5a232",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3737595048,
+          "body": "**Minor** — New failure paths are invisible to the user\n\n**What:** Both new failure paths report via `console.error` only — this one in `handleOpen`, and the `getAccessTokenSilently` catch in `RegeneratePdf.tsx`.\n\n**Why it matters:** On a 401 or a token-refresh failure the user clicks Open and nothing visibly happens; the Regenerate modal renders an empty box. Since this MR is what introduces the possibility of these failures (the endpoints were previously open), the silent-failure path ships in the same change. Repo convention is sonner — `import { toast } from 'sonner'`, global `<Toaster />` already in `App.tsx` — and the neighbouring pattern is `toast.error(...)` on export failures (`QueryRankingsExportButton.tsx:96-99`).\n\n**Recommendation:**\n```ts\nimport { toast } from 'sonner';\n// ...\n} catch (error) {\n    console.error('Error opening the file', error);\n    toast.error('Could not open the report. Please try again.');\n}\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-26T10:00:45.275Z"
+        },
+        {
+          "id": 3738174316,
+          "body": "Fixed in commit 01a2fb44c: both failure paths now raise a sonner toast alongside the existing `console.error`, so a 401 on Open is no longer a silent dead click and a token-refresh failure no longer renders an empty regenerate modal.\n\n- `PdfViewer.tsx` `handleOpen` catch → `toast.error('Could not open the report. Please try again.')`\n- `RegeneratePdf.tsx` access-token catch → `toast.error('Could not load the document for regeneration.')`\n\nBoth keep the `console.error`. Sonner is the repo convention (`<Toaster />` mounted in `App.tsx`, ~740 existing `toast.error` call sites), the copy is static developer-authored text with no error interpolation, and both components already import nothing that conflicts. The `WebViewer` initialisation catch in `RegeneratePdf.tsx` was left alone — it is outside this finding's scope.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-26T11:41:17.333Z"
+        }
+      ]
+    },
+    {
+      "id": "505bd880bbe4dc223531077e3fbe94f574d6538f",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3737595116,
+          "body": "**Minor** — A single variable flip restores fully public, unauthenticated API docs\n\n**What:** The secure-by-default work here is thorough — code default, both task definitions, both deploy jobs with a `'false'` fallback, plus two independent fail-closed guards (the deploy jobs hard-fail on any surviving `PLACEHOLDER_*`, and pydantic rejects a non-boolean literal at startup). No path was found that re-enables the docs silently.\n\nThe residual is that when someone *deliberately* sets `DOCS_ENABLED=true`, `/docs`, `/redoc` and `/openapi.json` return to being fully public and unauthenticated. They are in `EXEMPT_PREFIXES` (`main.py:1820-1821`), so they bypass `SubscriptionGatingMiddleware` as well, and `openapi.json` would enumerate the entire REST surface including the admin routes.\n\n**Attack scenario:** Someone flips the variable to debug an environment and forgets; the next deploy republishes the full API schema to the internet with no auth and no alert. This is a misconfiguration-recovery gap, not a current exposure.\n\n**Recommendation:** If the docs ever need to be on in a deployed environment, give them a second control rather than relying on the flag alone — simplest is a dependency that rejects callers without an admin role in `request.state.user_roles`, or binding them to an internal-only listener. Keeping them dev-only and documenting that in `.env.template` (already done) is also a fine answer.\n\nConfidence: 70/100 | Found by: Security Reviewer (OmniForge)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-26T10:00:46.239Z"
+        }
+      ]
+    },
+    {
+      "id": "af162d8a95c7dc264d7850364a23d1829d68ff9f",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3737676583,
+          "body": "/omnifix",
+          "author_username": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T10:15:50.865Z"
+        }
+      ]
+    },
+    {
+      "id": "d375b6db91d204a0b2394de1b36221fa618ff2e5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3737676697,
+          "body": "🔄 **OmniForge fix triage (proposal — nothing changes yet) started** (trigger: '/omnifix' by @shahilkadia) — typically 15–45 minutes.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T10:15:52.318Z"
+        }
+      ]
+    },
+    {
+      "id": "20ebc7a2c71e8c72b894e1521d0ff8e35b94d5fb",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3737724619,
+          "body": "## OmniFix fix proposal — MR !1306 (nothing has been changed yet)\n\nAll 6 unresolved review threads were triaged against the code at `5f60233d7` (4 parallel triage agents, grouped by file). Result: **3 VALID, 0 INVALID, 3 needing a human call.**\n\n### VALID — I will apply these three fixes on `/omnifix go`\n\n**1. `SEO/frontend/components/ui/PdfViewer.tsx:82` — blob URL revoked before the new tab can read it** (thread `b809efd7…`)\n`window.open(blobUrl, '_blank')` returns before the popup fetches the blob URL, and the synchronous `URL.revokeObjectURL(blobUrl)` on the very next line can win that race — a dead/blank tab, reliably on Firefox/Safari. No compensating control exists, and the codebase already defers revokes elsewhere (`ImprovePanel.tsx`, `ReportsList.tsx`, `ReportNotification.tsx`).\n**Fix:** replace the immediate revoke with `setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)` plus a one-line comment explaining the race. Nothing else in the function changes.\n\n**2. `SEO/frontend/components/ui/PdfViewer.tsx:84` + `RegeneratePdf.tsx:93` — new failure paths are invisible to the user** (thread `9fef4741…`)\nBoth catches this MR adds report via `console.error` only: a 401 on Open is a silent dead click, and a token-refresh failure renders an empty regenerate modal — on failure modes this MR itself introduces.\n**Fix:** add a sonner `toast.error(...)` (repo convention — `<Toaster />` is already mounted in `App.tsx`) to both catches, keeping the `console.error`: \"Could not open the report. Please try again.\" in `handleOpen`, and \"Could not load the document for regeneration.\" in the `RegeneratePdf` token catch.\n\n**3. `SEO/backend/api/routes/file_serving.py:32` — the \"tracked follow-up\" is not tracked anywhere** (thread `703b4531…`)\nNothing in the repo references the cross-tenant residual — no issue, no `docs/engineering/` entry, nothing beyond the docstring itself.\n**Fix:** add `docs/engineering/2026-08-26-files-endpoint-auth-residual.md` recording the accepted residual (authentication-only gate on the flat cross-tenant `generated_files/` store, ephemeral per ECS task, 128-bit filename secrecy as the remaining barrier) and the follow-up plan (filename→owner mapping recorded at generation time and checked in `open_file`/`download_file` via `build_user_id_candidates`, failing closed with 404), and point the `file_serving.py` docstring at it. The ownership enforcement itself is a schema change and remains a follow-up — the doc record is the minimal remedy the thread asks for.\n\nOn `/omnifix go` these land as a single conventional commit on `fix/api-auth-hardening`; I then push and reply on (and resolve) these three threads.\n\n### Not auto-fixable — need a human call (observations verified correct; no false positives)\n\n- **`file_serving.py:52` (thread `ea76cd27…`) — commit 1 breaks all three frontend `/files` consumers.** Verified: `f74b8d8dd` touches no frontend file, so PDF open/download/regenerate all 401 at that commit, and target history keeps merge commits (no squash), landing the broken intermediate state verbatim. But the remedy — squash on merge, or rebase the frontend fix into commit 1 — is a merge-strategy/history decision no ordinary commit can express. Recommendation: **merge with squash**.\n- **`referral_routes.py:245` (thread `7927f605…`) — subscription gating may 403 brand-new referred signups before the new auth runs.** Verified end-to-end in code: `/api/v1/referral/` is absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES`, `subscription_status` is only written post-checkout or by plan sync (so a fresh signup cannot have it), the frontend swallows the failure, and this is structurally identical to the documented `/api/v1/invitations/` deadlock. Not a regression from this MR. The remedy is verify-at-runtime-then-decide plus a scope decision (exact-path `/api/v1/referral/attribute-signup` vs prefix-wide, which would also un-gate the partner/admin routes). If you confirm the 403 live and tell me the scope, I can apply the exact-path exemption + focused test (mirroring `test_subscription_gate_invitation_exempt.py`) as a follow-up — not without that confirmation.\n- **`settings.py:69` (thread `505bd880…`) — a single `DOCS_ENABLED=true` flip restores fully public docs.** Verified, but the remedy the reviewer accepts as sufficient (keep dev-only, documented in `.env.template`) is already done by this MR. The stronger options (admin-role gate or internal-only listener) require remounting FastAPI's stock docs routes with auth and would reverse the deliberate `DOCS_ENABLED_STAGING` opt-in this MR provisions — a security-posture design decision, not an auto-fix.\n\nThese three threads stay open either way.\n\nReply `/omnifix go` on this MR to apply these fixes — I will push to the source branch and resolve the fixed threads.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T10:25:12.534Z"
+        }
+      ]
+    },
+    {
+      "id": "ae3dc997cf77405730896aa9516ebc1ba79e2800",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3738098972,
+          "body": "/omnifix go",
+          "author_username": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:27:35.574Z"
+        }
+      ]
+    },
+    {
+      "id": "d9870c31490c3f58084cd9103d4b9f759a17b1ea",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3738099076,
+          "body": "🔄 **OmniForge fix application (pushing to the source branch) started** (trigger: '/omnifix go' by @shahilkadia) — a few minutes.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:27:37.207Z"
+        }
+      ]
+    },
+    {
+      "id": "b1762f416a0d9fe8d90a9cf5172813ba25b58f91",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3738168428,
+          "body": "mentioned in commit 01a2fb44c65c474a4a36269647a9874278ee5d3b",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:40:13.882Z"
+        }
+      ]
+    },
+    {
+      "id": "4fa9df8e1c1be5862f13789fe8d9e4848c39aa92",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3738168535,
+          "body": "added 1 commit\n\n<ul><li>01a2fb44 - fix(review): defer blob revoke on open, surface /files auth failures, record...</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1306/diffs?diff_id=1984961300&start_sha=5f60233d72d7659545d038d297bcda11eeb080ac)",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:40:15.548Z"
+        }
+      ]
+    },
+    {
+      "id": "cb57e1326dab32b42606abdf860384c6d9feca5a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3738177328,
+          "body": "## OmniFix Summary — 6 findings processed\n\nCommit **01a2fb44c** pushed to `fix/api-auth-hardening` (`5f60233d7..01a2fb44c`, fast-forward, no drift). Applies the 3 fixes approved via `/omnifix go`.\n\n| Finding | File | Status |\n|---|---|---|\n| Blob URL revoked before the new tab can read it | `PdfViewer.tsx:82` | Fixed in 01a2fb44c — thread resolved |\n| New failure paths invisible to the user | `PdfViewer.tsx:84`, `RegeneratePdf.tsx:93` | Fixed in 01a2fb44c — thread resolved |\n| Cross-tenant residual: \"tracked follow-up\" not tracked anywhere | `file_serving.py:32` | Fixed in 01a2fb44c — thread resolved |\n| Commit 1 breaks all three frontend `/files` consumers | `file_serving.py:52` | **Skipped** — needs a human merge-strategy call |\n| Subscription gating may 403 referred signups before the new auth runs | `referral_routes.py:245` | **Skipped** — needs runtime confirmation + scope decision |\n| A single `DOCS_ENABLED=true` flip restores public docs | `settings.py:69` | **Skipped** — security-posture design decision |\n\n### What changed\n\n- **`PdfViewer.tsx` `handleOpen`** — the blob URL revoke now defers 60s instead of running synchronously after `window.open`, so the new tab can no longer lose the race for the URL (Firefox/Safari reliably, Chrome under load). `handleDownload`'s synchronous revoke is untouched; `anchor.click()` consumes the URL synchronously, so no race exists there.\n- **`PdfViewer.tsx` / `RegeneratePdf.tsx`** — both `/files` auth failure paths this MR introduced now raise a sonner `toast.error` alongside the existing `console.error`. Copy is static developer-authored text, no error interpolation.\n- **`docs/engineering/2026-08-26-files-endpoint-auth-residual.md`** (new) — records the accepted cross-tenant residual, the three conditions bounding it, and the open ownership-enforcement follow-up. The `get_current_user_id` docstring now points at it.\n\n### Verification\n\nFresh-eyes verification agent returned **APPROVED** — all three fixes scoped correctly, no out-of-scope edits, `git diff --check` clean, `ast.parse` on `file_serving.py` OK, every factual claim in the new doc fact-checked against the code (`secrets.token_hex(16)` at `risk_memo_pdf_generator.py:129`, `uuid4().hex` at `url_search_pdf_tool.py:106`, both writers resolving to the served `generated_files/` directory, `build_user_id_candidates` at `site_access_utils.py:10`, ECS task definitions mounting no volumes). The numeric separator `60_000` is safe — `tsconfig` target is ES2020 with downlevelled separators, and `60_000` already appears at `SEOCompetitors.tsx:184`.\n\nTwo non-blocking precision concerns it raised were addressed in the doc before commit: the random suffix is 128 bits for `token_hex(16)` but 122 bits for `uuid4().hex`, and only the live `website_report_*` path embeds a `session_id` (the dormant sessionless branch at `url_search_pdf_tool.py:1557` has no reachable caller — its sole caller passes `output_path` explicitly).\n\n**No test suite was runnable in the fixing environment** — no bun, node, `node_modules`, or Python venv, so `bun run build` (`tsc`), ESLint, and `pytest` did not execute. The `.tsx` changes rest on manual verification against codebase patterns. **`cd SEO && bun run build` should be run before merge** — CI does not type-check the frontend on MR pipelines, which is a gap the review already flagged.\n\n### The three skipped threads stay open\n\nEach was verified as a real observation; each needs a decision no ordinary commit can express:\n\n- **`file_serving.py:52`** — the remedy is squash-on-merge or a rebase of the frontend fix into commit 1. Recommend **squash on merge**.\n- **`referral_routes.py:245`** — needs a live 403 confirmation, then a scope call (exact-path `/api/v1/referral/attribute-signup` vs prefix-wide). Happy to apply the exact-path exemption + focused test as a follow-up once confirmed.\n- **`settings.py:69`** — the reviewer-accepted remedy (dev-only, documented) is already in this MR; anything stronger reverses the deliberate `DOCS_ENABLED_STAGING` opt-in.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T11:41:56.942Z"
+        }
+      ]
+    },
+    {
+      "id": "35af70557da69345fe62c99242ebbafe4503615f",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3740422470,
+          "body": "/omnicheck",
+          "author_username": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T17:03:36.678Z"
+        }
+      ]
+    },
+    {
+      "id": "748974186061c9fc65b671749f71014f28fb82d7",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3740788548,
+          "body": "🔄 **OmniForge findings check started** (trigger: '/omnicheck' by @shahilkadia) — typically 15–45 minutes.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T17:59:42.048Z"
+        }
+      ]
+    },
+    {
+      "id": "9ea649267028020dfb6bbcb4fde1caea20829e15",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3740809928,
+          "body": "## Follow-up Check — MR !1306\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 3 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 2 |\n\n### All findings\n\n| Status | Thread | File | Summary |\n|--------|--------|------|---------|\n| ✓ Applied | #b809efd | `SEO/frontend/components/ui/PdfViewer.tsx:82` | Blob URL revoked before the new tab could read it |\n| ✓ Applied | #9fef474 | `SEO/frontend/components/ui/PdfViewer.tsx:84` | New failure paths were invisible to the user |\n| ✓ Applied | #703b453 | `SEO/backend/api/routes/file_serving.py:32` | Cross-tenant residual was not tracked anywhere |\n| ✓ Silently Applied | #505bd88 | `SEO/backend/api/settings.py:69` | A single `DOCS_ENABLED=true` flip restores fully public docs |\n| ? Needs Human | #ea76cd2 | `SEO/backend/api/routes/file_serving.py:52` | Commit 1 lands the `/files` JWT gate with no working frontend consumers |\n| ? Needs Human | #7927f60 | `SEO/backend/api/routes/referral_routes.py:245` | Subscription gating may 403 brand-new referred signups before the new auth runs |\n\n### Needs Human Review\n\nThe three fixes from the last round are in and their threads are resolved. What remains cannot be closed by another commit on this branch — each needs a decision:\n\n- **#ea76cd2 — `file_serving.py:52`** — the branch is still three commits, and the first (`f74b8d8dd`) still touches no frontend file, so the intermediate state where PDF open, download and regenerate all 401 lands verbatim in `staging-phase` history — a `git bisect` hazard on a branch that deploys. The remedy is a merge-strategy choice, not a code change: merge with squash, or rebase the frontend fix into the first commit.\n- **#7927f60 — `referral_routes.py:245`** — `/api/v1/referral/` and `/files/` are still absent from `SubscriptionGatingMiddleware.EXEMPT_PREFIXES` and this MR does not touch `main.py`. A freshly-created referred signup whose `app_metadata` has no `subscription_status` is still rejected with 403 `no_active_subscription` before `attribute-signup` runs, and the frontend swallows the failure, so the partner's conversion is silently dropped. Needs one confirmation against a running backend, then a scope call on the exemption (exact path `/api/v1/referral/attribute-signup` vs the whole prefix) — the `/api/v1/invitations/` exemption at `main.py` is the precedent for why exempting does not weaken auth.\n\n### Silently Applied\n\n- **#505bd88 — `settings.py:69`** — no second control was added: `main.py:2422-2424` still serves `/docs`, `/redoc` and `/openapi.json` unauthenticated when the flag is on, and `main.py` is untouched by this MR. What is present is the alternative the reviewer accepted as sufficient — docs default to off in both `ApiSettings` classes, in both task definitions and in both deploy jobs (`DOCS_ENABLED` and `DOCS_ENABLED_STAGING`, each falling back to `'false'`), with the keep-it-off guidance recorded in `.env.template`. The single-flip residual itself remains; the second control (admin-role dependency or internal-only listener) is still open if docs are ever enabled in a deployed environment.",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-26T18:04:54.330Z"
+        }
+      ]
+    },
+    {
+      "id": "893c055e8499272c24c60347e9c9e5a65f2d2ce5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756484729,
+          "body": "mentioned in merge request !1353",
+          "author_username": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T13:11:39.131Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "01a2fb44c65c474a4a36269647a9874278ee5d3b",
+      "title": "fix(review): defer blob revoke on open, surface /files auth failures, record the cross-tenant residual",
+      "author_name": "omniforge-gateway",
+      "created_at": "2026-08-26T19:39:51.000+08:00"
+    },
+    {
+      "id": "5f60233d72d7659545d038d297bcda11eeb080ac",
+      "title": "fix(security): address review findings on /files auth, referral email handling and docs flag",
+      "author_name": "omniforge-gateway",
+      "created_at": "2026-08-26T04:52:20.000+08:00"
+    },
+    {
+      "id": "f74b8d8ddef1ce773d3f84862effc0fc743705f1",
+      "title": "fix(security): close unauthenticated API endpoints and disable public API docs by default",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-25T21:32:15.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [],
+    "approved": false,
+    "fetch_error": null
+  }
+}

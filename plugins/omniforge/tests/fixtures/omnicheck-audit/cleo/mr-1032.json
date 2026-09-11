@@ -1,0 +1,547 @@
+{
+  "meta": {
+    "iid": 1032,
+    "title": "Responsive/mobile UI fixes across SEO & GEO app",
+    "state": "merged",
+    "author_username": "priyansh-gupta23",
+    "created_at": "2026-07-29T08:10:11.026Z",
+    "updated_at": "2026-07-30T20:47:43.155Z",
+    "merged_at": "2026-07-30T20:47:41.280Z",
+    "labels": [],
+    "source_branch": "Responsive_UI",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032",
+    "sha": "2812ea696017a96982f7cfcc1386cdbd1692a7ee",
+    "merge_commit_sha": "bbad2f7ce73091585bb41f9c35c510e29d3b4532",
+    "diff_refs": {
+      "base_sha": "8de2c15bb6e4e661f8cea62fca2c7954ce3137c1",
+      "head_sha": "2812ea696017a96982f7cfcc1386cdbd1692a7ee",
+      "start_sha": "d6ba20b14c2124740b68731f0f4bf8c5d1dad9d4"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3621763208,
+      "body": "requested review from @jainex",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T07:33:41.789Z"
+    },
+    {
+      "id": 3622124811,
+      "body": "## OmniForge\n\n**Verdict:** APPROVE_WITH_FIXES\n\n### Overview\n\nThis is a large (68-file, ~1861-line) responsive/mobile CSS pass across the SEO/GEO frontend. The underlying architecture is sound: theme tokens are used consistently, the frozen `designSystem.ts` is genuinely untouched, and no security-relevant surface was touched. The main risks are process gaps — a stale/inaccurate description, no screenshots for a purely visual change, and no visible review activity — plus one apparent content regression (a tooltip's detailed copy was deleted, not just relocated, inside a commit described as \"layout only\").\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 6 |\n| Minor | 6 |\n\n### Strengths\n\n- `designSystem.ts` (frozen) verified genuinely untouched, and zero hardcoded hex colors introduced anywhere in the diff.\n- `ClientDetailView.tsx`'s largest change (572 lines) is a well-executed refactor — shared render helpers now drive both the new mobile-card layout and the existing desktop table from one source, with owner-only permission gates verified preserved identically in both paths.\n- Consistent, correct MUI breakpoint usage throughout, matching existing codebase patterns.\n\n### Key Concerns\n\n- **Tooltip copy silently rewritten** inside a commit described as layout-only — see inline thread on `CitationsView.tsx:1791`.\n- **MR description is stale and partly inaccurate** — it only reflects the first of two commits (omitting Campaign/Strategy/Reports/BlockEditor/Plans/Reputation/WordPress Editor, ~42 files), and claims fixes to \"Daily Monitoring\" / \"Keyword Ranking\" components that don't appear anywhere in the diff.\n- **Zero screenshots/GIFs** for a purely visual, 68-file, light+dark, mobile+desktop change — there's no way to verify the core claim without checking out the branch.\n- Both feature commits carry a `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` trailer, which is against this team's commit convention.\n- `ClientDetailView.tsx`'s 572-line change is a genuine structural refactor (not just CSS) and has zero test coverage — see inline thread.\n\n### Security\n\nNo security concerns found. All 10 OWASP categories checked clean — the diff is confirmed frontend-only, with no new dependencies, secrets, data-exposure, or access-control changes (owner-only gates traced and confirmed preserved).\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 12 findings above threshold*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T08:47:13.700Z"
+    },
+    {
+      "id": 3622140302,
+      "body": "**Important** — Tooltip copy rewritten, not just relocated\n\n**What:** While reordering the \"PRESENCE BY ENGINE\" section heading for mobile stacking, the tooltip text itself was substantively rewritten. The specific sub-metric definitions (\"Cited in answers — the share of AI answers that link to your site,\" \"Appears in queries — the share of your tracked questions where your brand shows up\") were deleted entirely and don't reappear anywhere else in the codebase.\n\n**Why it matters:** This MR (and its commits) describe this as a layout-only responsive pass. A content/copy change bundled silently into a \"reorder\" makes it easy for reviewers to approve a UX regression without noticing, since responsive QA checks layout, not tooltip wording.\n\n**Recommendation:**\n```\nRestore the original detailed tooltip copy, e.g.:\n\"How visible your brand is in each AI engine. Cited in answers — the share\nof AI answers that link to your site. Appears in queries — the share of\nyour tracked questions where your brand shows up. Higher is better on both.\"\n\n...or, if the shorter copy is an intentional simplification, get explicit\nproduct/design sign-off and call it out in the MR description separately\nfrom the layout changes.\n```\n\nConfidence: 97/100 | Found by: MR Analyst (OmniForge) + Codebase Reviewer (OmniForge) — independently flagged",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T08:50:26.034Z"
+    },
+    {
+      "id": 3622140381,
+      "body": "**Important** — Structural refactor mislabeled as \"fluid cards\", zero test coverage\n\n**What:** This 572-line change (the largest in the MR) isn't a pure CSS tweak — it replaces a single CSS-branched table with a full `isMobile ? <cards> : <table>` conditional render, extracting 8+ helper functions (`renderSiteActions`, `renderSeoScore`, `renderGeoScore`, `renderStatus`, `renderPlan`, etc.) so both layouts share the same logic. The refactor itself checks out as behavior-preserving on inspection, and owner-only permission gates were verified preserved identically in both branches — but it's materially higher-risk than \"fluid project cards, wrapping header/action buttons\" implies, and `ClientDetailView` has no test file at all, before or after this change.\n\n**Why it matters:** A future edit to either branch (mobile or desktop) has nothing to catch a regression that only shows up in the other branch — there's no automated signal today.\n\n**Recommendation:**\n```tsx\n// Add a smoke test covering both render paths, e.g.:\ndescribe('ClientDetailView', () => {\n  it('renders desktop table layout at desktop width', () => { ... });\n  it('renders mobile card layout at mobile width', () => { ... });\n});\n```\nAlso worth calling out this refactor explicitly in the MR description as a distinct, higher-risk change rather than bundling it under \"fluid project cards.\"\n\nConfidence: 85/100 | Found by: MR Analyst (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T08:50:26.938Z"
+    },
+    {
+      "id": 3622140479,
+      "body": "**Minor** — Style object recreated on every render\n\n**What:** `richContentOverflowSx` (with three nested selector sub-objects for `& table`, `& img`, `& pre`) is declared inside the `SectionCard` function body, so it's reconstructed on every render of every section card. `SectionCard` is rendered once per section in a `.map()` over a WordPress page's sections — a page can have dozens.\n\n**Why it matters:** The object has no dependency on props/state/theme, so it's trivially hoistable. Not currently egregious (MUI's `sx` diffing is cheap for small objects), but it's an avoidable allocation multiplied by section count on every re-render of a frequently-updated editor surface — and this same MR correctly hoists the equivalent `mobileCellLabelSx` pattern to module scope elsewhere.\n\n**Recommendation:**\n```tsx\n// Move outside the component, same as mobileCellLabelSx elsewhere in this MR:\nconst richContentOverflowSx = {\n  maxWidth: '100%',\n  overflowX: 'auto',\n  overflowWrap: 'anywhere',\n  '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' },\n  '& img': { maxWidth: '100%', height: 'auto' },\n  '& pre': { maxWidth: '100%', overflowX: 'auto', whiteSpace: 'pre-wrap' },\n} as const;\n\nconst SectionCard: React.FC<SectionCardProps> = ({ ... }) => { ... };\n```\n\nConfidence: 75/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T08:50:27.878Z"
+    },
+    {
+      "id": 3622140578,
+      "body": "**Minor** — Unlinked magic-number duplication\n\n**What:** The new mobile toggle offset hardcodes `288` (`isOpen ? 288 : 10`), which is a duplicate-with-offset of the drawer's own mobile width `280` defined a few lines later (`width: isMobile ? 280 : '18%'`). The two numbers aren't linked by any shared constant. The sibling component `SiteSection.tsx` (touched in this same commit) does this correctly — its toggle position is derived via `calc(${t.width} * 17/18)` from the same token that sizes its drawer.\n\n**Why it matters:** If the mobile drawer width (`280`) ever changes, this toggle position will silently drift out of alignment with no compiler or lint warning.\n\n**Recommendation:**\n```tsx\n// Derive from the same value used for the drawer width, mirroring SiteSection.tsx:\nconst mobileDrawerWidth = 280;\n// ...\nleft: isMobile ? (isOpen ? mobileDrawerWidth + 8 : 10) : (isOpen ? '17%' : '10px'),\n// ...\nwidth: isMobile ? mobileDrawerWidth : '18%',\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer (OmniForge)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T08:50:28.931Z"
+    },
+    {
+      "id": 3623497822,
+      "body": "added 1 commit\n\n<ul><li>4ee7eff2 - feat(geo): add site favicons to competitor/citation lists and guard partial diagnosis payloads</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1933230804&start_sha=39ee76bdbdf12bbf53204bf2617416d145b19168)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T13:19:39.249Z"
+    },
+    {
+      "id": 3623516485,
+      "body": "Responsive / mobile UI pass across SEO & GEO frontend\n\nSummary\n\nA frontend-only responsive/mobile layout pass so pages, dashboards, tables, and tool panels reflow cleanly on small screens instead of overflowing. Purely visual — no business logic, data flow, WebSocket actions, or backend touched. Verified in both Pearl (light) and Obsidian (dark) modes.\n\nScope: 68 files across the SEO tools, GEO Intelligence Dashboard, Reports, Block Editor / Quill, Campaign / Strategy / Reputation, WordPress Editor, Plans, Agency Mode, Client Detail, and shared UI/theme style modules.\n\nWhat changed\n\nClient Detail (largest change) — ClientDetailView.tsx refactored so shared render helpers drive both a new mobile-card layout and the existing desktop table from one source; owner-only permission gates preserved identically in both paths.\n\nGEO — Intelligence Dashboard — Responsive reflow of IntelligenceDashboard + header, CitationsView, CompetitorsView, AnalyticsLayout, QuillEditorView, ImprovementsView, SEOSettingsPanel, and cards (BrandHealthCards, CompetitiveLandscapeCard, RecommendationRateCard, VisibilityScoreTrendChart). Also restores the full PRESENCE BY ENGINE tooltip definition that had been shortened.\n\nSEO Tools — Responsive fixes across \\~30 tools (AI Audit, Backlink Analyzer/Gap, Canonical, Clone Page, Content Idea Finder, Custom 404, Site Verification, HTML Sitemap, Internal Linking, LLM Text Generator, Clarity, Popup Manager, Redirects, Schema Manager, Site Health Scanner, Submit Sitemap, URL Rewriting, Analytics Setup, Event Report, and new-tools: Content Gap, Crawl Stats, Meta Tag, Page Speed, Website Audit, WordPress Backup).\n\nBlock Editor / Quill — DragDropBlockEditor, AISidebar, WizardFormStep, ContentOpportunities (+ OpportunityCard), FontToolbar, QuillLandingView.\n\nCampaign / Strategy / Reputation — CampaignDetail, StrategyTab, ReputationTab.\n\nReports — ReportsList, GenerateReportDialog, ReportNotification, ReportProgressTracker, ReportsPage.\n\nWordPress Editor — WpPageEditor, SectionCard.\n\nPlans / Agency Mode / Shared UI & themes — PlansPage, Agency SEOSettingsCard, ui/LeftSection, ui/SiteSection, Scoreboard/styles, TheLoop, imageGeoTaggerStyles.ts, seoToolComponentStyles.ts.\n\nCommits\n\n1. f2ec443f1 — Responsive/mobile UI fixes across SEO & GEO app\n2. f51750768 — UI(mobile): fluid responsive layouts so nothing overflows on small screens\n3. 39ee76bdb — Merge staging-phase into Responsive_UI\n\nConventions honoured\n\n- designSystem.ts (frozen) untouched — no exports added.\n- No hardcoded hex / magic numbers — colours, spacing, fonts from theme tokens; correct in light + dark.\n- Consistent MUI breakpoint usage matching existing patterns.\n\nTesting / verification\n\n- [ ] Screenshots — before/after, mobile + desktop, light + dark\n- [ ] ClientDetailView mobile-card vs desktop-table parity spot-checked\n- [ ] Owner/Editor/Viewer gates behave identically on Client Detail\n\nRisk / blast radius\n\nFrontend-only visual changes. No new dependencies, secrets, data-exposure, or access-control changes. Backend, WebSocket actions, and API contracts untouched.\n\n---\n\nTwo notes:\n\n- I removed the reviewer's flagged inaccuracies — it no longer claims \"Daily Monitoring\" / \"Keyword Ranking\" fixes (those aren't in the diff), and it now covers Campaign/Strategy/Reports/BlockEditor/Plans/Reputation/WordPress Editor.\n- I dropped the Co-Authored-By: Claude reference from the description, but that trailer still lives in the two commit messages — that's a separate history-rewrite question. Want me to tackle that next, or move to the next review comment?\n\n  ![image.png](/uploads/ad8e0fc6373122a03cb8c67c74e57070/image.png){width=\"255\" height=\"564\"}\n\n  ![image.png](/uploads/554987c96b98152b43154add76556eac/image.png){width=\"254\" height=\"569\"}\n\n  ![image.png](/uploads/c628bc36bb5adac9419e67e84a906bf1/image.png){width=775 height=441}\n\n  Adds site favicons next to brand/competitor names across the GEO Competitors and Citations views so each row/chip carries the site's visual identity, and hardens the query-detail drawer against incomplete backend diagnosis payloads (which were causing render crashes).\n\n  Changes by page / component\n\n  GEO → Competitors tab — CompetitorRankingTable.tsx\n  - Added a rounded-square site favicon to the left of each competitor's name in the Competitor Rankings card.\n  - Graceful fallback to a colored letter-initial avatar when the domain is unknown or the icon fails to load.\n\n  GEO → Citations tab → Buyer Intent Queries → \"View details\" drawer — QueryDetailDrawer.tsx\n  - Diagnosis tab — favicons in the \"Who's being cited instead\" competitor list.\n  - Performance tab — favicons on the source-citation rows (both the per-execution and per-engine citation lists).\n  - Prompt Execution view — favicons on the Mentions chips (competitors get the site icon; your brand keeps its check marker).\n  - Crash fix: guarded partial LostQueryDiagnosis payloads (won_on_engines, lost_on_engines, cited_competitors, per_engine) so the drawer no longer throws (Cannot read properties of undefined / Cannot convert undefined or null to object) when the backend omits those fields.\n\n  Notes\n  - Favicons use the DuckDuckGo icon service (consistent with existing GEO components) with a non-blocking fallback; light/dark mode aware, styled from theme tokens.\n  - No API/contract changes; purely frontend rendering + defensive guards.",
+      "author_username": "priyansh-gupta23",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T13:22:54.542Z"
+    },
+    {
+      "id": 3625223915,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`richContentOverflowSx` is still declared inside the `SectionCard` function body (right before the `readMorePreviewSx` block), so it's still reconstructed on every render.\n\nCould you take another look? Marking for follow-up.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T19:02:48.160Z"
+    },
+    {
+      "id": 3625224106,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe mobile toggle offset at `LeftSection.tsx:403` still hardcodes `288`, while the drawer's mobile width a few lines later is still `280` — the two remain unlinked by any shared constant.\n\nCould you take another look? Marking for follow-up.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T19:02:50.971Z"
+    },
+    {
+      "id": 3625224265,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe PRESENCE BY ENGINE tooltip still reads the shortened copy (\"How your brand is represented across each AI engine — citation count and query coverage.\") — the detailed sub-metric definitions were not restored.\n\nCould you take another look? Marking for follow-up.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T19:02:53.469Z"
+    },
+    {
+      "id": 3625224480,
+      "body": "This concern appears unaddressed in the latest changes.\n\nNo test file exists for `ClientDetailView` yet — the dual desktop-table/mobile-card render paths still have no automated coverage.\n\nCould you take another look? Marking for follow-up.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-07-30T19:02:56.186Z"
+    },
+    {
+      "id": 3625225358,
+      "body": "## Follow-up Check — MR !1032\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 0 |\n| ✗ Not Applied | 4 |\n| ? Needs Human | 2 |\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #3e3fe20 | SEO/frontend/components/WordPressEditor/SectionCard.tsx:549 | `richContentOverflowSx` still declared inside the component body, not hoisted to module scope |\n| #1f990a1 | SEO/frontend/components/ui/LeftSection.tsx:403 | Mobile toggle offset still hardcodes `288`, unlinked to the drawer's `280` width |\n| #9cb1526 | SEO/frontend/components/IntelligenceDashboard/CitationsView.tsx:1791 | PRESENCE BY ENGINE tooltip still shows the shortened copy; detailed sub-metric definitions not restored |\n| #f97d3e5 | SEO/frontend/components/ClientDetail/ClientDetailView.tsx:794 | No test file exists for `ClientDetailView`; dual render paths remain uncovered |",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:03:08.288Z"
+    },
+    {
+      "id": 3625422987,
+      "body": "requested review from @Abhishek-2004-17 and removed review request for @jainex",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:42:56.614Z"
+    },
+    {
+      "id": 3625489057,
+      "body": "mentioned in commit 2812ea696017a96982f7cfcc1386cdbd1692a7ee",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:56:20.296Z"
+    },
+    {
+      "id": 3625489337,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3#6a05e0ed2077822ab32f789cfb4ecc66d88012e9_1791_1791)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:56:21.993Z"
+    },
+    {
+      "id": 3625489506,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3#05cea9ebcb16cb87ada44b3fd73ac52c8cfdf8e9_549_559)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:56:22.753Z"
+    },
+    {
+      "id": 3625489568,
+      "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3#c3e6297e81d556e50c80634796d264e7767dc8f8_403_408)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:56:23.068Z"
+    },
+    {
+      "id": 3625489629,
+      "body": "added 1 commit\n\n<ul><li>2812ea69 - fix(ui): resolve MR !1032 follow-up review findings</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3)",
+      "author_username": "priyansh-gupta23",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T19:56:23.327Z"
+    },
+    {
+      "id": 3625745491,
+      "body": "approved this merge request",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T20:47:31.133Z"
+    },
+    {
+      "id": 3625746177,
+      "body": "mentioned in commit bbad2f7ce73091585bb41f9c35c510e29d3b4532",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-07-30T20:47:42.339Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "b12d8380fa414e6b9bb782348173f2abce11ae7c",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3621763208,
+          "body": "requested review from @jainex",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T07:33:41.789Z"
+        }
+      ]
+    },
+    {
+      "id": "3628a622788964eddb6abc715871e737260c6fa4",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3622124811,
+          "body": "## OmniForge\n\n**Verdict:** APPROVE_WITH_FIXES\n\n### Overview\n\nThis is a large (68-file, ~1861-line) responsive/mobile CSS pass across the SEO/GEO frontend. The underlying architecture is sound: theme tokens are used consistently, the frozen `designSystem.ts` is genuinely untouched, and no security-relevant surface was touched. The main risks are process gaps — a stale/inaccurate description, no screenshots for a purely visual change, and no visible review activity — plus one apparent content regression (a tooltip's detailed copy was deleted, not just relocated, inside a commit described as \"layout only\").\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 0 |\n| Important | 6 |\n| Minor | 6 |\n\n### Strengths\n\n- `designSystem.ts` (frozen) verified genuinely untouched, and zero hardcoded hex colors introduced anywhere in the diff.\n- `ClientDetailView.tsx`'s largest change (572 lines) is a well-executed refactor — shared render helpers now drive both the new mobile-card layout and the existing desktop table from one source, with owner-only permission gates verified preserved identically in both paths.\n- Consistent, correct MUI breakpoint usage throughout, matching existing codebase patterns.\n\n### Key Concerns\n\n- **Tooltip copy silently rewritten** inside a commit described as layout-only — see inline thread on `CitationsView.tsx:1791`.\n- **MR description is stale and partly inaccurate** — it only reflects the first of two commits (omitting Campaign/Strategy/Reports/BlockEditor/Plans/Reputation/WordPress Editor, ~42 files), and claims fixes to \"Daily Monitoring\" / \"Keyword Ranking\" components that don't appear anywhere in the diff.\n- **Zero screenshots/GIFs** for a purely visual, 68-file, light+dark, mobile+desktop change — there's no way to verify the core claim without checking out the branch.\n- Both feature commits carry a `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` trailer, which is against this team's commit convention.\n- `ClientDetailView.tsx`'s 572-line change is a genuine structural refactor (not just CSS) and has zero test coverage — see inline thread.\n\n### Security\n\nNo security concerns found. All 10 OWASP categories checked clean — the diff is confirmed frontend-only, with no new dependencies, secrets, data-exposure, or access-control changes (owner-only gates traced and confirmed preserved).\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 12 findings above threshold*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T08:47:13.700Z"
+        }
+      ]
+    },
+    {
+      "id": "9cb152665b9784cbb482ed33889fc1853e7bdca5",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3622140302,
+          "body": "**Important** — Tooltip copy rewritten, not just relocated\n\n**What:** While reordering the \"PRESENCE BY ENGINE\" section heading for mobile stacking, the tooltip text itself was substantively rewritten. The specific sub-metric definitions (\"Cited in answers — the share of AI answers that link to your site,\" \"Appears in queries — the share of your tracked questions where your brand shows up\") were deleted entirely and don't reappear anywhere else in the codebase.\n\n**Why it matters:** This MR (and its commits) describe this as a layout-only responsive pass. A content/copy change bundled silently into a \"reorder\" makes it easy for reviewers to approve a UX regression without noticing, since responsive QA checks layout, not tooltip wording.\n\n**Recommendation:**\n```\nRestore the original detailed tooltip copy, e.g.:\n\"How visible your brand is in each AI engine. Cited in answers — the share\nof AI answers that link to your site. Appears in queries — the share of\nyour tracked questions where your brand shows up. Higher is better on both.\"\n\n...or, if the shorter copy is an intentional simplification, get explicit\nproduct/design sign-off and call it out in the MR description separately\nfrom the layout changes.\n```\n\nConfidence: 97/100 | Found by: MR Analyst (OmniForge) + Codebase Reviewer (OmniForge) — independently flagged",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T08:50:26.034Z"
+        },
+        {
+          "id": 3625224265,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe PRESENCE BY ENGINE tooltip still reads the shortened copy (\"How your brand is represented across each AI engine — citation count and query coverage.\") — the detailed sub-metric definitions were not restored.\n\nCould you take another look? Marking for follow-up.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T19:02:53.469Z"
+        },
+        {
+          "id": 3625489337,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3#6a05e0ed2077822ab32f789cfb4ecc66d88012e9_1791_1791)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:56:21.993Z"
+        }
+      ]
+    },
+    {
+      "id": "f97d3e5a3504abca3b2247e344a2b5d0adc77a4d",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3622140381,
+          "body": "**Important** — Structural refactor mislabeled as \"fluid cards\", zero test coverage\n\n**What:** This 572-line change (the largest in the MR) isn't a pure CSS tweak — it replaces a single CSS-branched table with a full `isMobile ? <cards> : <table>` conditional render, extracting 8+ helper functions (`renderSiteActions`, `renderSeoScore`, `renderGeoScore`, `renderStatus`, `renderPlan`, etc.) so both layouts share the same logic. The refactor itself checks out as behavior-preserving on inspection, and owner-only permission gates were verified preserved identically in both branches — but it's materially higher-risk than \"fluid project cards, wrapping header/action buttons\" implies, and `ClientDetailView` has no test file at all, before or after this change.\n\n**Why it matters:** A future edit to either branch (mobile or desktop) has nothing to catch a regression that only shows up in the other branch — there's no automated signal today.\n\n**Recommendation:**\n```tsx\n// Add a smoke test covering both render paths, e.g.:\ndescribe('ClientDetailView', () => {\n  it('renders desktop table layout at desktop width', () => { ... });\n  it('renders mobile card layout at mobile width', () => { ... });\n});\n```\nAlso worth calling out this refactor explicitly in the MR description as a distinct, higher-risk change rather than bundling it under \"fluid project cards.\"\n\nConfidence: 85/100 | Found by: MR Analyst (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T08:50:26.938Z"
+        },
+        {
+          "id": 3625224480,
+          "body": "This concern appears unaddressed in the latest changes.\n\nNo test file exists for `ClientDetailView` yet — the dual desktop-table/mobile-card render paths still have no automated coverage.\n\nCould you take another look? Marking for follow-up.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T19:02:56.186Z"
+        }
+      ]
+    },
+    {
+      "id": "3e3fe20086f975d49c30480b18176ebfec0af962",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3622140479,
+          "body": "**Minor** — Style object recreated on every render\n\n**What:** `richContentOverflowSx` (with three nested selector sub-objects for `& table`, `& img`, `& pre`) is declared inside the `SectionCard` function body, so it's reconstructed on every render of every section card. `SectionCard` is rendered once per section in a `.map()` over a WordPress page's sections — a page can have dozens.\n\n**Why it matters:** The object has no dependency on props/state/theme, so it's trivially hoistable. Not currently egregious (MUI's `sx` diffing is cheap for small objects), but it's an avoidable allocation multiplied by section count on every re-render of a frequently-updated editor surface — and this same MR correctly hoists the equivalent `mobileCellLabelSx` pattern to module scope elsewhere.\n\n**Recommendation:**\n```tsx\n// Move outside the component, same as mobileCellLabelSx elsewhere in this MR:\nconst richContentOverflowSx = {\n  maxWidth: '100%',\n  overflowX: 'auto',\n  overflowWrap: 'anywhere',\n  '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' },\n  '& img': { maxWidth: '100%', height: 'auto' },\n  '& pre': { maxWidth: '100%', overflowX: 'auto', whiteSpace: 'pre-wrap' },\n} as const;\n\nconst SectionCard: React.FC<SectionCardProps> = ({ ... }) => { ... };\n```\n\nConfidence: 75/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T08:50:27.878Z"
+        },
+        {
+          "id": 3625223915,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`richContentOverflowSx` is still declared inside the `SectionCard` function body (right before the `readMorePreviewSx` block), so it's still reconstructed on every render.\n\nCould you take another look? Marking for follow-up.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T19:02:48.160Z"
+        },
+        {
+          "id": 3625489506,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3#05cea9ebcb16cb87ada44b3fd73ac52c8cfdf8e9_549_559)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:56:22.753Z"
+        }
+      ]
+    },
+    {
+      "id": "1f990a13e930402335da7116a233cdf4eef642e7",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3622140578,
+          "body": "**Minor** — Unlinked magic-number duplication\n\n**What:** The new mobile toggle offset hardcodes `288` (`isOpen ? 288 : 10`), which is a duplicate-with-offset of the drawer's own mobile width `280` defined a few lines later (`width: isMobile ? 280 : '18%'`). The two numbers aren't linked by any shared constant. The sibling component `SiteSection.tsx` (touched in this same commit) does this correctly — its toggle position is derived via `calc(${t.width} * 17/18)` from the same token that sizes its drawer.\n\n**Why it matters:** If the mobile drawer width (`280`) ever changes, this toggle position will silently drift out of alignment with no compiler or lint warning.\n\n**Recommendation:**\n```tsx\n// Derive from the same value used for the drawer width, mirroring SiteSection.tsx:\nconst mobileDrawerWidth = 280;\n// ...\nleft: isMobile ? (isOpen ? mobileDrawerWidth + 8 : 10) : (isOpen ? '17%' : '10px'),\n// ...\nwidth: isMobile ? mobileDrawerWidth : '18%',\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer (OmniForge)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T08:50:28.931Z"
+        },
+        {
+          "id": 3625224106,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe mobile toggle offset at `LeftSection.tsx:403` still hardcodes `288`, while the drawer's mobile width a few lines later is still `280` — the two remain unlinked by any shared constant.\n\nCould you take another look? Marking for follow-up.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-07-30T19:02:50.971Z"
+        },
+        {
+          "id": 3625489568,
+          "body": "changed this line in [version 3 of the diff](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3#c3e6297e81d556e50c80634796d264e7767dc8f8_403_408)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:56:23.068Z"
+        }
+      ]
+    },
+    {
+      "id": "0ae979c0cf21958622e4301bad48b76ea19c25d0",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3623497822,
+          "body": "added 1 commit\n\n<ul><li>4ee7eff2 - feat(geo): add site favicons to competitor/citation lists and guard partial diagnosis payloads</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1933230804&start_sha=39ee76bdbdf12bbf53204bf2617416d145b19168)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T13:19:39.249Z"
+        }
+      ]
+    },
+    {
+      "id": "d36863b67466a3113e0f73badcef66ca1298a39b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3623516485,
+          "body": "Responsive / mobile UI pass across SEO & GEO frontend\n\nSummary\n\nA frontend-only responsive/mobile layout pass so pages, dashboards, tables, and tool panels reflow cleanly on small screens instead of overflowing. Purely visual — no business logic, data flow, WebSocket actions, or backend touched. Verified in both Pearl (light) and Obsidian (dark) modes.\n\nScope: 68 files across the SEO tools, GEO Intelligence Dashboard, Reports, Block Editor / Quill, Campaign / Strategy / Reputation, WordPress Editor, Plans, Agency Mode, Client Detail, and shared UI/theme style modules.\n\nWhat changed\n\nClient Detail (largest change) — ClientDetailView.tsx refactored so shared render helpers drive both a new mobile-card layout and the existing desktop table from one source; owner-only permission gates preserved identically in both paths.\n\nGEO — Intelligence Dashboard — Responsive reflow of IntelligenceDashboard + header, CitationsView, CompetitorsView, AnalyticsLayout, QuillEditorView, ImprovementsView, SEOSettingsPanel, and cards (BrandHealthCards, CompetitiveLandscapeCard, RecommendationRateCard, VisibilityScoreTrendChart). Also restores the full PRESENCE BY ENGINE tooltip definition that had been shortened.\n\nSEO Tools — Responsive fixes across \\~30 tools (AI Audit, Backlink Analyzer/Gap, Canonical, Clone Page, Content Idea Finder, Custom 404, Site Verification, HTML Sitemap, Internal Linking, LLM Text Generator, Clarity, Popup Manager, Redirects, Schema Manager, Site Health Scanner, Submit Sitemap, URL Rewriting, Analytics Setup, Event Report, and new-tools: Content Gap, Crawl Stats, Meta Tag, Page Speed, Website Audit, WordPress Backup).\n\nBlock Editor / Quill — DragDropBlockEditor, AISidebar, WizardFormStep, ContentOpportunities (+ OpportunityCard), FontToolbar, QuillLandingView.\n\nCampaign / Strategy / Reputation — CampaignDetail, StrategyTab, ReputationTab.\n\nReports — ReportsList, GenerateReportDialog, ReportNotification, ReportProgressTracker, ReportsPage.\n\nWordPress Editor — WpPageEditor, SectionCard.\n\nPlans / Agency Mode / Shared UI & themes — PlansPage, Agency SEOSettingsCard, ui/LeftSection, ui/SiteSection, Scoreboard/styles, TheLoop, imageGeoTaggerStyles.ts, seoToolComponentStyles.ts.\n\nCommits\n\n1. f2ec443f1 — Responsive/mobile UI fixes across SEO & GEO app\n2. f51750768 — UI(mobile): fluid responsive layouts so nothing overflows on small screens\n3. 39ee76bdb — Merge staging-phase into Responsive_UI\n\nConventions honoured\n\n- designSystem.ts (frozen) untouched — no exports added.\n- No hardcoded hex / magic numbers — colours, spacing, fonts from theme tokens; correct in light + dark.\n- Consistent MUI breakpoint usage matching existing patterns.\n\nTesting / verification\n\n- [ ] Screenshots — before/after, mobile + desktop, light + dark\n- [ ] ClientDetailView mobile-card vs desktop-table parity spot-checked\n- [ ] Owner/Editor/Viewer gates behave identically on Client Detail\n\nRisk / blast radius\n\nFrontend-only visual changes. No new dependencies, secrets, data-exposure, or access-control changes. Backend, WebSocket actions, and API contracts untouched.\n\n---\n\nTwo notes:\n\n- I removed the reviewer's flagged inaccuracies — it no longer claims \"Daily Monitoring\" / \"Keyword Ranking\" fixes (those aren't in the diff), and it now covers Campaign/Strategy/Reports/BlockEditor/Plans/Reputation/WordPress Editor.\n- I dropped the Co-Authored-By: Claude reference from the description, but that trailer still lives in the two commit messages — that's a separate history-rewrite question. Want me to tackle that next, or move to the next review comment?\n\n  ![image.png](/uploads/ad8e0fc6373122a03cb8c67c74e57070/image.png){width=\"255\" height=\"564\"}\n\n  ![image.png](/uploads/554987c96b98152b43154add76556eac/image.png){width=\"254\" height=\"569\"}\n\n  ![image.png](/uploads/c628bc36bb5adac9419e67e84a906bf1/image.png){width=775 height=441}\n\n  Adds site favicons next to brand/competitor names across the GEO Competitors and Citations views so each row/chip carries the site's visual identity, and hardens the query-detail drawer against incomplete backend diagnosis payloads (which were causing render crashes).\n\n  Changes by page / component\n\n  GEO → Competitors tab — CompetitorRankingTable.tsx\n  - Added a rounded-square site favicon to the left of each competitor's name in the Competitor Rankings card.\n  - Graceful fallback to a colored letter-initial avatar when the domain is unknown or the icon fails to load.\n\n  GEO → Citations tab → Buyer Intent Queries → \"View details\" drawer — QueryDetailDrawer.tsx\n  - Diagnosis tab — favicons in the \"Who's being cited instead\" competitor list.\n  - Performance tab — favicons on the source-citation rows (both the per-execution and per-engine citation lists).\n  - Prompt Execution view — favicons on the Mentions chips (competitors get the site icon; your brand keeps its check marker).\n  - Crash fix: guarded partial LostQueryDiagnosis payloads (won_on_engines, lost_on_engines, cited_competitors, per_engine) so the drawer no longer throws (Cannot read properties of undefined / Cannot convert undefined or null to object) when the backend omits those fields.\n\n  Notes\n  - Favicons use the DuckDuckGo icon service (consistent with existing GEO components) with a non-blocking fallback; light/dark mode aware, styled from theme tokens.\n  - No API/contract changes; purely frontend rendering + defensive guards.",
+          "author_username": "priyansh-gupta23",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T13:22:54.542Z"
+        }
+      ]
+    },
+    {
+      "id": "b1b44915f717531ef6c3b38af4b9c8689fc3f251",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3625225358,
+          "body": "## Follow-up Check — MR !1032\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 0 |\n| ✗ Not Applied | 4 |\n| ? Needs Human | 2 |\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #3e3fe20 | SEO/frontend/components/WordPressEditor/SectionCard.tsx:549 | `richContentOverflowSx` still declared inside the component body, not hoisted to module scope |\n| #1f990a1 | SEO/frontend/components/ui/LeftSection.tsx:403 | Mobile toggle offset still hardcodes `288`, unlinked to the drawer's `280` width |\n| #9cb1526 | SEO/frontend/components/IntelligenceDashboard/CitationsView.tsx:1791 | PRESENCE BY ENGINE tooltip still shows the shortened copy; detailed sub-metric definitions not restored |\n| #f97d3e5 | SEO/frontend/components/ClientDetail/ClientDetailView.tsx:794 | No test file exists for `ClientDetailView`; dual render paths remain uncovered |",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:03:08.288Z"
+        }
+      ]
+    },
+    {
+      "id": "f1f5f4317fd84061d62dd36c6ff31e4b8eb0b0ec",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3625422987,
+          "body": "requested review from @Abhishek-2004-17 and removed review request for @jainex",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:42:56.614Z"
+        }
+      ]
+    },
+    {
+      "id": "1107f7facaffc61282a088d5726ca007ef433306",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3625489057,
+          "body": "mentioned in commit 2812ea696017a96982f7cfcc1386cdbd1692a7ee",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:56:20.296Z"
+        }
+      ]
+    },
+    {
+      "id": "085d4b915430a141829d41350473cb7b30f2a2a6",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3625489629,
+          "body": "added 1 commit\n\n<ul><li>2812ea69 - fix(ui): resolve MR !1032 follow-up review findings</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1032/diffs?diff_id=1934120509&start_sha=4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3)",
+          "author_username": "priyansh-gupta23",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T19:56:23.327Z"
+        }
+      ]
+    },
+    {
+      "id": "536468187bdb87fd38739fe2397fa1d3f2009cfc",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3625745491,
+          "body": "approved this merge request",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T20:47:31.133Z"
+        }
+      ]
+    },
+    {
+      "id": "cf79e83a44483294057db6263c03dae065ed50d5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3625746177,
+          "body": "mentioned in commit bbad2f7ce73091585bb41f9c35c510e29d3b4532",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-07-30T20:47:42.339Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "2812ea696017a96982f7cfcc1386cdbd1692a7ee",
+      "title": "fix(ui): resolve MR !1032 follow-up review findings",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-07-31T01:26:02.000+05:30"
+    },
+    {
+      "id": "4ee7eff2164d9aa10e9bb92873a8145c28bd8dd3",
+      "title": "feat(geo): add site favicons to competitor/citation lists and guard partial diagnosis payloads",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-07-30T18:49:03.000+05:30"
+    },
+    {
+      "id": "39ee76bdbdf12bbf53204bf2617416d145b19168",
+      "title": "Merge branch 'staging-phase' into Responsive_UI",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-07-29T13:18:30.000+05:30"
+    },
+    {
+      "id": "f517507688014b9e36a154fbe613bb95f59b9e15",
+      "title": "UI(mobile): fluid responsive layouts so nothing overflows on small screens",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-07-29T13:09:50.000+05:30"
+    },
+    {
+      "id": "f2ec443f16df14ff754fc4ba40785702ee6246d5",
+      "title": "Responsive/mobile UI fixes across SEO & GEO app",
+      "author_name": "Priyansh Gupta",
+      "created_at": "2026-07-26T22:21:49.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "Abhishek-2004-17",
+        "name": "Abhishek S Daivathinveettil",
+        "approved_at": "2026-07-30T20:47:30.999Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

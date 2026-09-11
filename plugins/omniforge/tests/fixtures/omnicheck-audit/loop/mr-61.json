@@ -1,0 +1,995 @@
+{
+  "meta": {
+    "iid": 61,
+    "title": "feat(cockpit): steer messages — immediate mid-turn delivery replacing queue-until-idle",
+    "state": "merged",
+    "author": "shahilkadia",
+    "created_at": "2026-08-28T06:19:36.543Z",
+    "updated_at": "2026-08-29T11:23:49.229Z",
+    "merged_at": "2026-08-29T11:23:48.470Z",
+    "labels": [
+      "omniforge::check-rejected"
+    ],
+    "source_branch": "loop/cockpit-steer-messages",
+    "target_branch": "main",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/61",
+    "sha": "126f442d674c64a595c08ea990844c10ab118a98",
+    "merge_commit_sha": "a3a95f3dd357510ea99269ba7e0e7194a48094f6",
+    "diff_refs": {
+      "base_sha": "795a01a2d7a54352027eff9b56ed685f6ca89925",
+      "head_sha": "126f442d674c64a595c08ea990844c10ab118a98",
+      "start_sha": "795a01a2d7a54352027eff9b56ed685f6ca89925"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success",
+    "head_pipeline": {
+      "id": 2798937654,
+      "iid": 225,
+      "project_id": 83930487,
+      "sha": "126f442d674c64a595c08ea990844c10ab118a98",
+      "ref": "loop/cockpit-steer-messages",
+      "status": "success",
+      "source": "push",
+      "created_at": "2026-08-28T07:33:30.202Z",
+      "updated_at": "2026-08-28T07:43:15.559Z",
+      "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/loop-plugin/-/pipelines/2798937654",
+      "before_sha": "08eff97251c5eca5cd93e7441d481eb61ba6959d",
+      "tag": false,
+      "yaml_errors": null,
+      "user": {
+        "id": 29651405,
+        "username": "shahilkadia",
+        "public_email": null,
+        "name": "Shahil Kadia",
+        "state": "active",
+        "locked": false,
+        "avatar_url": "https://secure.gravatar.com/avatar/3bf51697c0d308d3fb60da2dc503e1cef26f00236f5b746e975f9538b9c06cd1?s=80&d=identicon",
+        "web_url": "https://gitlab.com/shahilkadia"
+      },
+      "started_at": "2026-08-28T07:33:31.140Z",
+      "finished_at": "2026-08-28T07:43:15.545Z",
+      "committed_at": null,
+      "duration": 582,
+      "queued_duration": null,
+      "coverage": null,
+      "detailed_status": {
+        "icon": "status_success",
+        "text": "Passed",
+        "label": "passed",
+        "group": "success",
+        "tooltip": "passed",
+        "has_details": true,
+        "details_path": "/regenai-gitlab/regenai-digital/loop-plugin/-/pipelines/2798937654",
+        "illustration": null,
+        "favicon": "/assets/ci_favicons/favicon_status_success-8451333011eee8ce9f2ab25dc487fe24a8758c694827a582f17f42b0a90446a2.png"
+      },
+      "archived": false
+    }
+  },
+  "notes": [
+    {
+      "id": 3750720435,
+      "body": "<!-- regenloop-ship:review:round-1:f-67d74759acff -->\n**blocking** — Mid-write cancel race: a raw-API DELETE that lands after the pre-write re-check but before the completion section flips the still-`queued` entry to `cancelled` while the write still runs; the POST then reports `state: cancelled` for a message whose bytes reached the child's stdin.\n\n**Evidence:** Reproduced at the MR head with the repo's Supervisor + drainer stub (submit parked in `send_user_message` via an Event seam, `cancel_message` fired mid-write): `cancel_message -> True`, `submit response -> {'state': 'cancelled'}`, `bytes on child stdin -> True`. Contradicts the diff's own docstring (:1189-1194), the in-code comment (:1220-1223 calls it 'the write window'), and the UI copy `cancelled — not sent` (ContinueComposer.tsx:190, :521). The window is widest exactly in the parked-writer/full-pipe scenario this MR hardens.\n\n**Suggested fix:** In the locked pre-write section, transition the entry `queued -> writing` when the write is owned; `cancel_message`'s `state != \"queued\"` guard then correctly returns False mid-write, and the completion section accepts `queued | writing` as writer-owned (~4 lines; no other consumer reads the state between those points).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:43:15.540Z"
+    },
+    {
+      "id": 3750720498,
+      "body": "<!-- regenloop-ship:review:round-1:f-3509137537d3 -->\n**non-blocking** — `failureCopyFor` falls back to the `outbox_missing` copy for any unrecognized/absent `reason`, naming a specific cause that is likely false for a future reason token.\n\n**Evidence:** A hypothetical `rate_limited` would render 'the session was stopped before the message landed'.\n\n**Suggested fix:** Generic fallback line ('delivery failed (<reason>); re-send once the session is healthy'); keep the specific copy keyed to `outbox_missing` only.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:43:17.210Z"
+    },
+    {
+      "id": 3750720527,
+      "body": "<!-- regenloop-ship:review:round-1:f-5f3dd3d6da1e -->\n**non-blocking** — Test-integrity nit: `test_input_never_draining_child_responds_within_15s_...` is named for a never-draining child but uses the Event seam, not a real full pipe (its own docstring says so); the genuine OS-pipe wedge lives at supervisor level only.\n\n**Suggested fix:** Rename to reflect the seam (e.g. `..._behind_parked_write_...`).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:43:18.178Z"
+    },
+    {
+      "id": 3750720565,
+      "body": "<!-- regenloop-ship:review:round-1:f-6121a4bed18e -->\n**non-blocking** (security) — The stdin write itself remains time-unbounded: only lock acquisition and the ticket wait are bounded. A ~30 MB operator POST (under the 32 MB request cap) mid-turn parks the handler thread in `write()` indefinitely, holding `stdin_lock` and the FIFO ticket; later submits fail at 15s, permission-responds at 2s; each retry piles a parked thread. Loopback + Host/Origin + CSRF guarded — self-DoS class only.\n\n**Suggested fix:** Enforce a small per-content size limit (1–4 MiB) at `_make_handle_input` / `_valid_content_blocks`, or move the pipe write off the handler thread.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:43:19.134Z"
+    },
+    {
+      "id": 3750720608,
+      "body": "<!-- regenloop-ship:review:round-1:f-8134dbe46b87 -->\n**non-blocking** (security) — A transient lock hold >2s by a benign in-flight steer permanently degrades the graceful interrupt path: `mark_degraded` is sticky per session+subtype, so every subsequent Interrupt is an abrupt group kill instead of the protocol stop.\n\n**Evidence:** Send a large image-block steer (>2s write), press Interrupt once — all later Interrupts for that session skip the control_request.\n\n**Suggested fix:** In `_write_request`'s timeout branch, return a distinguishable 'parked writer' outcome that `send_control` treats as retryable (one retry, or no `mark_degraded`) rather than a pipe failure.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:43:20.100Z"
+    },
+    {
+      "id": 3750720690,
+      "body": "<!-- regenloop-ship:review:round-1 -->\n### Review round 1\n\n2 reviewers (mr-code-reviewer, mr-security-reviewer), read beyond the diff; suites re-run locally green. **1 blocking, 6 non-blocking.** Blocking: mid-write cancel race — a raw-API DELETE landing after the pre-write re-check but before the completion section reports `cancelled` for a message whose bytes were delivered to the child's stdin (reproduced by the reviewer with the repo's own Supervisor + drainer stub). Non-blocking: overstated 15s handler-bound wording; unknown-reason failure copy naming a wrong cause; one overclaiming test name; unbounded first-write syscall (no payload cap — spec non-goal, Stop is recovery); sticky interrupt degradation after one >2s steer; reader-EOF `_close_stdin` unbounded acquire.\n\n### Could not be anchored to a diff line\n\nGitLab rejects an inline thread whose line is not part of this MR's diff — usually because the finding concerns a line the MR did not change. Reported here instead so nothing is lost:\n\n- **`scripts/cockpit/supervisor.py:71`** — **non-blocking** — `SUBMIT_DEADLINE_S`'s comment 'It bounds the HTTP handler thread that carries the call' overstates: the budget bounds only the FIFO ticket wait; the first submit's `stdin.write` syscall has no deadline and no payload cap.\n\n**Evidence:** The wedge test's own 1 MiB submitter stays parked until cleanup kills the child — no 15s bound is consulted on that path; only retries are bounded.\n\n**Suggested fix:** Correct the wording (and spec D7/AC-8) to 'bounds the ticket wait; a parked write itself is released only by child death (Stop)'.\n- **`scripts/cockpit/session.py:1699`** — **non-blocking** (security) — The one remaining unbounded `with self.stdin_lock:` acquire: the reader-EOF reap path (`terminate(from_reader_eof=True)` with sticky `interrupted`) skips the signal ladder; if the child closed stdout but still lives without draining stdin while a submit writer is parked mid-write, the reader thread parks forever inside `_close_stdin` — session never reaped, thread leaks.\n\n**Suggested fix:** Acquire with a generous bounded timeout (e.g. `TERMINATE_GRACE_SECONDS`) and close the pipe anyway on expiry — the parked writer's exception tuple already catches the resulting error.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T06:43:21.555Z"
+    },
+    {
+      "id": 3750799050,
+      "body": "<!-- regenloop-ship:fix:round-1:reply:a6a9f6afcf4a5bd3cf3fb2d4a5daa5ab6753cc98 -->\n**Fixed** in `126f442` — scripts/cockpit/supervisor.py `Supervisor.submit_message`:\n- The locked pre-write section now transitions the entry `queued -> writing` when the write is owned (same lock acquisition), so `cancel_message`'s lock-serialized `state != \"queued\"` guard atomically refuses mid-write cancels — a DELETE during the write returns `{cancelled: false}`.\n- The completion section's ownership check accepts `queued | writing` (`queued` still covers write_timeout/refused-write paths).\n- Exception-escape hardening: `send_user_message` is wrapped so an escaping exception marks the entry `failed`/`write_failed` via the completion section before propagating — no path can strand a `writing` entry.\n- Docstrings/comments corrected (supervisor.py `QueuedMessage`, `submit_message`, pre-write/completion/terminate-race comments; api_sessions.py cancel-route comment) — the \"cancel window is exactly the ticket-wait window\" claim is now true.\n- Two new regression tests: `test_cancel_mid_write_is_refused_and_the_write_lands` (park-after-write Event seam; transient `writing` asserted under the lock, cancel False, response `steered`, bytes in the drainer log) and `test_write_exception_marks_write_failed_then_propagates`.\n\nVerified: 138 supervisor + 92 api_sessions/interrupt + 17 registry tests green; ruff clean. Triage had reproduced the exact race pre-fix (VALID/96).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T07:09:10.944Z"
+    },
+    {
+      "id": 3750801100,
+      "body": "<!-- regenloop-ship:fix:round-1 -->\n### Round 1 — fix summary (commit `126f442`)\n\n**Fixed (validated blocking):**\n- `scripts/cockpit/supervisor.py:1214,1256` — F1 mid-write cancel race: entry transitions `queued -> writing` under the pre-write lock when the write is owned (mid-write DELETE now returns `{cancelled: false}`); completion ownership accepts `queued | writing`; exception-escape marks `failed/write_failed` before propagating; docstrings corrected (supervisor + api_sessions cancel-route comment). New tests: `test_cancel_mid_write_is_refused_and_the_write_lands`, `test_write_exception_marks_write_failed_then_propagates`. 138+92+17 tests green, ruff clean. Thread: F1 reply.\n\n**Not applied — non-blocking, left as notes for the developer (rule 6):**\n- F2 (`supervisor.py:71` `SUBMIT_DEADLINE_S` comment overstates the handler bound) — not changed; the adjacent window claims F1's doc fixes corrected are distinct from this comment.\n- F3 (`ContinueComposer.tsx:182` unknown-reason fallback copy names `outbox_missing`'s cause) — not changed.\n- F4 (`tests/test_cockpit_api_sessions.py:593` test name overclaims the seam as a real wedge) — not changed.\n- F5 (`session.py:692` write syscall itself unbounded; no payload cap — spec non-goal; Stop is the documented recovery) — not changed.\n- F6 (`control.py:212` one >2s steer permanently degrades graceful interrupt for the session) — not changed.\n- F7 (`session.py:1699` reader-EOF `_close_stdin` unbounded acquire) — not changed.\n\nRe-gate verdict for this round: posted separately under the gates stage.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T07:09:47.563Z"
+    },
+    {
+      "id": 3750867051,
+      "body": "<!-- regenloop-ship:gates:round-1 -->\n### Gates — round 1 re-gate\n\nVerdict: **green** at `126f442` (base `08eff97`, fast tier, `--forbid-fenced --require-evidence`, ledger `mr-fix`).\n\n| Gate | Status |\n|---|---|\n| python-test | pass |\n| validate | pass |\n| lint | pass |\n\n(The round's changed set was python/tests only; the ui gates did not select. The whole branch was full-tier green at `08eff97` pre-review, and §5g will re-run the full-branch gate before any promotion.)",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T07:26:44.829Z"
+    },
+    {
+      "id": 3750889459,
+      "body": "added 1 commit\n\n<ul><li>126f442d - review fixes (round 1)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/61/diffs?diff_id=1989936729&start_sha=08eff97251c5eca5cd93e7441d481eb61ba6959d)",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T07:33:30.910Z"
+    },
+    {
+      "id": 3754682221,
+      "body": "<!-- regenloop-ship:review:round-2:f-1bfc6c4d94a3 -->\n**non-blocking** — The FIFO ticket is released (inner `finally`, :1246) before the completion section (:1249-1273) records the outcome, so the next FIFO submit can take its pre-write `_turn_in_flight` snapshot before the previous idle submit's completion sets the flag True.\n\n**Evidence:** Two back-to-back idle submits A then B — B's snapshot can read False while A's turn is in flight, so B is labeled `sent` instead of `steered` (no steered note in the UI). Bytes, order, and delivery unaffected; label-only lag, and the spec defines the label from the pre-write snapshot.\n\n**Suggested fix:** Move `_release_ticket` to an outer `finally` that runs after the completion section (cost: the FIFO hands off one `_lock` section later).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T21:07:11.204Z"
+    },
+    {
+      "id": 3754682302,
+      "body": "<!-- regenloop-ship:review:round-2:f-7bf95636540d -->\n**non-blocking** (doc artifact nit) — Decision 3(v) still reads \"the section ONLY transitions the entry `queued` → terminal\", superseded by the round-1 fix (completion ownership now accepts `queued | writing`; supervisor.py:1253 and its docstring are corrected).\n\n**Suggested fix:** One-line amendment noting the fix widened ownership to `writing`, or accept the spec as a dated historical record.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T21:07:12.416Z"
+    },
+    {
+      "id": 3754682360,
+      "body": "<!-- regenloop-ship:review:round-2:f-d0a07c282361 -->\n**non-blocking** (security) — The round-1 deferred-raise wrapper catches `BaseException` from the stdin write and re-raises raw after the completion section; a non-`SessionNotFound` exception then lands in the dispatch catch-all (`except Exception`) and the client gets a structured 500 instead of the contract's `{state: failed, reason: write_failed}` (the outbox entry is still correctly marked; only the response shape breaks).\n\n**Suggested fix:** Narrow `except BaseException` to `except Exception` at :1233 to match the dispatch boundary (entry-marking behavior identical).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T21:07:13.487Z"
+    },
+    {
+      "id": 3754682410,
+      "body": "<!-- regenloop-ship:review:round-2:f-6dae27a96e7d -->\n**non-blocking** (security) — The terminate-race overwrite (`if not entry_present and outcome_owned: failed/outbox_missing`) mutates shared entry state outside `self._lock`, breaking the documented never-overwrite invariant in a micro-window: a cancel winning between the completion lock's release and this write returns `{cancelled: true}` while the submit's response later shows `failed/outbox_missing`. No delivery-truth corruption — an observable cross-thread inconsistency between two API responses.\n\n**Suggested fix:** Move the two mutation lines inside the existing `with self._lock:` completion block (`entry_present` is already computed there).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T21:07:14.351Z"
+    },
+    {
+      "id": 3754682455,
+      "body": "<!-- regenloop-ship:review:round-2:f-c0949fefd5c1 -->\n**non-blocking** (security) — While one writer is parked mid-syscall on a full pipe, `serving` never advances, so every subsequent submit burns a handler thread for the full 15s and deposits one never-discarded int into `ticket.abandoned`; a sustained authenticated request loop grows the set and thread population without bound until child death/Stop releases the writer. Trusted-loopback threat class (auth token + local access; single-operator tool).\n\n**Suggested fix:** Cap total outstanding positions per `_Ticket` (refuse submits beyond N ahead of `serving` with `failed/busy`) or prune `abandoned` below `serving` on a timer.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-28T21:07:15.330Z"
+    },
+    {
+      "id": 3754682507,
+      "body": "<!-- regenloop-ship:review:round-2 -->\n### Review round 2\n\n2 reviewers at head `126f442`. **0 blocking, 5 non-blocking.** The round-1 fix (mid-write cancel race) is verified closed with no new defects: the `queued -> writing` claim shares the pre-write lock acquisition, cancel's window is exactly the ticket-wait window, no stranded entries (every exception path enumerated), and both regression tests are real pins. All suites re-run green at head (python 444+, UI 86, e2e 5/1, ruff, tsc). Non-blocking: a label-only FIFO handoff window (ticket released before the completion section's flag set — a back-to-back idle submit can read `sent` instead of `steered`; bytes/order/delivery unaffected); one stale line in the dated spec artifact (D3(v) wording superseded by the fix); BaseException-vs-Exception narrowing on the deferred raise; terminate-race overwrite outside `_lock` (observable cross-thread inconsistency, no delivery-truth corruption); abandoned-ticket set growth under a sustained request loop (trusted-loopback threat class).",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T21:07:16.442Z"
+    },
+    {
+      "id": 3754712989,
+      "body": "changed the description",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T21:17:02.878Z"
+    },
+    {
+      "id": 3754716790,
+      "body": "marked this merge request as **ready**",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T21:18:00.724Z"
+    },
+    {
+      "id": 3754734424,
+      "body": "<!-- regenloop-ship:check:final -->\n## Merge check — SAFE_TO_MERGE\n\n**Why this is good to merge**\nThe one blocking finding (F1, mid-write cancel race — the only defect that corrupted delivery truth: `cancelled` reported for bytes the child actually received) is fixed at the MR head, and the fix is the one the reviewer prescribed: the `queued -> writing` claim shares the pre-write lock acquisition, so a cancel's win window is now exactly the FIFO ticket-wait window, every exception path out of the write marks the entry before propagating, and the corrected docstrings/API comment match the code. Both regression tests are real pins, re-run green at `126f442` by this check. Round 2 re-reviewed the fixed head and found 0 blocking. The 11 non-blocking findings are all correctly dispositioned as notes (only validated blocking findings are fixed), and the dispositions are truthful — not one silently half-applied. Gates full-tier 9/9 green; CI pipeline 2798937654 passed; both security-reviewer sweeps clean. The security-flavored notes (F5/F6/F7/F12) share one mitigating profile: loopback-only, token+Host/Origin+CSRF guarded, single-operator tool, Stop documented as recovery. No human findings exist to address (all 14 discussions loop-authored).\n\n**Why it might not be**\nEleven findings ship unfixed, four with security weight: an operator can park handler threads with an oversized POST (F5 — no payload cap); one >2s steer permanently degrades graceful interrupt to group-kill for that session (F6); a reader-EOF wedge can leak the reader thread via the unbounded `_close_stdin` acquire (F7); a sustained request loop grows threads and the abandoned-ticket set unboundedly (F12). F11 leaves a documented invariant broken in a micro-window (two API responses can disagree; delivery truth intact). F10 means some write failures surface as a structured 500 instead of the contract shape. CI on this branch never ran SAST/Secret-Detection (deferred to integration); e2e coverage is route-mocked.\n\n**What would change this:** a human reclassifying any of F5/F7/F12 from \"trusted-loopback self-DoS, defer\" to blocking — each is small scoped work (payload cap / bounded-acquire-then-close / ticket cap) landable pre-merge in one commit; or any human comment appearing after this check. Of the cosmetic notes, F2 (comment wording), F4 (test rename), F9 (one-line spec amendment) are trivial post-merge batch material; F3 (generic failure fallback copy) is cheap but needs a UI dist rebuild.\n\n| Finding | Source | Verdict |\n|---|---|---|\n| `scripts/cockpit/supervisor.py:1221` — F1 mid-write cancel race: `queued -> writing` claim under pre-write lock; `queued\\|writing` completion ownership (:1255); exception-escape marks `failed`/`write_failed` (:1233-1238, :1285-1288); docstrings corrected; 2 regression tests (:613, :984) | loop | APPLIED |\n| `scripts/cockpit/supervisor.py:76-78` — F2 `SUBMIT_DEADLINE_S` comment overstates the handler bound | loop | NOT_APPLIED |\n| `ui/src/components/ContinueComposer.tsx:182-184` — F3 unknown-reason fallback names `outbox_missing`'s cause | loop | NOT_APPLIED |\n| `tests/test_cockpit_api_sessions.py:593` — F4 test name overclaims its seam | loop | NOT_APPLIED |\n| `scripts/cockpit/session.py:691` — F5 first `stdin.write` syscall unbounded; no per-content size cap | loop | NOT_APPLIED |\n| `scripts/cockpit/control.py:209-213` — F6 timeout branch feeds sticky `mark_degraded` | loop | NOT_APPLIED |\n| `scripts/cockpit/session.py:1700` — F7 reader-EOF `_close_stdin` unbounded acquire | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1245-1246` — F8 ticket released before completion section (label-only lag window) | loop | NOT_APPLIED |\n| `claudedocs/2026-08-26-cockpit-steer-messages-spec.md:54` — F9 stale D3(v) line superseded by the fix | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1233` — F10 `BaseException` catch (escapes become structured 500s) | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1274-1284` — F11 terminate-race overwrite outside `self._lock` | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1307` — F12 `ticket.abandoned` unbounded growth under sustained submits | loop | NOT_APPLIED |\n\nHuman findings: none — all 14 MR discussions are loop-authored; no thread body contained instruction-like or injected text.\n\n**Not checked:** SAST/Secret-Detection never ran on this branch (feature-branch CI is validate+pytest only; the loop's security sweeps were the pre-merge secret scan — analyst judgment, not an automated scanner). The steer e2e is route-mocked — no end-to-end run against a real `claude` child exercised mid-turn steering in CI; child-side behavior rests on the spec's probe evidence plus stub-level tests. The concurrency micro-windows (F8, F11) are verified by reasoning, not deterministic tests. No test drives F12's sustained-abuse scenario or a real OS full-pipe wedge at API level. This check re-ran only the two F1 regression tests plus static verification of every disposition anchor at `126f442`; UI/e2e suites rest on the gates and CI.",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-28T21:22:45.084Z"
+    },
+    {
+      "id": 3756215631,
+      "body": "/omnicheck",
+      "author": "shahilkadia",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T10:43:06.171Z"
+    },
+    {
+      "id": 3756235224,
+      "body": "This concern appears unaddressed in the latest changes.\n\nLine 1233 of `scripts/cockpit/supervisor.py` still reads `except BaseException as exc:` rather than `except Exception`, so a non-`Exception` escape still reaches the dispatch catch-all as a structured 500 instead of the contract's `{state: failed, reason: write_failed}`.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:48:54.650Z"
+    },
+    {
+      "id": 3756235271,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`failureCopyFor` at `ui/src/components/ContinueComposer.tsx:183` still falls back to `FAILURE_COPY.outbox_missing` for every unrecognized or absent reason, so a future reason token still renders the specific \"the session was stopped before the message landed\" wording.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:48:55.769Z"
+    },
+    {
+      "id": 3756235339,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe test at `tests/test_cockpit_api_sessions.py:593` is still named `test_input_never_draining_child_responds_within_15s_failed_write_timeout_and_never_flips`, while its own docstring at line 601 states the parked write is the Event seam and never a real full pipe.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:48:56.832Z"
+    },
+    {
+      "id": 3756235377,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`scripts/cockpit/session.py:692` still calls `stdin.write(line + \"\\n\")` with no per-content size limit and no deadline on the syscall itself — only the `stdin_lock` acquire and the FIFO ticket wait are bounded — so a large mid-turn POST can still park its handler thread until the child dies or Stop is pressed.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:48:57.902Z"
+    },
+    {
+      "id": 3756235429,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe terminate-race overwrite still sits outside the completion section's `with self._lock:` block — that block closes at `scripts/cockpit/supervisor.py:1273` and `message.state = \"failed\"` / `message.reason = \"outbox_missing\"` run at lines 1283-1284 — so the cross-thread response inconsistency window remains.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:48:59.230Z"
+    },
+    {
+      "id": 3756236273,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`_release_ticket` still runs in the inner `finally` at `scripts/cockpit/supervisor.py:1245-1246`, ahead of the completion section's `with self._lock:` block at line 1249, so the label-only FIFO handoff window is unchanged.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:49:00.418Z"
+    },
+    {
+      "id": 3756236324,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe `SUBMIT_DEADLINE_S` comment at `scripts/cockpit/supervisor.py:76-78` still reads \"It bounds the HTTP handler thread that carries the call\", though the budget bounds only the FIFO ticket wait and the first submit's write syscall remains unbounded.\n\nThe reader-EOF close path likewise still takes an unbounded `with self.stdin_lock:` acquire at `scripts/cockpit/session.py:1699`.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:49:01.708Z"
+    },
+    {
+      "id": 3756236337,
+      "body": "This concern appears unaddressed in the latest changes.\n\nThe timeout branch at `scripts/cockpit/control.py:213` still returns an ordinary failure for the parked-writer case and `send_control` still reaches `mark_degraded` at line 352 with no retry and no distinction, so one >2s steer write still permanently degrades that session's graceful interrupt to the signal ladder.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:49:02.646Z"
+    },
+    {
+      "id": 3756236351,
+      "body": "This concern appears unaddressed in the latest changes.\n\nDecision 3(v) at `claudedocs/2026-08-26-cockpit-steer-messages-spec.md:53-54` still reads \"the section ONLY transitions the entry `queued` → terminal\", with no amendment for the round-1 fix that widened completion ownership to `queued | writing` (supervisor.py:1255).\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:49:03.686Z"
+    },
+    {
+      "id": 3756236394,
+      "body": "This concern appears unaddressed in the latest changes.\n\n`ticket.abandoned.add(position)` at `scripts/cockpit/supervisor.py:1307` still has no cap on outstanding positions and no pruning pass, so a sustained request loop behind a parked writer still grows the set and the handler-thread population without bound.\n\nCould you take another look? Marking for follow-up.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": true,
+      "resolved": null,
+      "created_at": "2026-08-29T10:49:04.772Z"
+    },
+    {
+      "id": 3756238494,
+      "body": "## Follow-up Check — MR !61\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 11 |\n| ? Needs Human | 0 |\n\nChecked every discussion thread against the diff at head `126f442`.\n\nThe one blocking finding — the mid-write cancel race reporting `cancelled` for delivered bytes (`supervisor.py:1201`) — is verified fixed in this diff: the pre-write section claims `writing` under the same lock acquisition as its re-checks (`supervisor.py:1221`), the completion section accepts `queued | writing` (`:1255`), an escaping exception marks `failed`/`write_failed` before propagating (`:1233-1238`, `:1285-1288`), and the `QueuedMessage`/`submit_message` docstrings plus the pre-write and completion comments are corrected. The thread is still open, so it is counted as silently applied rather than applied.\n\nThe eleven non-blocking findings remain outstanding. Nine are inline threads; the last two sit in the round-1 review thread because neither could be anchored to a diff line.\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #9f705b5 | `scripts/cockpit/supervisor.py:1233` | Deferred-raise wrapper still catches `BaseException` instead of `Exception`, so a non-`Exception` escape surfaces as a structured 500 rather than `{state: failed, reason: write_failed}`. |\n| #df5c237 | `ui/src/components/ContinueComposer.tsx:182` | `failureCopyFor` still falls back to the `outbox_missing` copy for any unrecognized or absent reason, naming a likely-false cause for a future reason token. |\n| #924ad1b | `tests/test_cockpit_api_sessions.py:593` | Test is still named for a never-draining child while its own docstring states the parked write is the Event seam, not a real full pipe. |\n| #98f5f33 | `scripts/cockpit/session.py:692` | The first `stdin.write` syscall remains unbounded and uncapped — only lock acquisition and the ticket wait are bounded — so a large mid-turn POST can park its handler thread until child death or Stop. |\n| #e5ad056 | `scripts/cockpit/supervisor.py:1274` | The terminate-race overwrite still mutates shared entry state outside `_lock`, leaving the documented never-overwrite invariant broken in a micro-window. |\n| #11b7c0e | `scripts/cockpit/supervisor.py:1246` | `_release_ticket` still runs in the inner `finally` before the completion section records the outcome, so a back-to-back idle submit can read `sent` instead of `steered`. |\n| #0187d05 | `scripts/cockpit/supervisor.py:71` and `scripts/cockpit/session.py:1699` | The `SUBMIT_DEADLINE_S` comment still overstates the handler bound, and the reader-EOF close path still takes the one remaining unbounded `stdin_lock` acquire. |\n| #ce8400d | `scripts/cockpit/control.py:212` | The timeout branch still returns an ordinary failure that reaches `mark_degraded`, so one benign >2s steer write permanently degrades that session's graceful interrupt to the signal ladder. |\n| #58d2eab | `claudedocs/2026-08-26-cockpit-steer-messages-spec.md:54` | Decision 3(v) still reads \"the section ONLY transitions the entry `queued` → terminal\", superseded by the round-1 fix widening ownership to `writing`. |\n| #ed218d4 | `scripts/cockpit/supervisor.py:1307` | `ticket.abandoned` still grows one int per timed-out submit with no cap and no pruning pass while a writer is parked mid-syscall. |\n\n### Notes\n\n- All replies posted successfully; no failures.\n- The remaining general threads (round-1 and round-2 review summaries, the round-1 fix summary, the round-1 gates verdict, and the merge check) record dispositions and gate results rather than findings, so they were not re-judged. The round-1 fix summary states F2–F7 were deliberately left unapplied as developer notes; this check confirms that disposition is accurate — those findings are indeed unaddressed in the diff.",
+      "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T10:49:36.828Z"
+    },
+    {
+      "id": 3756317019,
+      "body": "mentioned in commit a3a95f3dd357510ea99269ba7e0e7194a48094f6",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-29T11:23:48.841Z"
+    },
+    {
+      "id": 3770297565,
+      "body": "mentioned in commit e10b2ae42782b516f15c5ec99225430ff14a5293",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-09-01T15:16:50.334Z"
+    },
+    {
+      "id": 3770299495,
+      "body": "mentioned in merge request !63",
+      "author": "shahilkadia",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-09-01T15:17:13.071Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "a6a9f6afcf4a5bd3cf3fb2d4a5daa5ab6753cc98",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3750720435,
+          "body": "<!-- regenloop-ship:review:round-1:f-67d74759acff -->\n**blocking** — Mid-write cancel race: a raw-API DELETE that lands after the pre-write re-check but before the completion section flips the still-`queued` entry to `cancelled` while the write still runs; the POST then reports `state: cancelled` for a message whose bytes reached the child's stdin.\n\n**Evidence:** Reproduced at the MR head with the repo's Supervisor + drainer stub (submit parked in `send_user_message` via an Event seam, `cancel_message` fired mid-write): `cancel_message -> True`, `submit response -> {'state': 'cancelled'}`, `bytes on child stdin -> True`. Contradicts the diff's own docstring (:1189-1194), the in-code comment (:1220-1223 calls it 'the write window'), and the UI copy `cancelled — not sent` (ContinueComposer.tsx:190, :521). The window is widest exactly in the parked-writer/full-pipe scenario this MR hardens.\n\n**Suggested fix:** In the locked pre-write section, transition the entry `queued -> writing` when the write is owned; `cancel_message`'s `state != \"queued\"` guard then correctly returns False mid-write, and the completion section accepts `queued | writing` as writer-owned (~4 lines; no other consumer reads the state between those points).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:43:15.540Z"
+        },
+        {
+          "id": 3750799050,
+          "body": "<!-- regenloop-ship:fix:round-1:reply:a6a9f6afcf4a5bd3cf3fb2d4a5daa5ab6753cc98 -->\n**Fixed** in `126f442` — scripts/cockpit/supervisor.py `Supervisor.submit_message`:\n- The locked pre-write section now transitions the entry `queued -> writing` when the write is owned (same lock acquisition), so `cancel_message`'s lock-serialized `state != \"queued\"` guard atomically refuses mid-write cancels — a DELETE during the write returns `{cancelled: false}`.\n- The completion section's ownership check accepts `queued | writing` (`queued` still covers write_timeout/refused-write paths).\n- Exception-escape hardening: `send_user_message` is wrapped so an escaping exception marks the entry `failed`/`write_failed` via the completion section before propagating — no path can strand a `writing` entry.\n- Docstrings/comments corrected (supervisor.py `QueuedMessage`, `submit_message`, pre-write/completion/terminate-race comments; api_sessions.py cancel-route comment) — the \"cancel window is exactly the ticket-wait window\" claim is now true.\n- Two new regression tests: `test_cancel_mid_write_is_refused_and_the_write_lands` (park-after-write Event seam; transient `writing` asserted under the lock, cancel False, response `steered`, bytes in the drainer log) and `test_write_exception_marks_write_failed_then_propagates`.\n\nVerified: 138 supervisor + 92 api_sessions/interrupt + 17 registry tests green; ruff clean. Triage had reproduced the exact race pre-fix (VALID/96).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T07:09:10.944Z"
+        }
+      ]
+    },
+    {
+      "id": "df5c23718eb2d9647308be8bae0d16478cdd2817",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3750720498,
+          "body": "<!-- regenloop-ship:review:round-1:f-3509137537d3 -->\n**non-blocking** — `failureCopyFor` falls back to the `outbox_missing` copy for any unrecognized/absent `reason`, naming a specific cause that is likely false for a future reason token.\n\n**Evidence:** A hypothetical `rate_limited` would render 'the session was stopped before the message landed'.\n\n**Suggested fix:** Generic fallback line ('delivery failed (<reason>); re-send once the session is healthy'); keep the specific copy keyed to `outbox_missing` only.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:43:17.210Z"
+        },
+        {
+          "id": 3756235271,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`failureCopyFor` at `ui/src/components/ContinueComposer.tsx:183` still falls back to `FAILURE_COPY.outbox_missing` for every unrecognized or absent reason, so a future reason token still renders the specific \"the session was stopped before the message landed\" wording.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:48:55.769Z"
+        }
+      ]
+    },
+    {
+      "id": "924ad1bd225c442e208966aa7a665512858e2d48",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3750720527,
+          "body": "<!-- regenloop-ship:review:round-1:f-5f3dd3d6da1e -->\n**non-blocking** — Test-integrity nit: `test_input_never_draining_child_responds_within_15s_...` is named for a never-draining child but uses the Event seam, not a real full pipe (its own docstring says so); the genuine OS-pipe wedge lives at supervisor level only.\n\n**Suggested fix:** Rename to reflect the seam (e.g. `..._behind_parked_write_...`).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:43:18.178Z"
+        },
+        {
+          "id": 3756235339,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe test at `tests/test_cockpit_api_sessions.py:593` is still named `test_input_never_draining_child_responds_within_15s_failed_write_timeout_and_never_flips`, while its own docstring at line 601 states the parked write is the Event seam and never a real full pipe.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:48:56.832Z"
+        }
+      ]
+    },
+    {
+      "id": "98f5f3320328942c41dfdddce46c2390ae36cd15",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3750720565,
+          "body": "<!-- regenloop-ship:review:round-1:f-6121a4bed18e -->\n**non-blocking** (security) — The stdin write itself remains time-unbounded: only lock acquisition and the ticket wait are bounded. A ~30 MB operator POST (under the 32 MB request cap) mid-turn parks the handler thread in `write()` indefinitely, holding `stdin_lock` and the FIFO ticket; later submits fail at 15s, permission-responds at 2s; each retry piles a parked thread. Loopback + Host/Origin + CSRF guarded — self-DoS class only.\n\n**Suggested fix:** Enforce a small per-content size limit (1–4 MiB) at `_make_handle_input` / `_valid_content_blocks`, or move the pipe write off the handler thread.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:43:19.134Z"
+        },
+        {
+          "id": 3756235377,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`scripts/cockpit/session.py:692` still calls `stdin.write(line + \"\\n\")` with no per-content size limit and no deadline on the syscall itself — only the `stdin_lock` acquire and the FIFO ticket wait are bounded — so a large mid-turn POST can still park its handler thread until the child dies or Stop is pressed.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:48:57.902Z"
+        }
+      ]
+    },
+    {
+      "id": "ce8400d8a111a2b291b3f345fd268f566ace19ae",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3750720608,
+          "body": "<!-- regenloop-ship:review:round-1:f-8134dbe46b87 -->\n**non-blocking** (security) — A transient lock hold >2s by a benign in-flight steer permanently degrades the graceful interrupt path: `mark_degraded` is sticky per session+subtype, so every subsequent Interrupt is an abrupt group kill instead of the protocol stop.\n\n**Evidence:** Send a large image-block steer (>2s write), press Interrupt once — all later Interrupts for that session skip the control_request.\n\n**Suggested fix:** In `_write_request`'s timeout branch, return a distinguishable 'parked writer' outcome that `send_control` treats as retryable (one retry, or no `mark_degraded`) rather than a pipe failure.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:43:20.100Z"
+        },
+        {
+          "id": 3756236337,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe timeout branch at `scripts/cockpit/control.py:213` still returns an ordinary failure for the parked-writer case and `send_control` still reaches `mark_degraded` at line 352 with no retry and no distinction, so one >2s steer write still permanently degrades that session's graceful interrupt to the signal ladder.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:49:02.646Z"
+        }
+      ]
+    },
+    {
+      "id": "0187d05e0771900af27366380ef8a1d9ff888fe3",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3750720690,
+          "body": "<!-- regenloop-ship:review:round-1 -->\n### Review round 1\n\n2 reviewers (mr-code-reviewer, mr-security-reviewer), read beyond the diff; suites re-run locally green. **1 blocking, 6 non-blocking.** Blocking: mid-write cancel race — a raw-API DELETE landing after the pre-write re-check but before the completion section reports `cancelled` for a message whose bytes were delivered to the child's stdin (reproduced by the reviewer with the repo's own Supervisor + drainer stub). Non-blocking: overstated 15s handler-bound wording; unknown-reason failure copy naming a wrong cause; one overclaiming test name; unbounded first-write syscall (no payload cap — spec non-goal, Stop is recovery); sticky interrupt degradation after one >2s steer; reader-EOF `_close_stdin` unbounded acquire.\n\n### Could not be anchored to a diff line\n\nGitLab rejects an inline thread whose line is not part of this MR's diff — usually because the finding concerns a line the MR did not change. Reported here instead so nothing is lost:\n\n- **`scripts/cockpit/supervisor.py:71`** — **non-blocking** — `SUBMIT_DEADLINE_S`'s comment 'It bounds the HTTP handler thread that carries the call' overstates: the budget bounds only the FIFO ticket wait; the first submit's `stdin.write` syscall has no deadline and no payload cap.\n\n**Evidence:** The wedge test's own 1 MiB submitter stays parked until cleanup kills the child — no 15s bound is consulted on that path; only retries are bounded.\n\n**Suggested fix:** Correct the wording (and spec D7/AC-8) to 'bounds the ticket wait; a parked write itself is released only by child death (Stop)'.\n- **`scripts/cockpit/session.py:1699`** — **non-blocking** (security) — The one remaining unbounded `with self.stdin_lock:` acquire: the reader-EOF reap path (`terminate(from_reader_eof=True)` with sticky `interrupted`) skips the signal ladder; if the child closed stdout but still lives without draining stdin while a submit writer is parked mid-write, the reader thread parks forever inside `_close_stdin` — session never reaped, thread leaks.\n\n**Suggested fix:** Acquire with a generous bounded timeout (e.g. `TERMINATE_GRACE_SECONDS`) and close the pipe anyway on expiry — the parked writer's exception tuple already catches the resulting error.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T06:43:21.555Z"
+        },
+        {
+          "id": 3756236324,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe `SUBMIT_DEADLINE_S` comment at `scripts/cockpit/supervisor.py:76-78` still reads \"It bounds the HTTP handler thread that carries the call\", though the budget bounds only the FIFO ticket wait and the first submit's write syscall remains unbounded.\n\nThe reader-EOF close path likewise still takes an unbounded `with self.stdin_lock:` acquire at `scripts/cockpit/session.py:1699`.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:49:01.708Z"
+        }
+      ]
+    },
+    {
+      "id": "9122a671cbcf6647694973d28848d4add5e9fc61",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3750801100,
+          "body": "<!-- regenloop-ship:fix:round-1 -->\n### Round 1 — fix summary (commit `126f442`)\n\n**Fixed (validated blocking):**\n- `scripts/cockpit/supervisor.py:1214,1256` — F1 mid-write cancel race: entry transitions `queued -> writing` under the pre-write lock when the write is owned (mid-write DELETE now returns `{cancelled: false}`); completion ownership accepts `queued | writing`; exception-escape marks `failed/write_failed` before propagating; docstrings corrected (supervisor + api_sessions cancel-route comment). New tests: `test_cancel_mid_write_is_refused_and_the_write_lands`, `test_write_exception_marks_write_failed_then_propagates`. 138+92+17 tests green, ruff clean. Thread: F1 reply.\n\n**Not applied — non-blocking, left as notes for the developer (rule 6):**\n- F2 (`supervisor.py:71` `SUBMIT_DEADLINE_S` comment overstates the handler bound) — not changed; the adjacent window claims F1's doc fixes corrected are distinct from this comment.\n- F3 (`ContinueComposer.tsx:182` unknown-reason fallback copy names `outbox_missing`'s cause) — not changed.\n- F4 (`tests/test_cockpit_api_sessions.py:593` test name overclaims the seam as a real wedge) — not changed.\n- F5 (`session.py:692` write syscall itself unbounded; no payload cap — spec non-goal; Stop is the documented recovery) — not changed.\n- F6 (`control.py:212` one >2s steer permanently degrades graceful interrupt for the session) — not changed.\n- F7 (`session.py:1699` reader-EOF `_close_stdin` unbounded acquire) — not changed.\n\nRe-gate verdict for this round: posted separately under the gates stage.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T07:09:47.563Z"
+        }
+      ]
+    },
+    {
+      "id": "35fe59316b688ea88db52de22feee3548b1fdfc1",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3750867051,
+          "body": "<!-- regenloop-ship:gates:round-1 -->\n### Gates — round 1 re-gate\n\nVerdict: **green** at `126f442` (base `08eff97`, fast tier, `--forbid-fenced --require-evidence`, ledger `mr-fix`).\n\n| Gate | Status |\n|---|---|\n| python-test | pass |\n| validate | pass |\n| lint | pass |\n\n(The round's changed set was python/tests only; the ui gates did not select. The whole branch was full-tier green at `08eff97` pre-review, and §5g will re-run the full-branch gate before any promotion.)",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T07:26:44.829Z"
+        }
+      ]
+    },
+    {
+      "id": "0580b66bac69d298db2dd4e862b152bd8ff9eec5",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3750889459,
+          "body": "added 1 commit\n\n<ul><li>126f442d - review fixes (round 1)</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/loop-plugin/-/merge_requests/61/diffs?diff_id=1989936729&start_sha=08eff97251c5eca5cd93e7441d481eb61ba6959d)",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T07:33:30.910Z"
+        }
+      ]
+    },
+    {
+      "id": "11b7c0e6b5040185282cc811dac09d4d5de5a00c",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3754682221,
+          "body": "<!-- regenloop-ship:review:round-2:f-1bfc6c4d94a3 -->\n**non-blocking** — The FIFO ticket is released (inner `finally`, :1246) before the completion section (:1249-1273) records the outcome, so the next FIFO submit can take its pre-write `_turn_in_flight` snapshot before the previous idle submit's completion sets the flag True.\n\n**Evidence:** Two back-to-back idle submits A then B — B's snapshot can read False while A's turn is in flight, so B is labeled `sent` instead of `steered` (no steered note in the UI). Bytes, order, and delivery unaffected; label-only lag, and the spec defines the label from the pre-write snapshot.\n\n**Suggested fix:** Move `_release_ticket` to an outer `finally` that runs after the completion section (cost: the FIFO hands off one `_lock` section later).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T21:07:11.204Z"
+        },
+        {
+          "id": 3756236273,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`_release_ticket` still runs in the inner `finally` at `scripts/cockpit/supervisor.py:1245-1246`, ahead of the completion section's `with self._lock:` block at line 1249, so the label-only FIFO handoff window is unchanged.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:49:00.418Z"
+        }
+      ]
+    },
+    {
+      "id": "58d2eabe9a51fdcfde4fce8fbd4a0a926c8b62c3",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3754682302,
+          "body": "<!-- regenloop-ship:review:round-2:f-7bf95636540d -->\n**non-blocking** (doc artifact nit) — Decision 3(v) still reads \"the section ONLY transitions the entry `queued` → terminal\", superseded by the round-1 fix (completion ownership now accepts `queued | writing`; supervisor.py:1253 and its docstring are corrected).\n\n**Suggested fix:** One-line amendment noting the fix widened ownership to `writing`, or accept the spec as a dated historical record.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T21:07:12.416Z"
+        },
+        {
+          "id": 3756236351,
+          "body": "This concern appears unaddressed in the latest changes.\n\nDecision 3(v) at `claudedocs/2026-08-26-cockpit-steer-messages-spec.md:53-54` still reads \"the section ONLY transitions the entry `queued` → terminal\", with no amendment for the round-1 fix that widened completion ownership to `queued | writing` (supervisor.py:1255).\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:49:03.686Z"
+        }
+      ]
+    },
+    {
+      "id": "9f705b507bd23cd907eee5e831622557420d7ac5",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3754682360,
+          "body": "<!-- regenloop-ship:review:round-2:f-d0a07c282361 -->\n**non-blocking** (security) — The round-1 deferred-raise wrapper catches `BaseException` from the stdin write and re-raises raw after the completion section; a non-`SessionNotFound` exception then lands in the dispatch catch-all (`except Exception`) and the client gets a structured 500 instead of the contract's `{state: failed, reason: write_failed}` (the outbox entry is still correctly marked; only the response shape breaks).\n\n**Suggested fix:** Narrow `except BaseException` to `except Exception` at :1233 to match the dispatch boundary (entry-marking behavior identical).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T21:07:13.487Z"
+        },
+        {
+          "id": 3756235224,
+          "body": "This concern appears unaddressed in the latest changes.\n\nLine 1233 of `scripts/cockpit/supervisor.py` still reads `except BaseException as exc:` rather than `except Exception`, so a non-`Exception` escape still reaches the dispatch catch-all as a structured 500 instead of the contract's `{state: failed, reason: write_failed}`.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:48:54.650Z"
+        }
+      ]
+    },
+    {
+      "id": "e5ad0566cd9e89c96c493df4f49643384ba9c826",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3754682410,
+          "body": "<!-- regenloop-ship:review:round-2:f-6dae27a96e7d -->\n**non-blocking** (security) — The terminate-race overwrite (`if not entry_present and outcome_owned: failed/outbox_missing`) mutates shared entry state outside `self._lock`, breaking the documented never-overwrite invariant in a micro-window: a cancel winning between the completion lock's release and this write returns `{cancelled: true}` while the submit's response later shows `failed/outbox_missing`. No delivery-truth corruption — an observable cross-thread inconsistency between two API responses.\n\n**Suggested fix:** Move the two mutation lines inside the existing `with self._lock:` completion block (`entry_present` is already computed there).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T21:07:14.351Z"
+        },
+        {
+          "id": 3756235429,
+          "body": "This concern appears unaddressed in the latest changes.\n\nThe terminate-race overwrite still sits outside the completion section's `with self._lock:` block — that block closes at `scripts/cockpit/supervisor.py:1273` and `message.state = \"failed\"` / `message.reason = \"outbox_missing\"` run at lines 1283-1284 — so the cross-thread response inconsistency window remains.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:48:59.230Z"
+        }
+      ]
+    },
+    {
+      "id": "ed218d491c78e814196df71abb904702f4f90b1b",
+      "resolved": null,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3754682455,
+          "body": "<!-- regenloop-ship:review:round-2:f-c0949fefd5c1 -->\n**non-blocking** (security) — While one writer is parked mid-syscall on a full pipe, `serving` never advances, so every subsequent submit burns a handler thread for the full 15s and deposits one never-discarded int into `ticket.abandoned`; a sustained authenticated request loop grows the set and thread population without bound until child death/Stop releases the writer. Trusted-loopback threat class (auth token + local access; single-operator tool).\n\n**Suggested fix:** Cap total outstanding positions per `_Ticket` (refuse submits beyond N ahead of `serving` with `failed/busy`) or prune `abandoned` below `serving` on a timer.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-28T21:07:15.330Z"
+        },
+        {
+          "id": 3756236394,
+          "body": "This concern appears unaddressed in the latest changes.\n\n`ticket.abandoned.add(position)` at `scripts/cockpit/supervisor.py:1307` still has no cap on outstanding positions and no pruning pass, so a sustained request loop behind a parked writer still grows the set and the handler-thread population without bound.\n\nCould you take another look? Marking for follow-up.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": true,
+          "resolved": null,
+          "created_at": "2026-08-29T10:49:04.772Z"
+        }
+      ]
+    },
+    {
+      "id": "c6dc2ebb23a86c4c77654c08e7adde4c61bb7e45",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3754682507,
+          "body": "<!-- regenloop-ship:review:round-2 -->\n### Review round 2\n\n2 reviewers at head `126f442`. **0 blocking, 5 non-blocking.** The round-1 fix (mid-write cancel race) is verified closed with no new defects: the `queued -> writing` claim shares the pre-write lock acquisition, cancel's window is exactly the ticket-wait window, no stranded entries (every exception path enumerated), and both regression tests are real pins. All suites re-run green at head (python 444+, UI 86, e2e 5/1, ruff, tsc). Non-blocking: a label-only FIFO handoff window (ticket released before the completion section's flag set — a back-to-back idle submit can read `sent` instead of `steered`; bytes/order/delivery unaffected); one stale line in the dated spec artifact (D3(v) wording superseded by the fix); BaseException-vs-Exception narrowing on the deferred raise; terminate-race overwrite outside `_lock` (observable cross-thread inconsistency, no delivery-truth corruption); abandoned-ticket set growth under a sustained request loop (trusted-loopback threat class).",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T21:07:16.442Z"
+        }
+      ]
+    },
+    {
+      "id": "9bd4273865c0ace26612578d64a3e555e3c0ee5c",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3754712989,
+          "body": "changed the description",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T21:17:02.878Z"
+        }
+      ]
+    },
+    {
+      "id": "a8f569d5e53a1ae35881b7f286854374c9bdb3b8",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3754716790,
+          "body": "marked this merge request as **ready**",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T21:18:00.724Z"
+        }
+      ]
+    },
+    {
+      "id": "5e7ef67c9e05138ad67fa0f4c92c84624c69515d",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3754734424,
+          "body": "<!-- regenloop-ship:check:final -->\n## Merge check — SAFE_TO_MERGE\n\n**Why this is good to merge**\nThe one blocking finding (F1, mid-write cancel race — the only defect that corrupted delivery truth: `cancelled` reported for bytes the child actually received) is fixed at the MR head, and the fix is the one the reviewer prescribed: the `queued -> writing` claim shares the pre-write lock acquisition, so a cancel's win window is now exactly the FIFO ticket-wait window, every exception path out of the write marks the entry before propagating, and the corrected docstrings/API comment match the code. Both regression tests are real pins, re-run green at `126f442` by this check. Round 2 re-reviewed the fixed head and found 0 blocking. The 11 non-blocking findings are all correctly dispositioned as notes (only validated blocking findings are fixed), and the dispositions are truthful — not one silently half-applied. Gates full-tier 9/9 green; CI pipeline 2798937654 passed; both security-reviewer sweeps clean. The security-flavored notes (F5/F6/F7/F12) share one mitigating profile: loopback-only, token+Host/Origin+CSRF guarded, single-operator tool, Stop documented as recovery. No human findings exist to address (all 14 discussions loop-authored).\n\n**Why it might not be**\nEleven findings ship unfixed, four with security weight: an operator can park handler threads with an oversized POST (F5 — no payload cap); one >2s steer permanently degrades graceful interrupt to group-kill for that session (F6); a reader-EOF wedge can leak the reader thread via the unbounded `_close_stdin` acquire (F7); a sustained request loop grows threads and the abandoned-ticket set unboundedly (F12). F11 leaves a documented invariant broken in a micro-window (two API responses can disagree; delivery truth intact). F10 means some write failures surface as a structured 500 instead of the contract shape. CI on this branch never ran SAST/Secret-Detection (deferred to integration); e2e coverage is route-mocked.\n\n**What would change this:** a human reclassifying any of F5/F7/F12 from \"trusted-loopback self-DoS, defer\" to blocking — each is small scoped work (payload cap / bounded-acquire-then-close / ticket cap) landable pre-merge in one commit; or any human comment appearing after this check. Of the cosmetic notes, F2 (comment wording), F4 (test rename), F9 (one-line spec amendment) are trivial post-merge batch material; F3 (generic failure fallback copy) is cheap but needs a UI dist rebuild.\n\n| Finding | Source | Verdict |\n|---|---|---|\n| `scripts/cockpit/supervisor.py:1221` — F1 mid-write cancel race: `queued -> writing` claim under pre-write lock; `queued\\|writing` completion ownership (:1255); exception-escape marks `failed`/`write_failed` (:1233-1238, :1285-1288); docstrings corrected; 2 regression tests (:613, :984) | loop | APPLIED |\n| `scripts/cockpit/supervisor.py:76-78` — F2 `SUBMIT_DEADLINE_S` comment overstates the handler bound | loop | NOT_APPLIED |\n| `ui/src/components/ContinueComposer.tsx:182-184` — F3 unknown-reason fallback names `outbox_missing`'s cause | loop | NOT_APPLIED |\n| `tests/test_cockpit_api_sessions.py:593` — F4 test name overclaims its seam | loop | NOT_APPLIED |\n| `scripts/cockpit/session.py:691` — F5 first `stdin.write` syscall unbounded; no per-content size cap | loop | NOT_APPLIED |\n| `scripts/cockpit/control.py:209-213` — F6 timeout branch feeds sticky `mark_degraded` | loop | NOT_APPLIED |\n| `scripts/cockpit/session.py:1700` — F7 reader-EOF `_close_stdin` unbounded acquire | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1245-1246` — F8 ticket released before completion section (label-only lag window) | loop | NOT_APPLIED |\n| `claudedocs/2026-08-26-cockpit-steer-messages-spec.md:54` — F9 stale D3(v) line superseded by the fix | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1233` — F10 `BaseException` catch (escapes become structured 500s) | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1274-1284` — F11 terminate-race overwrite outside `self._lock` | loop | NOT_APPLIED |\n| `scripts/cockpit/supervisor.py:1307` — F12 `ticket.abandoned` unbounded growth under sustained submits | loop | NOT_APPLIED |\n\nHuman findings: none — all 14 MR discussions are loop-authored; no thread body contained instruction-like or injected text.\n\n**Not checked:** SAST/Secret-Detection never ran on this branch (feature-branch CI is validate+pytest only; the loop's security sweeps were the pre-merge secret scan — analyst judgment, not an automated scanner). The steer e2e is route-mocked — no end-to-end run against a real `claude` child exercised mid-turn steering in CI; child-side behavior rests on the spec's probe evidence plus stub-level tests. The concurrency micro-windows (F8, F11) are verified by reasoning, not deterministic tests. No test drives F12's sustained-abuse scenario or a real OS full-pipe wedge at API level. This check re-ran only the two F1 regression tests plus static verification of every disposition anchor at `126f442`; UI/e2e suites rest on the gates and CI.",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-28T21:22:45.084Z"
+        }
+      ]
+    },
+    {
+      "id": "0a632b172b23c01c4a44cd487b223f5c60420fd8",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756215631,
+          "body": "/omnicheck",
+          "author": "shahilkadia",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T10:43:06.171Z"
+        }
+      ]
+    },
+    {
+      "id": "64175e77fdbfd5f761c90d0c9d0464c6c2efabfe",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756238494,
+          "body": "## Follow-up Check — MR !61\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 1 |\n| ✗ Not Applied | 11 |\n| ? Needs Human | 0 |\n\nChecked every discussion thread against the diff at head `126f442`.\n\nThe one blocking finding — the mid-write cancel race reporting `cancelled` for delivered bytes (`supervisor.py:1201`) — is verified fixed in this diff: the pre-write section claims `writing` under the same lock acquisition as its re-checks (`supervisor.py:1221`), the completion section accepts `queued | writing` (`:1255`), an escaping exception marks `failed`/`write_failed` before propagating (`:1233-1238`, `:1285-1288`), and the `QueuedMessage`/`submit_message` docstrings plus the pre-write and completion comments are corrected. The thread is still open, so it is counted as silently applied rather than applied.\n\nThe eleven non-blocking findings remain outstanding. Nine are inline threads; the last two sit in the round-1 review thread because neither could be anchored to a diff line.\n\n### Unaddressed Findings\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #9f705b5 | `scripts/cockpit/supervisor.py:1233` | Deferred-raise wrapper still catches `BaseException` instead of `Exception`, so a non-`Exception` escape surfaces as a structured 500 rather than `{state: failed, reason: write_failed}`. |\n| #df5c237 | `ui/src/components/ContinueComposer.tsx:182` | `failureCopyFor` still falls back to the `outbox_missing` copy for any unrecognized or absent reason, naming a likely-false cause for a future reason token. |\n| #924ad1b | `tests/test_cockpit_api_sessions.py:593` | Test is still named for a never-draining child while its own docstring states the parked write is the Event seam, not a real full pipe. |\n| #98f5f33 | `scripts/cockpit/session.py:692` | The first `stdin.write` syscall remains unbounded and uncapped — only lock acquisition and the ticket wait are bounded — so a large mid-turn POST can park its handler thread until child death or Stop. |\n| #e5ad056 | `scripts/cockpit/supervisor.py:1274` | The terminate-race overwrite still mutates shared entry state outside `_lock`, leaving the documented never-overwrite invariant broken in a micro-window. |\n| #11b7c0e | `scripts/cockpit/supervisor.py:1246` | `_release_ticket` still runs in the inner `finally` before the completion section records the outcome, so a back-to-back idle submit can read `sent` instead of `steered`. |\n| #0187d05 | `scripts/cockpit/supervisor.py:71` and `scripts/cockpit/session.py:1699` | The `SUBMIT_DEADLINE_S` comment still overstates the handler bound, and the reader-EOF close path still takes the one remaining unbounded `stdin_lock` acquire. |\n| #ce8400d | `scripts/cockpit/control.py:212` | The timeout branch still returns an ordinary failure that reaches `mark_degraded`, so one benign >2s steer write permanently degrades that session's graceful interrupt to the signal ladder. |\n| #58d2eab | `claudedocs/2026-08-26-cockpit-steer-messages-spec.md:54` | Decision 3(v) still reads \"the section ONLY transitions the entry `queued` → terminal\", superseded by the round-1 fix widening ownership to `writing`. |\n| #ed218d4 | `scripts/cockpit/supervisor.py:1307` | `ticket.abandoned` still grows one int per timed-out submit with no cap and no pruning pass while a writer is parked mid-syscall. |\n\n### Notes\n\n- All replies posted successfully; no failures.\n- The remaining general threads (round-1 and round-2 review summaries, the round-1 fix summary, the round-1 gates verdict, and the merge check) record dispositions and gate results rather than findings, so they were not re-judged. The round-1 fix summary states F2–F7 were deliberately left unapplied as developer notes; this check confirms that disposition is accurate — those findings are indeed unaddressed in the diff.",
+          "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T10:49:36.828Z"
+        }
+      ]
+    },
+    {
+      "id": "0ebffb664fe1c5a680f48550a10e8c917fbf2c35",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3756317019,
+          "body": "mentioned in commit a3a95f3dd357510ea99269ba7e0e7194a48094f6",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-29T11:23:48.841Z"
+        }
+      ]
+    },
+    {
+      "id": "352cb990156e8e22e4f0e0a110ce2ded421d1a12",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3770297565,
+          "body": "mentioned in commit e10b2ae42782b516f15c5ec99225430ff14a5293",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-09-01T15:16:50.334Z"
+        }
+      ]
+    },
+    {
+      "id": "fbde907cbfd4bf7fe3a663e56dd0b9cb1d4df394",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3770299495,
+          "body": "mentioned in merge request !63",
+          "author": "shahilkadia",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-09-01T15:17:13.071Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "126f442d674c64a595c08ea990844c10ab118a98",
+      "short_id": "126f442d",
+      "title": "review fixes (round 1)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-28T12:38:29.000+05:30"
+    },
+    {
+      "id": "08eff97251c5eca5cd93e7441d481eb61ba6959d",
+      "short_id": "08eff972",
+      "title": "holistic review fixes: bound the permission-responder stdin writer (2.0s, failed response not a hang); fold the submit pre-write state read into the locked block so the cancel window is exactly the ticket-wait window; keep a winning cancel's terminal state in the terminate double race; exclude sessions-steer.spec.ts from the main e2e config; refresh stale ContinueComposer test comment; refresh cockpit + e2e-testing knowledge cards; resync line-keyed registries and dist manifest",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-28T00:54:31.000+05:30"
+    },
+    {
+      "id": "c5a945ff41ade2449f44f7abefe3938c53dcc564",
+      "short_id": "c5a945ff",
+      "title": "docs(cockpit): retire C-7 for the steer model, truthful delivery prose, line-registry resyncs (T-7)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T23:39:07.000+05:30"
+    },
+    {
+      "id": "741f567364451bdeef9f5b6bf01aad3e90baab1d",
+      "short_id": "741f5673",
+      "title": "tests(cockpit): route-mocked steer e2e over POST /input (T-6)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T23:20:06.000+05:30"
+    },
+    {
+      "id": "f25c6a68874761289d590936e045b4e456516b8f",
+      "short_id": "f25c6a68",
+      "title": "feat(cockpit): kill-safe terminate and bounded control write (T-3)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T06:54:26.000+05:30"
+    },
+    {
+      "id": "bca7a44f6b8f5f4462a0bcc19087ddbcdae46712",
+      "short_id": "bca7a44f",
+      "title": "tests(cockpit): kill-safety wedge and parked-writer timeout tests, red first (T-3)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T06:31:51.000+05:30"
+    },
+    {
+      "id": "39eebebb60f49b2561ae2caafd399ff7f4f801ca",
+      "short_id": "39eebebb",
+      "title": "review fixes (round 3): rebuild FIFO test on a one-shot write gate (waiter parked on the ticket, not the gate); guard the idle turn-flag write on entry presence and document the known micro-window; scale write-timeout elapsed bound to the patched SUBMIT_DEADLINE_S; type-valid sent state in spyFetch mock; resync line-keyed registries; rebuild ui dist",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T06:17:50.000+05:30"
+    },
+    {
+      "id": "56ec1473571f4d7afb529a139dfb85782d2bf691",
+      "short_id": "56ec1473",
+      "title": "cockpit(api): POST /input and compact respond with submit_message's result verbatim (T-4)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T04:48:59.000+05:30"
+    },
+    {
+      "id": "88cea80d7506c6bdf1aadd817fc95dc927afcdea",
+      "short_id": "88cea80d",
+      "title": "tests: pin the steer response contract on POST /input, compact and cancel (T-4 red)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T04:26:04.000+05:30"
+    },
+    {
+      "id": "39ecca6d407ceef950add67527f0638d9f984638",
+      "short_id": "39ecca6d",
+      "title": "feat(cockpit): supervisor steer-delivery state machine (T-2)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T03:45:21.000+05:30"
+    },
+    {
+      "id": "a679d93e159deb6af1638289d6a65f2bd71953a7",
+      "short_id": "a679d93e",
+      "title": "tests(cockpit): steer-delivery supervisor tests, red first (T-2)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T03:08:48.000+05:30"
+    },
+    {
+      "id": "2a46b4666b574a95aa032525ff4edda643894d81",
+      "short_id": "2a46b466",
+      "title": "review fixes (wave 1): register steered/cancelled notes in stylesheet (neutral --rule tint); publish stdin failure after stdin_lock release; parked-lock test asserts no publish; retire bool-contract test name; move design-lint markers to safe constant form; rebuild ui dist",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:45:53.000+05:30"
+    },
+    {
+      "id": "2ef2b07eefb39cbb40a5dade1a4b1ec5643f04d8",
+      "short_id": "2ef2b07e",
+      "title": "Merge branch 'worktree-agent-af42ff310e32e0d3e' into loop/cockpit-steer-messages",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:18:44.000+05:30"
+    },
+    {
+      "id": "f1ce4035d545860176cc2f50963362cedb46f7c3",
+      "short_id": "f1ce4035",
+      "title": "Merge branch 'worktree-agent-abdcd23f9e1414066' into loop/cockpit-steer-messages",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:18:44.000+05:30"
+    },
+    {
+      "id": "ac3d00707c69f500d3391005edf8b8fc275206fe",
+      "short_id": "ac3d0070",
+      "title": "docs(cockpit-steer-messages): steer-delivery spec + implementation plan (3 critic rounds, plan-approved)",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:18:17.000+05:30"
+    },
+    {
+      "id": "b485603dc70bb0b5f150fdce443b69c72fad054b",
+      "short_id": "b485603d",
+      "title": "chore: rebuild ui/dist after ContinueComposer state mapping",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:15:52.000+05:30"
+    },
+    {
+      "id": "bf42facf1057fbea32d30f04a49633fc9f9b9464",
+      "short_id": "bf42facf",
+      "title": "feat(cockpit): ContinueComposer maps the terminal response state — steered/cancelled status notes, reason-keyed failure copy with draft retention, queued-chip branch deleted",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:15:51.000+05:30"
+    },
+    {
+      "id": "57d47d059bf1a5ee96d9bacc40ee15f7abc6cdad",
+      "short_id": "57d47d05",
+      "title": "test(cockpit): ContinueComposer response-state mapping red tests — steered/failed/cancelled surfacing, queued-chip tests removed",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:07:55.000+05:30"
+    },
+    {
+      "id": "dc1e1c177ac1a7e5fa5e7c5b349a32603beecc34",
+      "short_id": "dc1e1c17",
+      "title": "T-1: send_user_message returns {ok, reason}; bounded stdin_lock acquire",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:07:51.000+05:30"
+    },
+    {
+      "id": "8cf52ed6effbc7fc4828ee16731dabfd6d85af27",
+      "short_id": "8cf52ed6",
+      "title": "T-1 red: tests for the send_user_message {ok, reason} write contract",
+      "author_name": "Shahil Kadia",
+      "created_at": "2026-08-27T02:02:47.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [],
+    "approved": true,
+    "approvals_required": 0,
+    "approved_by_raw": [],
+    "error": null
+  }
+}

@@ -1,0 +1,73 @@
+{
+ "repo": "cleo",
+ "iid": 1447,
+ "title": "fix(schedulers): re-attempt leadership so a rolling deploy cannot strand a scheduler",
+ "runs": [
+  {
+   "timestamp": "2026-09-06T14:26:44Z",
+   "gate": "REJECTED (label current on open MR)",
+   "head_at_run": "96b1e21ad5ab6cf8fa306eaed152e0fea02c79fe (run states diff generated from this tip)",
+   "author": "group_113177720_bot_92af8a6a935eded23dac4bef1220b38f",
+   "per_thread": [
+    {
+     "thread_id": "49e2949*",
+     "anchor": "wordpress_backup_scheduler",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "safe_create_task import (line 14) + call at line 84; pinned by test_stop_wordpress_scheduler_fires_its_shutdown_through_safe_create_task (test_scheduler_leadership_seam.py:582)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git grep at head"
+    },
+    {
+     "thread_id": "6e445ad*",
+     "anchor": "metrics/runtime_metrics.py:92",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "comment rewritten: 'a house-style choice, not a safety one' with loop rationale",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git show at head lines 88-96"
+    },
+    {
+     "thread_id": "83d7cf7*",
+     "anchor": "scheduler_lock.py:721",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "KNOWN LIMIT paragraph present in start_when_leader docstring (waiter armed only on DENIAL)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "git show at head lines 715-725"
+    },
+    {
+     "thread_id": "d56a340*/24f9b9d*/c80d35e*/7c845d3*",
+     "anchor": "description threads",
+     "omnicheck_verdict": "SILENTLY_APPLIED x4",
+     "ground_truth": "description edited 13:50:36 before run; run quotes the corrected content (Draft correction, incident date, follow-ups home); current description empty in evidence so independently UNDETERMINABLE, but system notes corroborate the edit sequence",
+     "judgment": "CORRECT_APPLY (run-corroborated; not independently re-verifiable from evidence)",
+     "hypothesis": null,
+     "evidence": "system note 3794046851 'changed the description'; run text 3794115305"
+    },
+    {
+     "thread_id": "f67b14a*",
+     "anchor": "referral_commission_scheduler.py:76",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "omnicheck factually OVERTURNED the reviewer premise: `from utils.scheduler_lock import ...` (line 74) sits OUTSIDE the try (line 75), so ImportError propagates to the wrapper \u2014 'unreachable except' premise false",
+     "judgment": "HIGH-QUALITY NH \u2014 correct analysis; needs maintainer accept/overrule since thread stays open",
+     "hypothesis": "H3",
+     "evidence": "git show 96b1e21a:...referral_commission_scheduler.py lines 73-76"
+    },
+    {
+     "thread_id": "64ad69c*/6ee2b1f*/2f848dd*/d81b51e*/ef8bf56*",
+     "anchor": "decision threads",
+     "omnicheck_verdict": "NEEDS_HUMAN x5",
+     "ground_truth": "flag-rollout ordering, MR-split scope, commit-split (barred by no-history-rewrite), skip acceptance \u2014 none settleable from the diff; every thread already carries a substantive author reply",
+     "judgment": "DEFENSIBLE NH x5 (genuine maintainer calls)",
+     "hypothesis": "H3",
+     "evidence": "run 'Needs a human decision' table"
+    }
+   ],
+   "overall": "CORRECT-in-verdicts (0 wrong; includes correctly overturning a reviewer's false premise), but gate REJECTED an MR the check itself describes as 'nothing left unaddressed' \u2014 pure fail-closed on 6 decision threads; MR open today with check-rejected label",
+   "root_causes": [
+    "H3 (primary): six NEEDS_HUMAN decision-requests force REJECTED; no nudge targets exist (0 NOT_APPLIED), so the label just blocks"
+   ]
+  }
+ ]
+}

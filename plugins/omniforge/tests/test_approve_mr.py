@@ -32,12 +32,21 @@ def _make_result(returncode=0, stdout="", stderr=""):
 
 SAMPLE_MR_JSON = json.dumps({
     "iid": 136,
+    "labels": ["omniforge::reviewed"],
     "diff_refs": {
         "base_sha": "aaa111",
         "head_sha": "deadbeef",
         "start_sha": "ccc333",
     },
 })
+
+# No unresolved resolvable threads: the approve guard's discussions fetch.
+EMPTY_DISCUSSIONS_JSON = json.dumps([
+    {"id": "done-1", "resolvable": True, "resolved": True,
+     "notes": [{"body": "done", "system": False, "author": {"username": "r"}}]},
+    {"id": "general-1", "resolvable": False, "resolved": False,
+     "notes": [{"body": "nice work", "system": False, "author": {"username": "r"}}]},
+])
 
 
 class TestApproveMr:
@@ -51,9 +60,11 @@ class TestApproveMr:
         def side_effect(args, cwd=None, timeout=60, env=None):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:  # glab mr view (IID + head_sha fetch)
+            if call_count == 1:  # glab mr view (IID + head_sha + labels fetch)
                 assert env is None, "IID fetch must inherit the normal environment"
                 return _make_result(0, SAMPLE_MR_JSON)
+            if call_count == 2:  # guard: discussions fetch
+                return _make_result(0, EMPTY_DISCUSSIONS_JSON)
             return _make_result(0, stdout="{}")  # POST approve
 
         mock_run.side_effect = side_effect
@@ -67,14 +78,14 @@ class TestApproveMr:
         assert result["action"] == "mr_approved"
 
         # The approve call must have carried the bot token via GITLAB_TOKEN env
-        approve_call_kwargs = mock_run.call_args_list[1].kwargs
+        approve_call_kwargs = mock_run.call_args_list[2].kwargs
         approve_env = approve_call_kwargs["env"]
         assert approve_env["GITLAB_TOKEN"] == "glpat-bot-secret"
         # And the rest of the environment is preserved
         assert "PATH" in approve_env
 
         # The approve command targeted the approve endpoint with sha pinned
-        approve_args = mock_run.call_args_list[1][0][0]
+        approve_args = mock_run.call_args_list[2][0][0]
         assert "approve" in approve_args[2]
         assert "--method" in approve_args
         assert "POST" in approve_args
@@ -92,6 +103,8 @@ class TestApproveMr:
             call_count += 1
             if call_count == 1:
                 return _make_result(0, SAMPLE_MR_JSON)
+            if call_count == 2:  # guard: discussions fetch
+                return _make_result(0, EMPTY_DISCUSSIONS_JSON)
             assert env is None, "no bot token => env must be None (inherit)"
             return _make_result(0, stdout="{}")
 
@@ -117,6 +130,8 @@ class TestApproveMr:
             call_count += 1
             if call_count == 1:
                 return _make_result(0, SAMPLE_MR_JSON)
+            if call_count == 2:
+                return _make_result(0, EMPTY_DISCUSSIONS_JSON)
             return _make_result(0, stdout="{}")
 
         mock_run.side_effect = side_effect
@@ -124,7 +139,7 @@ class TestApproveMr:
         result = asyncio.run(_approve_mr("136", repo, sha="cafef00d"))
         assert result["success"] is True
         assert result["sha"] == "cafef00d"
-        approve_args = mock_run.call_args_list[1][0][0]
+        approve_args = mock_run.call_args_list[2][0][0]
         assert any("sha=cafef00d" in a for a in approve_args)
         assert not any("sha=deadbeef" in a for a in approve_args)
 
@@ -136,6 +151,7 @@ class TestApproveMr:
 
         mock_run.side_effect = [
             _make_result(0, SAMPLE_MR_JSON),
+            _make_result(0, EMPTY_DISCUSSIONS_JSON),
             _make_result(0, stdout="{}"),
         ]
         result = asyncio.run(_approve_mr("136", repo))
@@ -149,6 +165,7 @@ class TestApproveMr:
 
         mock_run.side_effect = [
             _make_result(0, SAMPLE_MR_JSON),
+            _make_result(0, EMPTY_DISCUSSIONS_JSON),
             _make_result(1, stderr="403 Forbidden: not allowed to approve"),
         ]
         result = asyncio.run(_approve_mr("136", repo))
@@ -188,6 +205,7 @@ class TestApproveMr:
         repo = _make_repo(tmp_path)
         mock_run.side_effect = [
             _make_result(0, SAMPLE_MR_JSON),
+            _make_result(0, EMPTY_DISCUSSIONS_JSON),
             _make_result(0, stdout="{}"),
         ]
         result = asyncio.run(_approve_mr("!136", repo))
@@ -220,10 +238,12 @@ class TestApproveMr:
 
         no_head_sha = json.dumps({
             "iid": 136,
+            "labels": ["omniforge::reviewed"],
             "diff_refs": {"base_sha": "aaa111", "head_sha": "", "start_sha": "ccc333"},
         })
         mock_run.side_effect = [
             _make_result(0, no_head_sha),
+            _make_result(0, EMPTY_DISCUSSIONS_JSON),
             _make_result(0, stdout="{}"),
         ]
 

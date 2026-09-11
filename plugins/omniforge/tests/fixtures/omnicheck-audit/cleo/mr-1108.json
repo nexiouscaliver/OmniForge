@@ -1,0 +1,565 @@
+{
+  "meta": {
+    "iid": 1108,
+    "title": "feat: GEO query lifecycle redesign, brand personas, social entitlements, font tokens + UI pass (reapply of !1104)",
+    "state": "merged",
+    "author_username": "Abhishek-2004-17",
+    "created_at": "2026-08-07T12:05:48.394Z",
+    "updated_at": "2026-08-07T16:09:19.195Z",
+    "merged_at": "2026-08-07T16:09:07.781Z",
+    "labels": [],
+    "source_branch": "reapply/mr-1104-platform-redesign",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1108",
+    "sha": "8f63955547748c225bf3a4d1bf120022fdae8a2f",
+    "merge_commit_sha": "479891c192caf19769499ae6febb17bb1af7d208",
+    "diff_refs": {
+      "base_sha": "600105da14a4b425cabcde4ce0a2e7c649a711fe",
+      "head_sha": "8f63955547748c225bf3a4d1bf120022fdae8a2f",
+      "start_sha": "600105da14a4b425cabcde4ce0a2e7c649a711fe"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3657991962,
+      "body": "## OmniForge\n\n**Verdict:** APPROVE_WITH_FIXES (block on Finding 1 first)\n\n### Overview\n\nThis is a reapply of !1104 (accidentally merged, reverted via !1107) — identical content, opened properly for review this time. I reviewed both the full original scope and the incremental delta that landed just before the accidental merge. Code quality on the newest work is strong (the frozen-`designSystem.ts` violation from the first review is confirmed fixed, and the new social-entitlement gate is correctly implemented end-to-end), but there is one migration filed in the wrong directory that will break every `geo_queries` read the moment it deploys — this must be fixed before merge, not after.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 1 |\n| Important | 4 |\n| Minor | 9 |\n\n### Strengths\n\n- New `social_access.py` entitlement gate is correctly wired end-to-end: routes through `BillingService.get_site_capabilities` (the documented dispatch entry point), fails closed on every branch, and the backend enforces independently of the frontend hint, before quota consumption.\n- The `geo_outcome_rules.py` extraction is a genuine, well-executed consolidation — a previously duplicated, already-drifted win/partial/lose rule collapsed into one pure module, imported by all four original call sites.\n- The prior review's frozen-`designSystem.ts` violation is confirmed fixed — the flagged exports were removed and properly relocated into co-located style files.\n- New `geo2_get_query_fanout` WS action follows this repo's standard patterns (correct registration, derives `site_id` from the row rather than trusting client input, existing plan gating re-applied).\n\n### Key Concerns\n\n- **Migration `137_geo_query_category.sql` is filed at the repo root instead of `db/migrations/prod/`** — the only directory this repo's migration tooling scans. The column it adds is already a mapped ORM column, so every `SELECT` against `GeoQuery` will raise `UndefinedColumn` once deployed. See inline thread — this needs a rename+move to `prod/152_...` before merge.\n- A new background task (`_schedule_intent_class_upgrade`) fires without this repo's standard `bounded=True` safeguard and makes sequential per-query LLM calls while holding a pooled DB session — a connection-pool-exhaustion path under repeated use.\n- A new 90-day, unprojected full-ORM-row fetch was added to the GEO dashboard's hot load path, hydrating full LLM answer text + JSONB that the caller never reads.\n- Alerting (`geo_alert_detectors.py`) was not migrated to the new `geo_outcome_rules` single-source-of-truth, so it can now alert on a verdict the dashboard itself no longer shows.\n\n### Security\n\nNo critical or important security findings. The new social-entitlement and query-fan-out surfaces were both independently verified correctly gated, fail-closed, and free of IDOR.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 14 findings posted as inline threads below*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T12:11:23.658Z"
+    },
+    {
+      "id": 3657997763,
+      "body": "**Critical** — Migration filed outside `db/migrations/prod/` — will break every `geo_queries` read\n\n**What:** This file lives at the repo root, but every migration runner in this repo (`apply_local_migrations.sh` hardcodes `PROD_DIR=.../prod`) only scans `db/migrations/prod/`. Meanwhile `query_category` is already a mapped ORM column (`sql_base.py`, `query_category = Column(String(24), nullable=True)`), included in every `sa.select(GeoQuery)`.\n\n**Why it matters:** On any environment where this file isn't hand-applied, every read of `GeoQuery` will raise `UndefinedColumn: column geo_queries.query_category does not exist` — a full GEO-module outage, not a degraded feature. This is the same mistake class this repo has hit before (migrations 123, 134/135) and has partial CI tripwires for. The number `137` is also already used twice under `prod/`, so it can't just be moved as-is.\n\n**Recommendation:**\n```\ngit mv SEO/backend/db/migrations/137_geo_query_category.sql SEO/backend/db/migrations/prod/152_geo_query_category.sql\n```\nConfirm 152 is still free at merge time, and apply this migration to any environment currently running the reverted/previous version of this code before this MR deploys.\n\nConfidence: 99/100 | Found by: MR Analyst + Codebase Reviewer (independently, cross-correlated), verified directly against the branch",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:12:35.057Z"
+    },
+    {
+      "id": 3657998374,
+      "body": "**Important** — New background LLM task is resource-unsafe under repeated use\n\n**What:** `_schedule_intent_class_upgrade` fires via `safe_create_task` without `bounded=True` — every other DB-touching background task in this file (and 8 other call sites repo-wide) uses this flag. The scheduled coroutine (`upgrade_intent_classes_llm`) opens one `AsyncSessionLocal()` and then makes sequential per-query Vertex `gemini-2.5-flash` calls while holding that session open for the whole batch.\n\n**Why it matters:** An editor creating or editing queries repeatedly (no rate limit on the edit path, no length cap on `query_text`) can pin multiple pooled DB connections open for the duration of many sequential LLM round-trips — a connection-pool-exhaustion path whose symptom surfaces as unrelated request failures elsewhere, plus unmetered LLM spend.\n\n**Recommendation:**\n```python\nsafe_create_task(upgrade_intent_classes_llm(site_id, query_ids), bounded=True)\n```\nAnd move the LLM classification outside the session — gather results first (optionally with a bounded `asyncio.gather`), then open a short session only to write.\n\nConfidence: 90/100 (cross-correlated — flagged independently from two angles) | Found by: Codebase Reviewer + Security Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:12:43.321Z"
+    },
+    {
+      "id": 3657998646,
+      "body": "**Important** — NULL-composite-score fallback has no staleness bound, masking genuine scoring failures\n\n**What:** When the day's composite score resolves to `None`, the dashboard now serves the newest **previously scored** snapshot instead of blanking — correct for the \"run in flight\" case this was built to fix — but there's no staleness bound: `_latest_scored_snapshot` will happily serve a score from weeks ago if that's the newest one available, with only a `logger.info` line as evidence.\n\n**Why it matters:** A genuine multi-week scoring failure (engine outage, config breakage, plan mis-resolution) now presents identically to \"no new score yet.\" There's no row to alert on and nothing on the payload marking the served score as stale.\n\n**Recommendation:** Either bound the fallback (refuse to serve a snapshot older than N days) or surface `snapshot_date` staleness explicitly on the payload so both the UI and the alerting layer can distinguish \"stale but real\" from \"current.\"\n\nConfidence: 72/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:12:45.809Z"
+    },
+    {
+      "id": 3657998912,
+      "body": "**Important** — New 90-day fetch with no column projection added to the GEO dashboard's hot load path\n\n**What:** `gather_tier_scores` (which calls into this function) replays up to 90 days site-wide the moment any single query hasn't changed tier recently — the normal state on a mature site — and `_rows_by_query_day` hydrates full ORM entities, including `raw_response` (Text, the entire LLM answer) and `raw_response_json` (JSONB), neither of which the fold reads.\n\n**Why it matters:** The Prompts-tab load now performs 2-3 of these full-row fetches per view. For a 50-query/4-engine site that's roughly 20k rows of full answer text + JSONB per dashboard load, versus ~4.6k before this change on the pre-existing 21-day path alone. Given this repo's documented sensitivity to GEO cold-load performance, this is a material regression on an already-hot path.\n\n**Recommendation:** Project only the columns the fold actually uses (`load_only()`), or push per-query start filtering into SQL instead of one site-wide 90-day window.\n\nConfidence: 85/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:12:48.836Z"
+    },
+    {
+      "id": 3657999575,
+      "body": "**Important** — Alerting was not migrated to this new single-source-of-truth, and can now contradict the dashboard\n\n**What:** This module exists specifically so every *display* surface answers to one win/partial/lose rule instead of four independently-drifted copies (per this file's own module docstring). `geo_alert_detectors.py`'s `_is_lost`/`_is_won`, however, were not migrated — they still read the stored `query_outcome`/`competitive_win` columns directly rather than importing from here. (That file has no diff in this MR at all, which is exactly the gap — it should have been touched.)\n\n**Why it matters:** A `win_to_lose` alert can now fire on a baseline the Prompts table no longer shows as ever having been a win — the exact class of contradiction this extraction was built to eliminate, just relocated to the alert-vs-row boundary instead of removed.\n\n**Recommendation:** Route `RunOutcome` construction in `geo_alert_service`/`geo_alert_detectors` through `per_engine_outcome`/`outcome_for_result` from this module, or explicitly document (with a reason) that alerting deliberately stays on the frozen verdict.\n\nConfidence: 78/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:12:56.951Z"
+    },
+    {
+      "id": 3658000085,
+      "body": "**Minor** — This module has no dedicated test file\n\n**What:** This is now the single source of truth for the client-facing win/partial/lose verdict — a rule change applied retroactively across all history — but it's only exercised indirectly, through `geo_lost_query_service`'s re-export and the table-builder tests. `outcome_for_result`'s NULL-guard and projection-fallback branches, and `aggregate_citation_role`, have no direct coverage at all.\n\n**Why it matters:** A future refactor that moves the re-export path loses this coverage silently, on the riskiest logic in this batch.\n\n**Recommendation:** Add `tests/geo_lifecycle/test_geo_outcome_rules.py` covering `outcome_for_result` (NULL stored verdict, projection without `found_url`), `aggregate_citation_role` precedence, and both branches of `select_recommended`.\n\nConfidence: 80/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:03.970Z"
+    },
+    {
+      "id": 3658000296,
+      "body": "**Minor** — Tier-transition replay floor contradicts its own spec and its own test's stated intent\n\n**What:** This floors the replay to the *start of the transition day* rather than the day after, so the verdict that caused the transition gets folded into the new tier's counter. The design spec (`docs/engineering/2026-08-06-geo-tier-streak-scoring-spec.md`) specifies a promotion lands at 0/4 and a demotion lands at 8; in practice a promotion lands at 1/4 and a demotion lands at 7 — the transition day is counted on both sides. The existing test for this fold (`test_tier_score_fold.py`) even has a docstring stating the opposite intent (\"folding the days that earned the promotion into the new tier would hand it a buffer it never won there\"), then asserts a value that contains exactly that overlap.\n\n**Why it matters:** Small and self-correcting over time, but the demotion case shortens the deliberately-chosen 8-day de-bounce to 7.\n\n**Recommendation:** Use `start.date() + 1 day` for the replay floor to match the spec, or update the spec table and the test's docstring to say the transition day is deliberately double-counted and why.\n\nConfidence: 68/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:06.606Z"
+    },
+    {
+      "id": 3658000473,
+      "body": "**Minor** — Test asserts on source text rather than computed behavior\n\n**What:** `assert \"query_category=(normalise_query_category(query_category)\" in src` — this and similar assertions in this file check `inspect.getsource()` output down to formatting/parenthesis placement, rather than calling the function with fixture data and asserting on the actual result. This pattern was flagged in the prior OmniForge review on !1104 for the GEO Score/tier tests and has since expanded to several more files in this area, including the persistence path for this new column.\n\n**Why it matters:** These tests pass on code that doesn't work and fail on working code that was merely reformatted — they provide no behavioral guarantee for the write paths they claim to cover.\n\n**Recommendation:** Assert on the constructed object instead (the harness in `test_geo_table_data_outcome_rollup.py` already shows the pattern: mock `db.execute` and inspect what was actually added). Reserve `getsource` for genuine cross-module wiring checks.\n\nConfidence: 92/100 | Found by: Codebase Reviewer (repeat/expansion of a prior-review finding)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:09.285Z"
+    },
+    {
+      "id": 3658001079,
+      "body": "**Minor** — `showIcons` prop is dead code\n\n**What:** Fully implemented (default `true`, gates two icon renders) but never passed at any of its call sites in the codebase.\n\n**Why it matters:** No functional effect today, but it's speculative API surface that adds noise for the next reader.\n\n**Recommendation:** Wire `showIcons` into the intended consumer, or drop the prop until one exists.\n\nConfidence: 90/100 | Found by: MR Analyst (from the original !1104 review — confirmed still present in this reapply)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:17.548Z"
+    },
+    {
+      "id": 3658001292,
+      "body": "**Minor** — CSV export functions are now orphaned after this import removal\n\n**What:** `GeoExportDropdown` and the two CSV formatters (`formatActiveTabToCsv`, `formatFoundationalTabToCsv`) are removed from this file's imports here, and after this change they have zero remaining importers anywhere in the codebase.\n\n**Why it matters:** Not a regression by itself, but the AI Score tab now has no export UI (unlike Competitors and AI Readiness, which both correctly wire `GeoExportDropdown`), and `formatActiveTabToCsv`/`formatFoundationalTabToCsv` in `geoExportFormatter.ts` are dead code that nothing calls.\n\n**Recommendation:** Either wire `GeoExportDropdown` into the AI Score tab, or delete the two now-orphaned formatter functions.\n\nConfidence: 75/100 | Found by: Codebase Reviewer (from the original !1104 review — confirmed still present in this reapply)",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:20.307Z"
+    },
+    {
+      "id": 3658001506,
+      "body": "**Minor** — Dead mock-data module carried over uncleaned in the AI-Readiness relocation\n\n**What:** `USE_MOCK_DATA` and `generateMockARSData` have zero import sites anywhere in the frontend after this file's relocation into the new `AIReadiness/` directory. `CleoAuditQuickWins.tsx` (also relocated here) has exactly one reference, and it's commented out.\n\n**Why it matters:** Dead code moved rather than deleted; `USE_MOCK_DATA` in particular is a live footgun sitting in a production tool directory.\n\n**Recommendation:** Delete both files, or add a note on when the Quick Wins block is expected to come back.\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:23.678Z"
+    },
+    {
+      "id": 3658001769,
+      "body": "**Minor** — `intent_class` is kept on the Prompts payload for a rationale that's no longer true\n\n**What:** The rationale for keeping `intent_class` alongside the new `query_category` is \"the Discovery tab keeps using it\" — but there is no Discovery tab anymore (`types.ts` maps the legacy `'discovery'` slug to `'prompts'` with a comment noting the Discovery tab became Prompts). `IntentClassBadge` (which rendered it) was correctly deleted with zero remaining references, yet the backend was newly wired here to keep emitting `intent_class` on this payload, and it survives as an unread field on the frontend row types.\n\n**Why it matters:** Payload weight and type surface for a value nothing renders, on a stated justification that doesn't hold — will mislead the next reader into thinking there's still a consumer.\n\n**Recommendation:** Either drop `intent_class` from the lifecycle payload and the frontend row interfaces, or correct the comment — `resolve_intent_class` is still genuinely used elsewhere (the rankings table), which is a real reason to keep the *resolver*, just not to ship this field here.\n\nConfidence: 82/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:27.127Z"
+    },
+    {
+      "id": 3658002340,
+      "body": "**Minor** — Comment references a card this same MR deletes\n\n**What:** This comment (and two others nearby in this file) describes the owned/earned split as folding \"the SAME citation-mix buckets the Citation Source Mix card renders further down the tab\" — but `CitationSourceMixCard` is deleted by this same MR.\n\n**Why it matters:** Sends the next reader looking for a component that no longer exists, in a codebase whose comments are otherwise unusually load-bearing and precise.\n\n**Recommendation:** Update or remove the three references to the deleted card. (The owned/earned reconciliation math itself is correct — verified independently: both shares are computed over `owned + earned`, excluding `other`/`institution` from both numerator and denominator, so they sum to 100% by construction.)\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:35.272Z"
+    },
+    {
+      "id": 3658002624,
+      "body": "**Minor** — Comment points to a function that moved\n\n**What:** This note says the deliberate difference is from `per_engine_outcome (geo_lost_query_service.py)`, but `per_engine_outcome` was moved to the new `geo_outcome_rules.py` module in this same MR.\n\n**Why it matters:** Minor, but sends the reader to the wrong file for a comparison the comment is explicitly trying to help them make.\n\n**Recommendation:** Update the reference to `geo_outcome_rules.per_engine_outcome`.\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": false,
+      "created_at": "2026-08-07T12:13:38.508Z"
+    },
+    {
+      "id": 3658150710,
+      "body": "added 1 commit\n\n<ul><li>9a21b731 - feat(geo): optimize database queries by loading only necessary fields</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1108/diffs?diff_id=1948781381&start_sha=0d2981ce39122897232d337dd31cbdc9f7a58626)",
+      "author_username": "jainex",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T12:48:46.627Z"
+    },
+    {
+      "id": 3658524232,
+      "body": "added 25 commits\n\n<ul><li>9a21b731...600105da - 23 commits from branch <code>staging-phase</code></li><li>cf8280a2 - Merge branch &#39;staging-phase&#39; into reapply/mr-1104-platform-redesign</li><li>8f639555 - feat(geo): implement transient error handling for Google API calls</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1108/diffs?diff_id=1948972593&start_sha=9a21b731a13528a31b9e07b328ac96cdb46b95b8)",
+      "author_username": "jainex",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T14:03:34.486Z"
+    },
+    {
+      "id": 3659054905,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T16:05:40.394Z"
+    },
+    {
+      "id": 3659057372,
+      "body": "## Follow-up Check — MR !1108\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 3 |\n| ✗ Not Applied | 10 |\n| ? Needs Human | 1 |\n\n### Outstanding Findings (not blocking this approval)\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #efe3b14 | general | Alerting (`geo_alert_detectors.py`) was not migrated to the new `geo_outcome_rules` single source of truth |\n| #81472cb | general | NULL composite-score fallback still has no staleness bound |\n| #6014f7e | general | `geo_outcome_rules.py` still has no dedicated test file |\n| #b3254f8 | general | Comment still points to `per_engine_outcome`'s old location |\n| #68206a9 | general | `showIcons` prop is still dead code |\n| #c02b85a | general | CSV export functions remain orphaned; AI Score tab still has no export UI |\n| #bbb4d4b | general | Dead mock-data module still uncleaned in the AI-Readiness relocation |\n| #2924a13 | general | Comment still references the deleted Citation Source Mix card |\n| #dfba2cb | general | Tier-transition replay floor still double-counts the transition day |\n| #3179c96 | general | Tests still assert on source text rather than computed behavior |\n\n### Needs Human Review\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #c9afe54 | general | Background LLM task now uses `bounded=True`, but the sequential LLM calls still run inside the open DB session |\n\nThis MR was approved with the above findings still outstanding.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T16:06:21.403Z"
+    },
+    {
+      "id": 3659069484,
+      "body": "mentioned in commit 479891c192caf19769499ae6febb17bb1af7d208",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-07T16:09:08.683Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "5a2e55018364dc9c31a01a48dad8d2f949f6ea4a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3657991962,
+          "body": "## OmniForge\n\n**Verdict:** APPROVE_WITH_FIXES (block on Finding 1 first)\n\n### Overview\n\nThis is a reapply of !1104 (accidentally merged, reverted via !1107) — identical content, opened properly for review this time. I reviewed both the full original scope and the incremental delta that landed just before the accidental merge. Code quality on the newest work is strong (the frozen-`designSystem.ts` violation from the first review is confirmed fixed, and the new social-entitlement gate is correctly implemented end-to-end), but there is one migration filed in the wrong directory that will break every `geo_queries` read the moment it deploys — this must be fixed before merge, not after.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 1 |\n| Important | 4 |\n| Minor | 9 |\n\n### Strengths\n\n- New `social_access.py` entitlement gate is correctly wired end-to-end: routes through `BillingService.get_site_capabilities` (the documented dispatch entry point), fails closed on every branch, and the backend enforces independently of the frontend hint, before quota consumption.\n- The `geo_outcome_rules.py` extraction is a genuine, well-executed consolidation — a previously duplicated, already-drifted win/partial/lose rule collapsed into one pure module, imported by all four original call sites.\n- The prior review's frozen-`designSystem.ts` violation is confirmed fixed — the flagged exports were removed and properly relocated into co-located style files.\n- New `geo2_get_query_fanout` WS action follows this repo's standard patterns (correct registration, derives `site_id` from the row rather than trusting client input, existing plan gating re-applied).\n\n### Key Concerns\n\n- **Migration `137_geo_query_category.sql` is filed at the repo root instead of `db/migrations/prod/`** — the only directory this repo's migration tooling scans. The column it adds is already a mapped ORM column, so every `SELECT` against `GeoQuery` will raise `UndefinedColumn` once deployed. See inline thread — this needs a rename+move to `prod/152_...` before merge.\n- A new background task (`_schedule_intent_class_upgrade`) fires without this repo's standard `bounded=True` safeguard and makes sequential per-query LLM calls while holding a pooled DB session — a connection-pool-exhaustion path under repeated use.\n- A new 90-day, unprojected full-ORM-row fetch was added to the GEO dashboard's hot load path, hydrating full LLM answer text + JSONB that the caller never reads.\n- Alerting (`geo_alert_detectors.py`) was not migrated to the new `geo_outcome_rules` single-source-of-truth, so it can now alert on a verdict the dashboard itself no longer shows.\n\n### Security\n\nNo critical or important security findings. The new social-entitlement and query-fan-out surfaces were both independently verified correctly gated, fail-closed, and free of IDOR.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 14 findings posted as inline threads below*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T12:11:23.658Z"
+        }
+      ]
+    },
+    {
+      "id": "c89d3da63b147da359336dc3b81a331a3f34c178",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3657997763,
+          "body": "**Critical** — Migration filed outside `db/migrations/prod/` — will break every `geo_queries` read\n\n**What:** This file lives at the repo root, but every migration runner in this repo (`apply_local_migrations.sh` hardcodes `PROD_DIR=.../prod`) only scans `db/migrations/prod/`. Meanwhile `query_category` is already a mapped ORM column (`sql_base.py`, `query_category = Column(String(24), nullable=True)`), included in every `sa.select(GeoQuery)`.\n\n**Why it matters:** On any environment where this file isn't hand-applied, every read of `GeoQuery` will raise `UndefinedColumn: column geo_queries.query_category does not exist` — a full GEO-module outage, not a degraded feature. This is the same mistake class this repo has hit before (migrations 123, 134/135) and has partial CI tripwires for. The number `137` is also already used twice under `prod/`, so it can't just be moved as-is.\n\n**Recommendation:**\n```\ngit mv SEO/backend/db/migrations/137_geo_query_category.sql SEO/backend/db/migrations/prod/152_geo_query_category.sql\n```\nConfirm 152 is still free at merge time, and apply this migration to any environment currently running the reverted/previous version of this code before this MR deploys.\n\nConfidence: 99/100 | Found by: MR Analyst + Codebase Reviewer (independently, cross-correlated), verified directly against the branch",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:12:35.057Z"
+        }
+      ]
+    },
+    {
+      "id": "c9afe54ed4c37102a08654e721f8c4ede3cbed35",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3657998374,
+          "body": "**Important** — New background LLM task is resource-unsafe under repeated use\n\n**What:** `_schedule_intent_class_upgrade` fires via `safe_create_task` without `bounded=True` — every other DB-touching background task in this file (and 8 other call sites repo-wide) uses this flag. The scheduled coroutine (`upgrade_intent_classes_llm`) opens one `AsyncSessionLocal()` and then makes sequential per-query Vertex `gemini-2.5-flash` calls while holding that session open for the whole batch.\n\n**Why it matters:** An editor creating or editing queries repeatedly (no rate limit on the edit path, no length cap on `query_text`) can pin multiple pooled DB connections open for the duration of many sequential LLM round-trips — a connection-pool-exhaustion path whose symptom surfaces as unrelated request failures elsewhere, plus unmetered LLM spend.\n\n**Recommendation:**\n```python\nsafe_create_task(upgrade_intent_classes_llm(site_id, query_ids), bounded=True)\n```\nAnd move the LLM classification outside the session — gather results first (optionally with a bounded `asyncio.gather`), then open a short session only to write.\n\nConfidence: 90/100 (cross-correlated — flagged independently from two angles) | Found by: Codebase Reviewer + Security Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:12:43.321Z"
+        }
+      ]
+    },
+    {
+      "id": "81472cbd892e287080ecf447321006c58291ab18",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3657998646,
+          "body": "**Important** — NULL-composite-score fallback has no staleness bound, masking genuine scoring failures\n\n**What:** When the day's composite score resolves to `None`, the dashboard now serves the newest **previously scored** snapshot instead of blanking — correct for the \"run in flight\" case this was built to fix — but there's no staleness bound: `_latest_scored_snapshot` will happily serve a score from weeks ago if that's the newest one available, with only a `logger.info` line as evidence.\n\n**Why it matters:** A genuine multi-week scoring failure (engine outage, config breakage, plan mis-resolution) now presents identically to \"no new score yet.\" There's no row to alert on and nothing on the payload marking the served score as stale.\n\n**Recommendation:** Either bound the fallback (refuse to serve a snapshot older than N days) or surface `snapshot_date` staleness explicitly on the payload so both the UI and the alerting layer can distinguish \"stale but real\" from \"current.\"\n\nConfidence: 72/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:12:45.809Z"
+        }
+      ]
+    },
+    {
+      "id": "b5d906dad27c94b1ef60a9dd66c513735020a3c6",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3657998912,
+          "body": "**Important** — New 90-day fetch with no column projection added to the GEO dashboard's hot load path\n\n**What:** `gather_tier_scores` (which calls into this function) replays up to 90 days site-wide the moment any single query hasn't changed tier recently — the normal state on a mature site — and `_rows_by_query_day` hydrates full ORM entities, including `raw_response` (Text, the entire LLM answer) and `raw_response_json` (JSONB), neither of which the fold reads.\n\n**Why it matters:** The Prompts-tab load now performs 2-3 of these full-row fetches per view. For a 50-query/4-engine site that's roughly 20k rows of full answer text + JSONB per dashboard load, versus ~4.6k before this change on the pre-existing 21-day path alone. Given this repo's documented sensitivity to GEO cold-load performance, this is a material regression on an already-hot path.\n\n**Recommendation:** Project only the columns the fold actually uses (`load_only()`), or push per-query start filtering into SQL instead of one site-wide 90-day window.\n\nConfidence: 85/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:12:48.836Z"
+        }
+      ]
+    },
+    {
+      "id": "efe3b14cb9ecf7611de1aa158bd66c60ad99e350",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3657999575,
+          "body": "**Important** — Alerting was not migrated to this new single-source-of-truth, and can now contradict the dashboard\n\n**What:** This module exists specifically so every *display* surface answers to one win/partial/lose rule instead of four independently-drifted copies (per this file's own module docstring). `geo_alert_detectors.py`'s `_is_lost`/`_is_won`, however, were not migrated — they still read the stored `query_outcome`/`competitive_win` columns directly rather than importing from here. (That file has no diff in this MR at all, which is exactly the gap — it should have been touched.)\n\n**Why it matters:** A `win_to_lose` alert can now fire on a baseline the Prompts table no longer shows as ever having been a win — the exact class of contradiction this extraction was built to eliminate, just relocated to the alert-vs-row boundary instead of removed.\n\n**Recommendation:** Route `RunOutcome` construction in `geo_alert_service`/`geo_alert_detectors` through `per_engine_outcome`/`outcome_for_result` from this module, or explicitly document (with a reason) that alerting deliberately stays on the frozen verdict.\n\nConfidence: 78/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:12:56.951Z"
+        }
+      ]
+    },
+    {
+      "id": "6014f7e50420071dc3a737943317cc87dfeb4f06",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658000085,
+          "body": "**Minor** — This module has no dedicated test file\n\n**What:** This is now the single source of truth for the client-facing win/partial/lose verdict — a rule change applied retroactively across all history — but it's only exercised indirectly, through `geo_lost_query_service`'s re-export and the table-builder tests. `outcome_for_result`'s NULL-guard and projection-fallback branches, and `aggregate_citation_role`, have no direct coverage at all.\n\n**Why it matters:** A future refactor that moves the re-export path loses this coverage silently, on the riskiest logic in this batch.\n\n**Recommendation:** Add `tests/geo_lifecycle/test_geo_outcome_rules.py` covering `outcome_for_result` (NULL stored verdict, projection without `found_url`), `aggregate_citation_role` precedence, and both branches of `select_recommended`.\n\nConfidence: 80/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:03.970Z"
+        }
+      ]
+    },
+    {
+      "id": "dfba2cb6360a63f8821e6beb95a8d955dd3fb581",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658000296,
+          "body": "**Minor** — Tier-transition replay floor contradicts its own spec and its own test's stated intent\n\n**What:** This floors the replay to the *start of the transition day* rather than the day after, so the verdict that caused the transition gets folded into the new tier's counter. The design spec (`docs/engineering/2026-08-06-geo-tier-streak-scoring-spec.md`) specifies a promotion lands at 0/4 and a demotion lands at 8; in practice a promotion lands at 1/4 and a demotion lands at 7 — the transition day is counted on both sides. The existing test for this fold (`test_tier_score_fold.py`) even has a docstring stating the opposite intent (\"folding the days that earned the promotion into the new tier would hand it a buffer it never won there\"), then asserts a value that contains exactly that overlap.\n\n**Why it matters:** Small and self-correcting over time, but the demotion case shortens the deliberately-chosen 8-day de-bounce to 7.\n\n**Recommendation:** Use `start.date() + 1 day` for the replay floor to match the spec, or update the spec table and the test's docstring to say the transition day is deliberately double-counted and why.\n\nConfidence: 68/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:06.606Z"
+        }
+      ]
+    },
+    {
+      "id": "3179c9621400266e5d6aad753a5c7bd708a76465",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658000473,
+          "body": "**Minor** — Test asserts on source text rather than computed behavior\n\n**What:** `assert \"query_category=(normalise_query_category(query_category)\" in src` — this and similar assertions in this file check `inspect.getsource()` output down to formatting/parenthesis placement, rather than calling the function with fixture data and asserting on the actual result. This pattern was flagged in the prior OmniForge review on !1104 for the GEO Score/tier tests and has since expanded to several more files in this area, including the persistence path for this new column.\n\n**Why it matters:** These tests pass on code that doesn't work and fail on working code that was merely reformatted — they provide no behavioral guarantee for the write paths they claim to cover.\n\n**Recommendation:** Assert on the constructed object instead (the harness in `test_geo_table_data_outcome_rollup.py` already shows the pattern: mock `db.execute` and inspect what was actually added). Reserve `getsource` for genuine cross-module wiring checks.\n\nConfidence: 92/100 | Found by: Codebase Reviewer (repeat/expansion of a prior-review finding)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:09.285Z"
+        }
+      ]
+    },
+    {
+      "id": "68206a9941e8bdbbdbc5ea5303b6265352ca5405",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658001079,
+          "body": "**Minor** — `showIcons` prop is dead code\n\n**What:** Fully implemented (default `true`, gates two icon renders) but never passed at any of its call sites in the codebase.\n\n**Why it matters:** No functional effect today, but it's speculative API surface that adds noise for the next reader.\n\n**Recommendation:** Wire `showIcons` into the intended consumer, or drop the prop until one exists.\n\nConfidence: 90/100 | Found by: MR Analyst (from the original !1104 review — confirmed still present in this reapply)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:17.548Z"
+        }
+      ]
+    },
+    {
+      "id": "c02b85a677698d109143aedef39e63eb61e9b15c",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658001292,
+          "body": "**Minor** — CSV export functions are now orphaned after this import removal\n\n**What:** `GeoExportDropdown` and the two CSV formatters (`formatActiveTabToCsv`, `formatFoundationalTabToCsv`) are removed from this file's imports here, and after this change they have zero remaining importers anywhere in the codebase.\n\n**Why it matters:** Not a regression by itself, but the AI Score tab now has no export UI (unlike Competitors and AI Readiness, which both correctly wire `GeoExportDropdown`), and `formatActiveTabToCsv`/`formatFoundationalTabToCsv` in `geoExportFormatter.ts` are dead code that nothing calls.\n\n**Recommendation:** Either wire `GeoExportDropdown` into the AI Score tab, or delete the two now-orphaned formatter functions.\n\nConfidence: 75/100 | Found by: Codebase Reviewer (from the original !1104 review — confirmed still present in this reapply)",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:20.307Z"
+        }
+      ]
+    },
+    {
+      "id": "bbb4d4b4e645cc85e776c6493b44e853ffb398c3",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658001506,
+          "body": "**Minor** — Dead mock-data module carried over uncleaned in the AI-Readiness relocation\n\n**What:** `USE_MOCK_DATA` and `generateMockARSData` have zero import sites anywhere in the frontend after this file's relocation into the new `AIReadiness/` directory. `CleoAuditQuickWins.tsx` (also relocated here) has exactly one reference, and it's commented out.\n\n**Why it matters:** Dead code moved rather than deleted; `USE_MOCK_DATA` in particular is a live footgun sitting in a production tool directory.\n\n**Recommendation:** Delete both files, or add a note on when the Quick Wins block is expected to come back.\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:23.678Z"
+        }
+      ]
+    },
+    {
+      "id": "895b19acfb017cae2218cc8f5d352444e1271a9f",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658001769,
+          "body": "**Minor** — `intent_class` is kept on the Prompts payload for a rationale that's no longer true\n\n**What:** The rationale for keeping `intent_class` alongside the new `query_category` is \"the Discovery tab keeps using it\" — but there is no Discovery tab anymore (`types.ts` maps the legacy `'discovery'` slug to `'prompts'` with a comment noting the Discovery tab became Prompts). `IntentClassBadge` (which rendered it) was correctly deleted with zero remaining references, yet the backend was newly wired here to keep emitting `intent_class` on this payload, and it survives as an unread field on the frontend row types.\n\n**Why it matters:** Payload weight and type surface for a value nothing renders, on a stated justification that doesn't hold — will mislead the next reader into thinking there's still a consumer.\n\n**Recommendation:** Either drop `intent_class` from the lifecycle payload and the frontend row interfaces, or correct the comment — `resolve_intent_class` is still genuinely used elsewhere (the rankings table), which is a real reason to keep the *resolver*, just not to ship this field here.\n\nConfidence: 82/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:27.127Z"
+        }
+      ]
+    },
+    {
+      "id": "2924a136a4aba8c9c4563e77600af8e630546d61",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658002340,
+          "body": "**Minor** — Comment references a card this same MR deletes\n\n**What:** This comment (and two others nearby in this file) describes the owned/earned split as folding \"the SAME citation-mix buckets the Citation Source Mix card renders further down the tab\" — but `CitationSourceMixCard` is deleted by this same MR.\n\n**Why it matters:** Sends the next reader looking for a component that no longer exists, in a codebase whose comments are otherwise unusually load-bearing and precise.\n\n**Recommendation:** Update or remove the three references to the deleted card. (The owned/earned reconciliation math itself is correct — verified independently: both shares are computed over `owned + earned`, excluding `other`/`institution` from both numerator and denominator, so they sum to 100% by construction.)\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:35.272Z"
+        }
+      ]
+    },
+    {
+      "id": "b3254f83f0b292a817756c6b7efb6767d3e3d37d",
+      "resolved": false,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3658002624,
+          "body": "**Minor** — Comment points to a function that moved\n\n**What:** This note says the deliberate difference is from `per_engine_outcome (geo_lost_query_service.py)`, but `per_engine_outcome` was moved to the new `geo_outcome_rules.py` module in this same MR.\n\n**Why it matters:** Minor, but sends the reader to the wrong file for a comparison the comment is explicitly trying to help them make.\n\n**Recommendation:** Update the reference to `geo_outcome_rules.per_engine_outcome`.\n\nConfidence: 90/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": false,
+          "created_at": "2026-08-07T12:13:38.508Z"
+        }
+      ]
+    },
+    {
+      "id": "579ea5a35365581b8342bcdf41043ab97c2e0944",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3658150710,
+          "body": "added 1 commit\n\n<ul><li>9a21b731 - feat(geo): optimize database queries by loading only necessary fields</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1108/diffs?diff_id=1948781381&start_sha=0d2981ce39122897232d337dd31cbdc9f7a58626)",
+          "author_username": "jainex",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T12:48:46.627Z"
+        }
+      ]
+    },
+    {
+      "id": "00f559355ad7d0195dca96350015ce11a6220d54",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3658524232,
+          "body": "added 25 commits\n\n<ul><li>9a21b731...600105da - 23 commits from branch <code>staging-phase</code></li><li>cf8280a2 - Merge branch &#39;staging-phase&#39; into reapply/mr-1104-platform-redesign</li><li>8f639555 - feat(geo): implement transient error handling for Google API calls</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1108/diffs?diff_id=1948972593&start_sha=9a21b731a13528a31b9e07b328ac96cdb46b95b8)",
+          "author_username": "jainex",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T14:03:34.486Z"
+        }
+      ]
+    },
+    {
+      "id": "06b460314c6da9310ca12cf83614b4f485a03dc3",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3659054905,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T16:05:40.394Z"
+        }
+      ]
+    },
+    {
+      "id": "d45bb92c7ef6b91130ed94ceb9ae564d84d8ff02",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3659057372,
+          "body": "## Follow-up Check — MR !1108\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 0 |\n| ✓ Silently Applied | 3 |\n| ✗ Not Applied | 10 |\n| ? Needs Human | 1 |\n\n### Outstanding Findings (not blocking this approval)\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #efe3b14 | general | Alerting (`geo_alert_detectors.py`) was not migrated to the new `geo_outcome_rules` single source of truth |\n| #81472cb | general | NULL composite-score fallback still has no staleness bound |\n| #6014f7e | general | `geo_outcome_rules.py` still has no dedicated test file |\n| #b3254f8 | general | Comment still points to `per_engine_outcome`'s old location |\n| #68206a9 | general | `showIcons` prop is still dead code |\n| #c02b85a | general | CSV export functions remain orphaned; AI Score tab still has no export UI |\n| #bbb4d4b | general | Dead mock-data module still uncleaned in the AI-Readiness relocation |\n| #2924a13 | general | Comment still references the deleted Citation Source Mix card |\n| #dfba2cb | general | Tier-transition replay floor still double-counts the transition day |\n| #3179c96 | general | Tests still assert on source text rather than computed behavior |\n\n### Needs Human Review\n\n| Thread | File | Summary |\n|--------|------|---------|\n| #c9afe54 | general | Background LLM task now uses `bounded=True`, but the sequential LLM calls still run inside the open DB session |\n\nThis MR was approved with the above findings still outstanding.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T16:06:21.403Z"
+        }
+      ]
+    },
+    {
+      "id": "c3995b433d9e221409a3f2984b772a73537e249c",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3659069484,
+          "body": "mentioned in commit 479891c192caf19769499ae6febb17bb1af7d208",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-07T16:09:08.683Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "8f63955547748c225bf3a4d1bf120022fdae8a2f",
+      "title": "feat(geo): implement transient error handling for Google API calls",
+      "author_name": "jainex17",
+      "created_at": "2026-08-07T19:09:50.000+05:30"
+    },
+    {
+      "id": "cf8280a2969140d5063d25aeda2bba652e8d75e5",
+      "title": "Merge branch 'staging-phase' into reapply/mr-1104-platform-redesign",
+      "author_name": "jainex17",
+      "created_at": "2026-08-07T18:58:02.000+05:30"
+    },
+    {
+      "id": "9a21b731a13528a31b9e07b328ac96cdb46b95b8",
+      "title": "feat(geo): optimize database queries by loading only necessary fields",
+      "author_name": "jainex17",
+      "created_at": "2026-08-07T18:14:27.000+05:30"
+    },
+    {
+      "id": "0d2981ce39122897232d337dd31cbdc9f7a58626",
+      "title": "Reapply \"Merge branch 'feat/platform-redesign' into 'staging-phase'\"",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-07T17:35:16.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-07T16:05:40.282Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

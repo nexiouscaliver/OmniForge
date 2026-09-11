@@ -1,0 +1,42 @@
+[
+  {
+    "id": "p2dr-f1",
+    "disposition": "not_fixed",
+    "severity": "important",
+    "kind": "code",
+    "file_path": "plugins/omniforge/skills/omnireview-gitlab/scripts/omni_partition.py",
+    "line_number": 60,
+    "body": "**Important** — added_lines() rescans the whole diff per file; O(files x hunks) on 200-file MRs",
+    "reason": ""
+  },
+  {
+    "id": "p2dr-f2",
+    "disposition": "not_fixed",
+    "severity": "critical",
+    "kind": "code",
+    "file_path": "plugins/omniforge/skills/omnireview-gitlab/SKILL.md",
+    "line_number": 30,
+    "body": "**Critical** — the improvised gather path writes to /tmp/omni_mr{id}_gather.json from multiple agents with no run-dir isolation; consolidate via one prepare step (omni_prepare) or races will corrupt the gather",
+    "reason": ""
+  },
+  {
+    "id": "p2dr-f3",
+    "disposition": "not_fixed",
+    "severity": "minor",
+    "kind": "docs",
+    "file_path": "plugins/omniforge/skills/omnireview-gitlab/references/posting-guide.md",
+    "line_number": 12,
+    "body": "**Minor** — posting guide still documents the unanchored glab position command",
+    "reason": ""
+  },
+  {
+    "id": "p2dr-f4",
+    "disposition": "not_fixed",
+    "severity": "minor",
+    "kind": "process",
+    "file_path": null,
+    "line_number": null,
+    "body": "**Minor** — CI should run the contract tests on every PR, not only on main",
+    "reason": ""
+  }
+]

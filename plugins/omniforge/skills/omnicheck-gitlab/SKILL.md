@@ -53,6 +53,44 @@ Phase 5: DONE     — no cleanup needed (no worktrees)
 | `NOT_APPLIED` | Thread open, diff shows no relevant change | Nudge: thread reply + summary row |
 | `NEEDS_HUMAN` | Ambiguous — cannot determine from diff alone | Flag in report; no automatic nudge |
 
+## Verification Model v2 (dispositions, severity, kind, gate)
+
+**REQUIRED REFERENCE:** `./references/verdict-model.md` — the closed vocabulary
+(single source of truth, shared with the push sweep). The deterministic model
+lives in `./scripts/omni_verdict.py` (pure stdlib; also a thin CLI:
+`python3 omni_verdict.py --in <threads.json>`).
+
+Before dispatching the analysis agent, run the deterministic layer over the
+fetched threads:
+
+1. **Artifact/command filter** — review report posts (`## OmniForge`), fix
+   briefs, disposition summaries, regenloop round summaries, trigger commands
+   (`/omnireview`, `/omniforge`, `/omnicheck`), and bot status notes never
+   classify as findings.
+2. **Disposition** — `fixed / not_fixed / obsolete / deferred / declined /
+   decision / artifact`. Resolved threads are `fixed` **unless** a reply
+   records a deferral/decline/decision (valid consent). Open threads with a
+   consent reply are DISPOSED (`deferred`/`declined`/`decision`) — reported as
+   ATTENTION_REQUIRED, never nudged, never blocking.
+3. **Severity** — `critical|important|minor` from `**Critical**`-style markers,
+   `severity:` JSON, or the regenloop `**blocking**`/`**non-blocking**`/`**note**`
+   convention; unmarked threads are `minor` (severity must be evidenced to gate).
+4. **Kind** — `code|test|docs|process|decision` from the anchor path and body.
+
+Only threads that still need diff verification (open, not disposed, not
+artifacts) go to the analysis agent. After verdicts return, compute the gate
+with `omni_verdict.gate(findings)`:
+
+- `BLOCKED` — an unfixed Critical/Important **code** finding with no valid consent.
+- `CLEAN` — nothing open at all.
+- `READY_WITH_NOTES` — anything else (open minors, unfixed test/docs/process
+  findings, ATTENTION_REQUIRED disposed threads).
+
+Fail-closed applies to the blocking class ONLY — process/decision threads and
+report artifacts can never gate (this retires the audit's over-rejection
+class), while unanswered Important code findings still block (retaining
+fail-closed where it matters).
+
 ---
 
 ## Phase 1: Gather
@@ -77,7 +115,9 @@ Returns structured threads with: `id`, `resolvable`, `resolved`, `type`, `file_p
 mcp__omniforge__fetch_mr_data(mr_id="{id}", repo_root="{cwd}")
 ```
 
-Returns: title, author, source_branch, target_branch, diff, diff_line_count, commits, files_changed.
+Returns: title, author, source_branch, target_branch, diff, diff_line_count, commits, files_changed, head_sha, `truncated_files`.
+
+**Truncation guard:** when `diff_truncated` is true, threads anchored in `truncated_files` cannot be verified from the diff — mark them NEEDS_HUMAN with the stated truncation reason (run `omni_verdict.apply_truncation_guard`, or set the reason manually). Never report "no relevant change" for a region the diff never showed.
 
 **Step 4:** Early exit checks.
 - Zero threads returned: "MR !{id} has no discussion threads. Nothing to check." Stop.
@@ -148,9 +188,9 @@ OmniCheck — MR !{id}: {title}
   ? Needs Human Review:     {N} threads
 ```
 
-Then branch on the count of outstanding findings.
+Then branch on the gate outcome and outstanding findings.
 
-### Branch A — there are unaddressed findings (`NOT_APPLIED + NEEDS_HUMAN > 0`)
+### Branch A — there are unaddressed findings (`not_fixed` findings remain, or the gate is BLOCKED)
 
 This is the standard nudge path. Show the breakdown and ask before posting:
 
@@ -168,9 +208,11 @@ Post nudge replies on NOT_APPLIED threads? [Y/n]
 
 On approval, proceed to Phase 4 Branch A.
 
-### Branch B — all findings verified (`NOT_APPLIED + NEEDS_HUMAN = 0`)
+### Branch B — all findings verified or disposed (no `not_fixed` findings remain)
 
-There is nothing to nudge. Offer to **approve** the MR instead:
+There is nothing to nudge. DISPOSED threads (deferred / declined / decision)
+are listed as ATTENTION_REQUIRED — they do not block, but say so before
+approving. Offer to **approve** the MR instead:
 
 ```
 ✅ All {N} findings verified applied (0 unresolved).
@@ -222,16 +264,17 @@ mcp__omniforge__post_review_summary(
 
 ### Branch B — Approve (all findings verified)
 
-**Step 1:** Approve the MR. The tool approves as the OmniCheck bot when `OMNICHECK_BOT_TOKEN` is set, else as the current `glab` user. It pins to the MR HEAD sha automatically.
+**Step 1:** Approve the MR. The tool approves as the OmniCheck bot when `OMNICHECK_BOT_TOKEN` is set, else as the current `glab` user. It pins to the MR HEAD sha automatically — pass `checked_sha` = the `head_sha` the Phase-1 fetch recorded, so a head move since the check refuses the approval.
 
 ```
 mcp__omniforge__approve_mr(
   mr_id="{id}",
-  repo_root="{cwd}"
+  repo_root="{cwd}",
+  checked_sha="{head_sha from Phase 1}"
 )
 ```
 
-Check the returned `approver` (`bot` | `current_user`) and `success`. If `success` is false (commonly `403` / "not allowed to approve"), report the cause to the user and stop — do **not** post a misleading success comment. Typical causes: bot is not a Maintainer, bot is not an Eligible approver, the token is unset so the current (blocked) user was used, or the bot is the MR author/committer.
+Check the returned `approver` (`bot` | `current_user`) and `success`. If `success` is false (commonly `403` / "not allowed to approve"), report the cause to the user and stop — do **not** post a misleading success comment. The tool also REFUSES (fail-closed) on: `unresolved_threads` (a resolvable thread is still open), `missing_reviewed_label` (the MR lacks `omniforge::reviewed` — run the OmniForge review first; this approval must never certify an unreviewed MR), and `head_moved` (re-run the check at the new head). Other typical causes: bot is not a Maintainer, bot is not an Eligible approver, the token is unset so the current (blocked) user was used, or the bot is the MR author/committer.
 
 **Step 2:** Only after a successful approval, post one summary comment.
 
@@ -294,6 +337,11 @@ OmniCheck complete — MR !{id}
 
 **Subagent Template:**
 - `./references/analysis-agent-prompt.md` — Analysis Agent (single, diff-only check)
+
+**Deterministic model + replay:**
+- `./scripts/omni_verdict.py` — disposition/severity/kind extractors, artifact filter, gate (import, or CLI: `--in threads.json`)
+- `./references/verdict-model.md` — the vocabulary decision (single source of truth; the push sweep reuses it verbatim)
+- `./scripts/replay_audit.py` + `./references/replay-table-2026-09-11.md` — audit-corpus replay harness and the release-gate table it produced
 
 ---
 

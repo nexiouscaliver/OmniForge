@@ -1,0 +1,425 @@
+{
+  "meta": {
+    "iid": 1172,
+    "title": "Add trial plan-card to Billing and Plans page",
+    "state": "merged",
+    "author_username": "Abhishek-2004-17",
+    "created_at": "2026-08-13T07:18:21.465Z",
+    "updated_at": "2026-08-14T06:02:13.412Z",
+    "merged_at": "2026-08-14T06:02:12.312Z",
+    "labels": [],
+    "source_branch": "loop/billing-trial-card",
+    "target_branch": "staging-phase",
+    "web_url": "https://gitlab.com/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1172",
+    "sha": "56679cf4fec97af998feb932191dc9282061ca36",
+    "merge_commit_sha": "21a73aeedd861554b637232e9a555e1156f5f823",
+    "diff_refs": {
+      "base_sha": "d3462d1f5e545f144660a7984ca4a08e7709efff",
+      "head_sha": "56679cf4fec97af998feb932191dc9282061ca36",
+      "start_sha": "1a03c5921d88f80f661e67902c780d3c528ffadf"
+    },
+    "blocking_discussions_resolved": true,
+    "head_pipeline_status": "success"
+  },
+  "notes": [
+    {
+      "id": 3683768468,
+      "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis MR adds a trial plan-card to the Billing page's Subscriptions list, and the implementation itself is clean — unit tests pass, `tsc` is clean, and the new UI reuses existing patterns correctly. However, tracing the candidate-domain logic against the real backend data model surfaces a likely-critical bug: the feature's target scenario (a trial site with no paid subscription) appears to be structurally unreachable, because the domain source (`/my-sites`) is itself filtered on active-subscription status in a way that excludes every trial state this card is meant to cover. See inline threads for details.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 1 |\n| Important | 4 |\n| Minor | 3 |\n\n### Strengths\n\n- 8 new unit tests independently re-run and passing; `tsc --noEmit` clean.\n- `PlanAccordionRow`'s prop refactor (`plan` → `header`) is correct and consistent at both call sites.\n- Urgency-colour thresholds genuinely match `TrialBanner`'s existing logic, as claimed.\n- Trial-fetch failures are isolated with their own try/catch, degrading gracefully instead of breaking the page.\n\n### Key Concerns\n\n- **Critical:** `domainsNeedingTrialCheck` sources candidates from `mySites`, but `/my-sites` is itself filtered to active-subscription status — the same status trialing/expired sites either still hold or fall out of entirely, so the card may never render for its intended scenarios. See inline thread on `BillingSettingsPage.tsx`.\n- **Important:** Usage bars on the trial card will always show \"0 used\" — `buildFeatureRows` is called without the `siteUsageData` argument that supplies real consumption numbers. See inline thread.\n- **Important:** Test coverage stops at the two pure helper functions and doesn't touch the actual integration seam where the critical bug lives. See inline thread.\n- **Important (process, no diff line to anchor):** The MR description states a code review and design review occurred, but there are zero comments/reviewers on the MR and only one squashed commit — nothing here is independently verifiable. If review happens via an internal pipeline before the MR opens, worth saying so explicitly and linking the artifact.\n- **Important (process):** Pipeline status is `unknown` despite this repo having active CI — worth confirming the MR's pipeline actually ran before merge.\n- **Minor (process):** Commit message is a single subject line with no body, embedding internal gate-status metadata rather than describing the change; the \"0 warnings, 0 errors\" lint claim is technically imprecise (true for touched lines, not the whole file); the `PlanAccordionRow` prop-contract change (see inline thread) is correct but understated in the description.\n\n### Security\n\nNo security concerns found. The new fetch reuses an already-hardened, per-domain-authorized endpoint fed only by server-scoped domain lists, with no new attack surface or sensitive data exposure.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 8 findings above threshold*",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-13T17:01:33.016Z"
+    },
+    {
+      "id": 3683769691,
+      "body": "**Critical** — Trial candidate-domain logic likely makes the feature unreachable in its target states\n\n**What:** `domainsNeedingTrialCheck` excludes any `mySites` domain already covered by a subscription with status in `ACTIVE_STATUSES` (`active`, `trialing`, `past_due`, `grace_period`). But `mySites` itself comes from `/my-sites`, whose backend implementation only returns sites whose subscription status is already in that same active set. Tracing `admin_trial_service.py`'s lifecycle: while a trial is `active`/`expired_pending`/`expired_locked`, the site's `Subscription.status` is `\"trialing\"` — so this function excludes it as \"already paid.\" Once a trial becomes `not_converted`, the subscription flips to `\"cancelled\"`/`\"inactive\"` — outside `/my-sites`' active filter — so the domain disappears from `mySites` entirely before this function even sees it.\n\n**Why it matters:** For every one of the four `TRIAL_VISIBLE_STATUSES` this feature targets, the candidate list appears structurally unable to include that domain — the new trial plan-card may never render in production for the scenario the MR describes. The 8 passing unit tests only exercise the pure helpers against hand-built fixtures and don't catch this, since the real constraint lives in `/my-sites`' filtering.\n\n**Recommendation:**\n```\nSource trial candidates from something not gated on active-subscription\nstatus — e.g. a dedicated domain list keyed off a live/recent admin_trials\nrow (joined on SiteLicenseUser), or extend /my-sites to also include sites\nwhose subscription is cancelled/inactive specifically due to\nnot_convert_trial/cancel_trial.\n\nBefore merge, manually verify against a real not_converted or\nexpired_pending trial site in a dev environment.\n```\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:01:45.956Z"
+    },
+    {
+      "id": 3683770242,
+      "body": "**Important** — Usage bars on the trial card will always show \"0 used\"\n\n**What:** `trialPlanVMs` calls `buildFeatureRows(capabilities.features || {})` with no second (`siteUsageData`) argument — a comment explains `tsc` rejected passing `capabilities` directly since `SiteCapabilities` lacks `MySite`'s required fields. But `buildFeatureRows` only populates real `used`/`remaining` values when given that second argument; without it, `usedCount` is always `0` and the limit is always the raw plan maximum.\n\n**Why it matters:** If the candidate-domain bug (see the other Critical thread) is fixed and the card starts rendering, its usage bars will silently and always show full remaining allowance, misleading a customer deciding whether to convert.\n\n**Recommendation:**\n```tsx\n// Use the existing getSiteUsageData helper (already used identically\n// elsewhere in this file for primaryUsageForSub) to source a real MySite\n// for the lookup, instead of dropping usage data entirely:\nconst siteUsage = getSiteUsageData(capabilities.site_license_id, domain);\nconst rows = buildFeatureRows(capabilities.features || {}, siteUsage);\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:01:57.113Z"
+    },
+    {
+      "id": 3683770676,
+      "body": "**Important** — Test coverage stops before the actual integration risk\n\n**What:** The 8 tests here only exercise `domainsNeedingTrialCheck` and `filterTrialCapabilities` in isolation with hand-built fixtures that don't reflect `/my-sites`' real constraints. There's no test for `trialPlanVMs`'s name/urgency derivation, no test for the fetch-and-set flow, and nothing pins the urgency thresholds against `TrialBanner`'s to prevent drift.\n\n**Why it matters:** The MR description's \"Unit tests: 8/8 passing\" overstates coverage of the actual risk area — the critical candidate-domain bug lives exactly in the untested seam between these helpers and their real data source.\n\n**Recommendation:**\n```\nAdd an integration-style test mocking getMySites/getAllSubscriptions/\ngetSiteCapabilitiesByDomain end-to-end, covering at least one state per\nTRIAL_VISIBLE_STATUSES value. Unit-test trialPlanVMs's urgency/ended\nderivation directly.\n```\n\nConfidence: 82/100 | Found by: Codebase Reviewer",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:02:06.569Z"
+    },
+    {
+      "id": 3683771194,
+      "body": "**Minor** — `PlanAccordionRow` prop-contract change is correct but understated in the description\n\n**What:** This MR refactors `PlanAccordionRow`'s prop signature from `plan: PlanVM` to `header: PlanCardHeaderVM` to share the component between paid and trial cards. The refactor itself is correct — confirmed no other callers exist and both call sites in this file were updated consistently — but it's an interface change to a shared component that isn't mentioned in the MR description.\n\n**Why it matters:** A reviewer skimming the description might assume this MR is purely additive and not realize a shared component's prop contract changed, missing the need to check both render paths (paid + trial).\n\n**Recommendation:**\n```\nNo code change needed — just mention in the description that\nPlanAccordionRow's prop shape was changed to support both card types.\n```\n\nConfidence: 70/100 | Found by: MR Analyst",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:02:15.265Z"
+    },
+    {
+      "id": 3683971234,
+      "body": "mentioned in commit 56679cf4fec97af998feb932191dc9282061ca36",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-13T17:58:14.602Z"
+    },
+    {
+      "id": 3683971257,
+      "body": "added 1 commit\n\n<ul><li>56679cf4 - fix: resolve review findings from MR !1172</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1172/diffs?diff_id=1960840509&start_sha=11d699093551d38553cd6d40fdca5723fe983c03)",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-13T17:58:15.174Z"
+    },
+    {
+      "id": 3683971541,
+      "body": "Fixed in commit 56679cf4f: `trialPlanVMs` now sources real usage data via `getSiteUsageData(capabilities.site_license_id, domain)` (the same lookup `primaryUsageForSub` uses for paid cards) and passes it into `buildFeatureRows`, replacing the always-zero one-arg call.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:58:22.067Z"
+    },
+    {
+      "id": 3683971921,
+      "body": "Partially addressed in commit 56679cf4f: extracted the urgency/ended derivation out of `trialPlanVMs` into a pure exported `deriveTrialUrgency` helper (mirroring the existing `domainsNeedingTrialCheck`/`filterTrialCapabilities` pattern) and added 8 unit tests covering every status/threshold branch, including drift protection against `TrialBanner`'s thresholds via a doc-comment cross-reference.\n\nThe broader ask — an integration-style test mocking `getMySites`/`getAllSubscriptions`/`getSiteCapabilitiesByDomain` end-to-end — was scoped out as too large/risky to safely automate here, and is the same untested seam as the critical candidate-domain finding below, which is being tracked separately as it needs a backend change.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:58:26.413Z"
+    },
+    {
+      "id": 3683972133,
+      "body": "Confirmed — traced this end-to-end (backend `/my-sites` filtering + `admin_trial_service.py`'s lifecycle) and the bug is real: the candidate list is structurally unable to include any of the 4 target trial states.\n\nA correct fix needs a backend change (either extending the active-subscription filter that `/my-sites` relies on, or sourcing candidates from `admin_trials` directly instead of `mySites`), which is out of scope for this frontend-only MR. Tracking as a follow-up rather than expanding this MR's surface — will scope and open a separate MR for the backend fix, and do a manual verification pass against a real `not_converted`/`expired_pending` trial site before that lands.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:58:30.776Z"
+    },
+    {
+      "id": 3683972258,
+      "body": "Fair point — updated the MR description to call out that `PlanAccordionRow`'s prop shape changed from `plan: PlanVM` to `header: PlanCardHeaderVM` to support both paid and trial cards.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "created_at": "2026-08-13T17:58:32.909Z"
+    },
+    {
+      "id": 3683973299,
+      "body": "changed the description",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-13T17:58:53.918Z"
+    },
+    {
+      "id": 3685704984,
+      "body": "resolved all threads",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T05:56:07.591Z"
+    },
+    {
+      "id": 3685713455,
+      "body": "approved this merge request",
+      "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T06:00:11.746Z"
+    },
+    {
+      "id": 3685713888,
+      "body": "## Follow-up Check — MR !1172\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 4 |\n| ✓ Silently Applied | 0 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 1 |\n\nAll flagged findings have been addressed. MR approved.\n\nOne thread (the top-level review summary) remains open by design — it restates the critical candidate-domain issue already tracked in a resolved inline thread, which was confirmed real and deliberately deferred to a separate backend MR rather than expanded into this frontend-only change.",
+      "author_username": "Abhishek-2004-17",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T06:00:18.758Z"
+    },
+    {
+      "id": 3685719353,
+      "body": "mentioned in commit 21a73aeedd861554b637232e9a555e1156f5f823",
+      "author_username": "Abhishek-2004-17",
+      "system": true,
+      "resolvable": false,
+      "resolved": null,
+      "created_at": "2026-08-14T06:02:13.533Z"
+    }
+  ],
+  "discussions": [
+    {
+      "id": "63abbebf99a7af406265f5a7d855e27cf5cad77d",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3683768468,
+          "body": "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n\n### Overview\n\nThis MR adds a trial plan-card to the Billing page's Subscriptions list, and the implementation itself is clean — unit tests pass, `tsc` is clean, and the new UI reuses existing patterns correctly. However, tracing the candidate-domain logic against the real backend data model surfaces a likely-critical bug: the feature's target scenario (a trial site with no paid subscription) appears to be structurally unreachable, because the domain source (`/my-sites`) is itself filtered on active-subscription status in a way that excludes every trial state this card is meant to cover. See inline threads for details.\n\n### At a Glance\n\n| | Count |\n|---|---|\n| Critical | 1 |\n| Important | 4 |\n| Minor | 3 |\n\n### Strengths\n\n- 8 new unit tests independently re-run and passing; `tsc --noEmit` clean.\n- `PlanAccordionRow`'s prop refactor (`plan` → `header`) is correct and consistent at both call sites.\n- Urgency-colour thresholds genuinely match `TrialBanner`'s existing logic, as claimed.\n- Trial-fetch failures are isolated with their own try/catch, degrading gracefully instead of breaking the page.\n\n### Key Concerns\n\n- **Critical:** `domainsNeedingTrialCheck` sources candidates from `mySites`, but `/my-sites` is itself filtered to active-subscription status — the same status trialing/expired sites either still hold or fall out of entirely, so the card may never render for its intended scenarios. See inline thread on `BillingSettingsPage.tsx`.\n- **Important:** Usage bars on the trial card will always show \"0 used\" — `buildFeatureRows` is called without the `siteUsageData` argument that supplies real consumption numbers. See inline thread.\n- **Important:** Test coverage stops at the two pure helper functions and doesn't touch the actual integration seam where the critical bug lives. See inline thread.\n- **Important (process, no diff line to anchor):** The MR description states a code review and design review occurred, but there are zero comments/reviewers on the MR and only one squashed commit — nothing here is independently verifiable. If review happens via an internal pipeline before the MR opens, worth saying so explicitly and linking the artifact.\n- **Important (process):** Pipeline status is `unknown` despite this repo having active CI — worth confirming the MR's pipeline actually ran before merge.\n- **Minor (process):** Commit message is a single subject line with no body, embedding internal gate-status metadata rather than describing the change; the \"0 warnings, 0 errors\" lint claim is technically imprecise (true for touched lines, not the whole file); the `PlanAccordionRow` prop-contract change (see inline thread) is correct but understated in the description.\n\n### Security\n\nNo security concerns found. The new fetch reuses an already-hardened, per-domain-authorized endpoint fed only by server-scoped domain lists, with no new attack surface or sensitive data exposure.\n\n---\n*Reviewed by 3 parallel agents (MR Analyst, Codebase Reviewer, Security Reviewer)*\n*Confidence threshold: 70/100 | 8 findings above threshold*",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-13T17:01:33.016Z"
+        }
+      ]
+    },
+    {
+      "id": "f825dd68db5c593374dbe637a8e101f2ae5b646c",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3683769691,
+          "body": "**Critical** — Trial candidate-domain logic likely makes the feature unreachable in its target states\n\n**What:** `domainsNeedingTrialCheck` excludes any `mySites` domain already covered by a subscription with status in `ACTIVE_STATUSES` (`active`, `trialing`, `past_due`, `grace_period`). But `mySites` itself comes from `/my-sites`, whose backend implementation only returns sites whose subscription status is already in that same active set. Tracing `admin_trial_service.py`'s lifecycle: while a trial is `active`/`expired_pending`/`expired_locked`, the site's `Subscription.status` is `\"trialing\"` — so this function excludes it as \"already paid.\" Once a trial becomes `not_converted`, the subscription flips to `\"cancelled\"`/`\"inactive\"` — outside `/my-sites`' active filter — so the domain disappears from `mySites` entirely before this function even sees it.\n\n**Why it matters:** For every one of the four `TRIAL_VISIBLE_STATUSES` this feature targets, the candidate list appears structurally unable to include that domain — the new trial plan-card may never render in production for the scenario the MR describes. The 8 passing unit tests only exercise the pure helpers against hand-built fixtures and don't catch this, since the real constraint lives in `/my-sites`' filtering.\n\n**Recommendation:**\n```\nSource trial candidates from something not gated on active-subscription\nstatus — e.g. a dedicated domain list keyed off a live/recent admin_trials\nrow (joined on SiteLicenseUser), or extend /my-sites to also include sites\nwhose subscription is cancelled/inactive specifically due to\nnot_convert_trial/cancel_trial.\n\nBefore merge, manually verify against a real not_converted or\nexpired_pending trial site in a dev environment.\n```\n\nConfidence: 88/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:01:45.956Z"
+        },
+        {
+          "id": 3683972133,
+          "body": "Confirmed — traced this end-to-end (backend `/my-sites` filtering + `admin_trial_service.py`'s lifecycle) and the bug is real: the candidate list is structurally unable to include any of the 4 target trial states.\n\nA correct fix needs a backend change (either extending the active-subscription filter that `/my-sites` relies on, or sourcing candidates from `admin_trials` directly instead of `mySites`), which is out of scope for this frontend-only MR. Tracking as a follow-up rather than expanding this MR's surface — will scope and open a separate MR for the backend fix, and do a manual verification pass against a real `not_converted`/`expired_pending` trial site before that lands.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:58:30.776Z"
+        }
+      ]
+    },
+    {
+      "id": "e5c17aa2f1f01e273881bcf4267ffbad0725ddf9",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3683770242,
+          "body": "**Important** — Usage bars on the trial card will always show \"0 used\"\n\n**What:** `trialPlanVMs` calls `buildFeatureRows(capabilities.features || {})` with no second (`siteUsageData`) argument — a comment explains `tsc` rejected passing `capabilities` directly since `SiteCapabilities` lacks `MySite`'s required fields. But `buildFeatureRows` only populates real `used`/`remaining` values when given that second argument; without it, `usedCount` is always `0` and the limit is always the raw plan maximum.\n\n**Why it matters:** If the candidate-domain bug (see the other Critical thread) is fixed and the card starts rendering, its usage bars will silently and always show full remaining allowance, misleading a customer deciding whether to convert.\n\n**Recommendation:**\n```tsx\n// Use the existing getSiteUsageData helper (already used identically\n// elsewhere in this file for primaryUsageForSub) to source a real MySite\n// for the lookup, instead of dropping usage data entirely:\nconst siteUsage = getSiteUsageData(capabilities.site_license_id, domain);\nconst rows = buildFeatureRows(capabilities.features || {}, siteUsage);\n```\n\nConfidence: 70/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:01:57.113Z"
+        },
+        {
+          "id": 3683971541,
+          "body": "Fixed in commit 56679cf4f: `trialPlanVMs` now sources real usage data via `getSiteUsageData(capabilities.site_license_id, domain)` (the same lookup `primaryUsageForSub` uses for paid cards) and passes it into `buildFeatureRows`, replacing the always-zero one-arg call.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:58:22.067Z"
+        }
+      ]
+    },
+    {
+      "id": "7ad94270404d1b0c03ae4bb2490b1351eb744ece",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3683770676,
+          "body": "**Important** — Test coverage stops before the actual integration risk\n\n**What:** The 8 tests here only exercise `domainsNeedingTrialCheck` and `filterTrialCapabilities` in isolation with hand-built fixtures that don't reflect `/my-sites`' real constraints. There's no test for `trialPlanVMs`'s name/urgency derivation, no test for the fetch-and-set flow, and nothing pins the urgency thresholds against `TrialBanner`'s to prevent drift.\n\n**Why it matters:** The MR description's \"Unit tests: 8/8 passing\" overstates coverage of the actual risk area — the critical candidate-domain bug lives exactly in the untested seam between these helpers and their real data source.\n\n**Recommendation:**\n```\nAdd an integration-style test mocking getMySites/getAllSubscriptions/\ngetSiteCapabilitiesByDomain end-to-end, covering at least one state per\nTRIAL_VISIBLE_STATUSES value. Unit-test trialPlanVMs's urgency/ended\nderivation directly.\n```\n\nConfidence: 82/100 | Found by: Codebase Reviewer",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:02:06.569Z"
+        },
+        {
+          "id": 3683971921,
+          "body": "Partially addressed in commit 56679cf4f: extracted the urgency/ended derivation out of `trialPlanVMs` into a pure exported `deriveTrialUrgency` helper (mirroring the existing `domainsNeedingTrialCheck`/`filterTrialCapabilities` pattern) and added 8 unit tests covering every status/threshold branch, including drift protection against `TrialBanner`'s thresholds via a doc-comment cross-reference.\n\nThe broader ask — an integration-style test mocking `getMySites`/`getAllSubscriptions`/`getSiteCapabilitiesByDomain` end-to-end — was scoped out as too large/risky to safely automate here, and is the same untested seam as the critical candidate-domain finding below, which is being tracked separately as it needs a backend change.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:58:26.413Z"
+        }
+      ]
+    },
+    {
+      "id": "045f2a3b5d233a1f26be5fd53091492600b228ab",
+      "resolved": true,
+      "individual_note": false,
+      "notes": [
+        {
+          "id": 3683771194,
+          "body": "**Minor** — `PlanAccordionRow` prop-contract change is correct but understated in the description\n\n**What:** This MR refactors `PlanAccordionRow`'s prop signature from `plan: PlanVM` to `header: PlanCardHeaderVM` to share the component between paid and trial cards. The refactor itself is correct — confirmed no other callers exist and both call sites in this file were updated consistently — but it's an interface change to a shared component that isn't mentioned in the MR description.\n\n**Why it matters:** A reviewer skimming the description might assume this MR is purely additive and not realize a shared component's prop contract changed, missing the need to check both render paths (paid + trial).\n\n**Recommendation:**\n```\nNo code change needed — just mention in the description that\nPlanAccordionRow's prop shape was changed to support both card types.\n```\n\nConfidence: 70/100 | Found by: MR Analyst",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:02:15.265Z"
+        },
+        {
+          "id": 3683972258,
+          "body": "Fair point — updated the MR description to call out that `PlanAccordionRow`'s prop shape changed from `plan: PlanVM` to `header: PlanCardHeaderVM` to support both paid and trial cards.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": true,
+          "resolved": true,
+          "created_at": "2026-08-13T17:58:32.909Z"
+        }
+      ]
+    },
+    {
+      "id": "b3ed3ded5e08145529b386e3abf84d09f0937670",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3683971234,
+          "body": "mentioned in commit 56679cf4fec97af998feb932191dc9282061ca36",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-13T17:58:14.602Z"
+        }
+      ]
+    },
+    {
+      "id": "ea2e6ee6e8b749922ef5cfac123908ef63d92434",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3683971257,
+          "body": "added 1 commit\n\n<ul><li>56679cf4 - fix: resolve review findings from MR !1172</li></ul>\n\n[Compare with previous version](/regenai-gitlab/regenai-digital/cleo/-/merge_requests/1172/diffs?diff_id=1960840509&start_sha=11d699093551d38553cd6d40fdca5723fe983c03)",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-13T17:58:15.174Z"
+        }
+      ]
+    },
+    {
+      "id": "d6c175cf32bbad3c5dfc0cc6865cce68589ad57b",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3683973299,
+          "body": "changed the description",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-13T17:58:53.918Z"
+        }
+      ]
+    },
+    {
+      "id": "7d2fae8e671286ddd9fae555b06c89fa0bfc5860",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685704984,
+          "body": "resolved all threads",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T05:56:07.591Z"
+        }
+      ]
+    },
+    {
+      "id": "b744be3e6cf8d068a3984fb2f75d78cf7c2e0796",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685713455,
+          "body": "approved this merge request",
+          "author_username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T06:00:11.746Z"
+        }
+      ]
+    },
+    {
+      "id": "adea088813dd632e0fe0dca35dfc27143a03be35",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685713888,
+          "body": "## Follow-up Check — MR !1172\n\n| Status | Count |\n|--------|-------|\n| ✓ Applied | 4 |\n| ✓ Silently Applied | 0 |\n| ✗ Not Applied | 0 |\n| ? Needs Human | 1 |\n\nAll flagged findings have been addressed. MR approved.\n\nOne thread (the top-level review summary) remains open by design — it restates the critical candidate-domain issue already tracked in a resolved inline thread, which was confirmed real and deliberately deferred to a separate backend MR rather than expanded into this frontend-only change.",
+          "author_username": "Abhishek-2004-17",
+          "system": false,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T06:00:18.758Z"
+        }
+      ]
+    },
+    {
+      "id": "84ac8f17f459bc128104b79b109bd9e5061d144a",
+      "resolved": null,
+      "individual_note": true,
+      "notes": [
+        {
+          "id": 3685719353,
+          "body": "mentioned in commit 21a73aeedd861554b637232e9a555e1156f5f823",
+          "author_username": "Abhishek-2004-17",
+          "system": true,
+          "resolvable": false,
+          "resolved": null,
+          "created_at": "2026-08-14T06:02:13.533Z"
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "id": "56679cf4fec97af998feb932191dc9282061ca36",
+      "title": "fix: resolve review findings from MR !1172",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-13T23:27:22.000+05:30"
+    },
+    {
+      "id": "11d699093551d38553cd6d40fdca5723fe983c03",
+      "title": "feat(loop/billing-trial-card): trial plan-card on BillingSettingsPage — gates: code-review approve, design-review approve with changes (fixed)",
+      "author_name": "Abhishek-2004-17",
+      "created_at": "2026-08-12T22:43:29.000+05:30"
+    }
+  ],
+  "approvals": {
+    "approvers": [
+      {
+        "username": "service_account_project_73281071_381f4aadb6a063b480e73ea889b282dd",
+        "name": "OmniCheck Bot",
+        "approved_at": "2026-08-14T06:00:11.652Z"
+      }
+    ],
+    "approved": true,
+    "fetch_error": null
+  }
+}

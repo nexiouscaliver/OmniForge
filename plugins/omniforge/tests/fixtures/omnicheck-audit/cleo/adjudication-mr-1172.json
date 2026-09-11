@@ -1,0 +1,74 @@
+{
+ "repo": "cleo",
+ "iid": 1172,
+ "title": "Add trial plan-card to Billing and Plans page",
+ "runs": [
+  {
+   "timestamp": "2026-08-14T06:00:18.758Z",
+   "gate": "APPROVED",
+   "head_at_run": "56679cf4fec9",
+   "bot_approval": "2026-08-14T06:00:11.652Z",
+   "merged": "2026-08-14T06:02:12.312Z",
+   "fc_counts": {
+    "applied": 4,
+    "silently_applied": 0,
+    "not_applied": 0,
+    "needs_human": 1
+   },
+   "per_thread": [
+    {
+     "thread_id": "ae5b646c Critical candidate-domain unreachable",
+     "anchor": "BillingSettingsPage.tsx",
+     "omnicheck_verdict": "APPLIED(resolved-trusted)",
+     "ground_truth": "NOT fixed: at head, candidates still sourced from mySites + ACTIVE_STATUSES filter (diff lines 163-166, 274); author CONFIRMED bug real and deferred to 'separate backend MR'",
+     "judgment": "FALSE_APPLY (resolved-by-deferral)",
+     "hypothesis": "H4",
+     "evidence": "diff d3462d1f...56679cf4; reply 17:58:30 'the bug is real... out of scope... will open a separate MR'"
+    },
+    {
+     "thread_id": "0725ddf9 usage bars always 0",
+     "anchor": "trialPlanVMs",
+     "omnicheck_verdict": "APPLIED(resolved-trusted)",
+     "ground_truth": "fix present: getSiteUsageData(capabilities.site_license_id, domain) fed into buildFeatureRows (diff 311-314)",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": null,
+     "evidence": "diff lines 311-332"
+    },
+    {
+     "thread_id": "eb744ece test coverage gap",
+     "anchor": "tests",
+     "omnicheck_verdict": "APPLIED(resolved-trusted)",
+     "ground_truth": "partially addressed per reply (fixtures still hand-built) \u2014 acceptable",
+     "judgment": "PARTIAL/CORRECT",
+     "hypothesis": null,
+     "evidence": "reply text"
+    },
+    {
+     "thread_id": "(4th resolved: PlanAccordionRow prop disclosure)",
+     "anchor": "MR description",
+     "omnicheck_verdict": "APPLIED(resolved-trusted)",
+     "ground_truth": "description updated \u2014 disclosure",
+     "judgment": "RESOLVED_BY_DISCLOSURE",
+     "hypothesis": "H4",
+     "evidence": "reply 17:58:32"
+    },
+    {
+     "thread_id": "f5cad77d overview (restates Critical)",
+     "anchor": "general",
+     "omnicheck_verdict": "NEEDS_HUMAN",
+     "ground_truth": "correctly identified as open; but did NOT block approval",
+     "judgment": "CORRECT verdict / WRONG gate",
+     "hypothesis": "H5-class",
+     "evidence": "FC note: 'remains open by design... deliberately deferred' then 'MR approved'"
+    }
+   ],
+   "overall": "FALSE_APPROVE",
+   "overall_note": "A confirmed-real Critical (feature structurally unreachable in all 4 target trial states) was resolved-by-deferral, blindly counted APPLIED (H4), and the gate approved despite its own NEEDS_HUMAN flag. The promised backend MR never landed: no BillingSettingsPage/my-sites trial fix in staging through 2026-08-22 (only 5001df84d touches billing_service, unrelated). Feature shipped dead at merge.",
+   "root_causes": [
+    "H4: resolved-trust counted a confirmed-unfixed Critical as APPLIED",
+    "H5-class: APPROVED despite NEEDS_HUMAN=1 (fail-closed violated)",
+    "OTHER: deferral promise untracked \u2014 no follow-up MR ever opened"
+   ]
+  }
+ ]
+}

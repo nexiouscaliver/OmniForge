@@ -1,0 +1,131 @@
+{
+ "repo": "loop-plugin",
+ "iid": 61,
+ "title": "feat(cockpit): steer messages \u2014 immediate mid-turn delivery",
+ "runs": [
+  {
+   "timestamp": "2026-08-29T10:49:36.828Z",
+   "summary_note": 3756238494,
+   "trigger_note": 3756215631,
+   "head_at_run": "126f442d674c64a595c08ea990844c10ab118a98",
+   "base": "795a01a2d7a54352027eff9b56ed685f6ca89925",
+   "gate": "REJECTED",
+   "gate_evidence": "meta.labels=['omniforge::check-rejected']; 11 NOT_APPLIED -> REJECTED",
+   "per_thread": [
+    {
+     "thread_id": "#9f705b5",
+     "anchor": "scripts/cockpit/supervisor.py:1233",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "except BaseException at :1233/:1198 at 126f442"
+    },
+    {
+     "thread_id": "#df5c237",
+     "anchor": "ui/src/components/ContinueComposer.tsx:182",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "failureCopyFor returns ?? FAILURE_COPY.outbox_missing at :182"
+    },
+    {
+     "thread_id": "#924ad1b",
+     "anchor": "tests/test_cockpit_api_sessions.py:593",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "test_input_never_draining_child_... still named at :593"
+    },
+    {
+     "thread_id": "#98f5f33",
+     "anchor": "scripts/cockpit/session.py:692",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "stdin.write(line+'\\n') unbounded; only acquire(timeout=WRITE_LOCK_TIMEOUT_S)"
+    },
+    {
+     "thread_id": "#e5ad056",
+     "anchor": "scripts/cockpit/supervisor.py:1274",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "message.state='failed'/reason='outbox_missing' at :1283-1284 outside the with self._lock block"
+    },
+    {
+     "thread_id": "#11b7c0e",
+     "anchor": "scripts/cockpit/supervisor.py:1246",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "_release_ticket(ticket,position) in inner finally before completion section"
+    },
+    {
+     "thread_id": "#0187d05-a",
+     "anchor": "scripts/cockpit/supervisor.py:71",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "SUBMIT_DEADLINE_S comment unchanged (budget covers ticket-wait, not the write syscall)"
+    },
+    {
+     "thread_id": "#0187d05-b",
+     "anchor": "scripts/cockpit/session.py:1699",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "reader-EOF close path 'with self.stdin_lock:' plain unbounded acquire"
+    },
+    {
+     "thread_id": "#ce8400d",
+     "anchor": "scripts/cockpit/control.py:212",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "timeout branch returns ordinary (False,'stdin write timed out...') failure -> degradation path"
+    },
+    {
+     "thread_id": "#58d2eab",
+     "anchor": "claudedocs/2026-08-26-cockpit-steer-messages-spec.md:54",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "Decision 3(v) still 'ONLY transitions the entry queued -> terminal' while code accepts queued|writing"
+    },
+    {
+     "thread_id": "#ed218d4",
+     "anchor": "scripts/cockpit/supervisor.py:1307",
+     "omnicheck_verdict": "NOT_APPLIED",
+     "ground_truth": "UNADDRESSED",
+     "judgment": "CORRECT_REJECT",
+     "hypothesis": "-",
+     "evidence": "ticket.abandoned.add(position) with no cap; discard only advances past serving"
+    },
+    {
+     "thread_id": "#a6a9f6a (F1 blocking)",
+     "anchor": "scripts/cockpit/supervisor.py:1201",
+     "omnicheck_verdict": "SILENTLY_APPLIED",
+     "ground_truth": "ADDRESSED",
+     "judgment": "CORRECT_APPLY",
+     "hypothesis": "-",
+     "evidence": "at 126f442: outcome_owned = state in ('queued','writing') (:1252-1255); write_error marks failed/write_failed before propagating (:1285-1288); docstrings corrected"
+    }
+   ],
+   "overall": "CORRECT",
+   "overall_note": "All 11 NOT_APPLIED verified accurate at run head (10 table rows; #0187d05 row carries the 2 unanchorable findings -> count 11 consistent). All 11 were non-blocking; blocking F1 verified fixed. Merged 34m after run (human override). Severity-blind rejection (H3 flavor) but zero wrong verdicts.",
+   "root_causes": [
+    "H3-spirit (all non-blocking findings force REJECTED; no severity awareness)"
+   ]
+  }
+ ]
+}
