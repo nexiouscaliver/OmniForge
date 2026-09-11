@@ -205,8 +205,14 @@ class SweepMainThresholdTests(unittest.TestCase):
 
     def _p3_run_main(self, argv, env=None):
         out = io.StringIO()
+        env = dict(env or {})
         with contextlib.redirect_stdout(out):
-            with mock.patch.dict(os.environ, env or {}, clear=False):
+            with mock.patch.dict(os.environ, env, clear=False):
+                # env isolation (review round): this feature's own env var
+                # must never leak from the real environment into a test
+                # that did not set it
+                if "OMNIFORGE_DELTA_THRESHOLD" not in env:
+                    os.environ.pop("OMNIFORGE_DELTA_THRESHOLD", None)
                 rc = omni_sweep.main(argv)
         # the sweep result prints multi-line (indent=1): whole-stdout parse
         return rc, json.loads(out.getvalue())
@@ -300,6 +306,64 @@ class SweepMainThresholdTests(unittest.TestCase):
                         base_argv + ["--threshold-config", "{bad"])
             self.assertEqual(rc, 2)
 
+    def test_p3_main_blank_env_var_means_unset(self):
+        # review round: an exported-but-blank env var (a common CI pattern)
+        # must mean UNSET (defaults), never a fatal exit-2 on every sweep
+        with tempfile.TemporaryDirectory() as td:
+            path, git = self._p3_repo(td)
+            with open(os.path.join(path, "base.txt"), "w") as fh:
+                fh.write("base\n")
+            git("add", "-A")
+            git("commit", "-q", "-m", "base")
+            reviewed = subprocess.run(
+                ["git", "-C", path, "rev-parse", "HEAD"],
+                capture_output=True, text=True).stdout.strip()
+            os.makedirs(os.path.join(path, "src"))
+            with open(os.path.join(path, "src", "thing.py"), "w") as fh:
+                fh.write("x = 1\n")
+            git("add", "-A")
+            git("commit", "-q", "-m", "new code")
+            head = subprocess.run(
+                ["git", "-C", path, "rev-parse", "HEAD"],
+                capture_output=True, text=True).stdout.strip()
+            findings = os.path.join(td, "findings.json")
+            with open(findings, "w") as fh:
+                json.dump([], fh)
+            rc, result = self._p3_run_main(
+                ["--repo-root", path, "--reviewed-head", reviewed,
+                 "--head", head, "--findings", findings, "--model", "none"],
+                env={"OMNIFORGE_DELTA_THRESHOLD": ""})
+            self.assertEqual(rc, 0)
+            self.assertTrue(result["residual_decision"]["threshold_met"])
+            self.assertIsNone(result["residual_decision"]["config"])
+
+    def test_p3_main_skip_paths_carry_config_key(self):
+        # review round: the opt-out / already-swept skip results must carry
+        # the same residual_decision shape as the normal path (incl. the
+        # config echo) — the seam consumer gets ONE schema, not two
+        with tempfile.TemporaryDirectory() as td:
+            path, git = self._p3_repo(td)
+            with open(os.path.join(path, "base.txt"), "w") as fh:
+                fh.write("base\n")
+            git("add", "-A")
+            git("commit", "-q", "-m", "base")
+            sha = subprocess.run(
+                ["git", "-C", path, "rev-parse", "HEAD"],
+                capture_output=True, text=True).stdout.strip()
+            findings = os.path.join(td, "findings.json")
+            with open(findings, "w") as fh:
+                json.dump([], fh)
+            rc, result = self._p3_run_main(
+                ["--repo-root", path, "--reviewed-head", sha, "--head", sha,
+                 "--findings", findings, "--model", "none",
+                 "--ledger", os.path.join(FIXTURES,
+                                          "p3_ledger_optout.json")])
+            self.assertEqual(rc, 0)
+            self.assertEqual(result["skip"], "SKIP_OPT_OUT")
+            self.assertEqual(set(result["residual_decision"]),
+                             {"threshold_met", "reason", "config"})
+            self.assertIsNone(result["residual_decision"]["config"])
+
 
 # ── 2. Anchoring-safe file-set overlay ────────────────────────────────────
 
@@ -347,6 +411,22 @@ class LoadDeltaSpecTests(unittest.TestCase):
             files, reason = omni_delta.load_delta_spec(path)
             self.assertIsNone(files, path)
             self.assertEqual(reason, want)
+
+    def test_p3_load_rejects_empty_spec(self):
+        # review round: a valid-but-empty spec would silently produce a
+        # degenerate 0-scope delta run (full gather, three dispatches,
+        # nothing owned) — reject it like any other unusable shape so a
+        # caller bug is loud (exit 2 in a real run)
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", d]))
+        for i, text in enumerate(('[]', '{"files": []}',
+                                  '{"residual": {"files": []}}')):
+            path = os.path.join(d, "empty%d.json" % i)
+            with open(path, "w") as fh:
+                fh.write(text)
+            files, reason = omni_delta.load_delta_spec(path)
+            self.assertIsNone(files, text)
+            self.assertEqual(reason, "unrecognized shape", text)
 
     def test_p3_load_rejects_non_string_entries(self):
         d = tempfile.mkdtemp()
