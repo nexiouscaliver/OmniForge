@@ -241,6 +241,40 @@ class TestE3ConcernCarries(E3Fixture, unittest.TestCase):
                       RecordingProvider.prompt)
 
 
+class TestE3SelfIngestion(unittest.TestCase):
+    """The sweep's own posted output must never come back as a finding
+    (found live on dogfood MR !29: the living report and the breadcrumb
+    notes returned as fetched threads and were classified as findings on
+    the NEXT sweep). is_artifact owns the artifact vocabulary."""
+
+    def test_e3_living_report_body_is_artifact(self):
+        body = ("**Push sweep report** — `42892070..a5e0ad44`\n\n"
+                "| finding | severity | kind | verdict | evidence | note |")
+        self.assertTrue(omni_verdict.is_artifact(body))
+
+    def test_e3_breadcrumb_body_is_artifact(self):
+        body = ("**Push check complete — head `a5e0ad44`** (sweep #2)\n\n"
+                "- Fixed since review: 0 findings")
+        self.assertTrue(omni_verdict.is_artifact(body))
+
+    def test_e3_transition_reply_body_is_artifact(self):
+        body = "Push sweep at `1b5c9fba`: verdict not_fixed (was needs_judgment)."
+        self.assertTrue(omni_verdict.is_artifact(body))
+
+    def test_e3_model_degraded_banner_is_artifact(self):
+        body = ("**⚠ Model leg unavailable this sweep — open findings "
+                "deferred to judgment, nothing auto-closed.**\n\n"
+                "**Push sweep report**")
+        self.assertTrue(omni_verdict.is_artifact(body))
+
+    def test_e3_human_finding_is_not_swallowed(self):
+        # the guard must not over-block: a finding that QUOTES the report
+        # header mid-body (not at the start) stays a finding
+        body = ("The sweep said \"**Push sweep report**\" but my concern "
+                "**Important** here is real")
+        self.assertFalse(omni_verdict.is_artifact(body))
+
+
 class TestE3ResidualDecision(E3Fixture, unittest.TestCase):
 
     def test_e3_code_residual_trips_threshold(self):
