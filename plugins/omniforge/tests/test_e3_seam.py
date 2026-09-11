@@ -31,6 +31,7 @@ def _load(name, filename):
 
 
 omni_sweep = _load("omni_sweep_e3", "omni_sweep")
+omni_verdict = _load("omni_verdict_e3", "omni_verdict")
 
 
 def e3_repo(root, name="e3_repo"):
@@ -200,6 +201,44 @@ class TestE3LedgerConsumption(E3Fixture, unittest.TestCase):
         self.assertIsNone(result["skip"])
         self.assertNotIn("ledger_error", result)
         self.assertTrue(result["report"])
+
+
+class TestE3ConcernCarries(E3Fixture, unittest.TestCase):
+    """The seam's concern-carrying contract (found live on the dogfood MR:
+    the model answered 'the concern text is empty'): a {threads: [...]}
+    payload classified through omni_verdict must carry the thread BODY into
+    the finding record — it is the evidence packet's concern text."""
+
+    def test_e3_classified_thread_carries_body(self):
+        threads = [{"id": "t1", "resolved": False,
+                    "file_path": "src/app.py", "line_number": 2,
+                    "body": "**Important**: `run()` returns unguarded",
+                    "replies": []}]
+        findings, _ = omni_verdict.classify_run(threads)
+        self.assertEqual(findings[0].get("body"),
+                         "**Important**: `run()` returns unguarded")
+
+    def test_e3_sweep_packet_has_concern_text(self):
+        class RecordingProvider:
+            prompt = None
+
+            def call(self, prompt):
+                type(self).prompt = prompt
+                return json.dumps([{
+                    "finding_id": "t1", "verdict": "not_fixed",
+                    "evidence_hunk_id": None, "confidence": 60,
+                    "one_line": "no"}])
+
+        omni_sweep.run_sweep(
+            repo_root=self.path, reviewed_head=self.reviewed, head=self.head,
+            findings=[{"id": "t1", "disposition": "not_fixed",
+                       "severity": "important", "kind": "code",
+                       "file_path": "src/app.py", "line_number": 2,
+                       "body": "`run()` must guard its return",
+                       "reason": ""}],
+            provider=RecordingProvider(), sweep_number=1)
+        self.assertIn("`run()` must guard its return",
+                      RecordingProvider.prompt)
 
 
 class TestE3ResidualDecision(E3Fixture, unittest.TestCase):
