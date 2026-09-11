@@ -1,0 +1,9 @@
+{
+  "residual": {
+    "files": ["src/app.py", "src/auth_check.py"],
+    "additions": 5,
+    "deletions": 0,
+    "shapes": ["code", "new file"]
+  },
+  "residual_decision": {"threshold_met": true, "reason": "non-test residual content present"}
+}
