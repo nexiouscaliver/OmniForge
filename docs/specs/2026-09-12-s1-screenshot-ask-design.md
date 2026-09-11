@@ -19,10 +19,16 @@ vocabulary, §ask-author, §posting mechanics).
 | Note helper | same file | `_post_mr_note` — returns the `discussion_id` |
 | Uploads helper | same file | `_upload_project_file` — multipart POST /projects/:id/uploads |
 | MCP tools | same file | `update_mr_labels`, `post_mr_note`, `upload_project_file` registered |
-| Tests | `tests/test_s1_screenshot_flow.py`, `tests/test_s1_mcp_helpers.py` | 65 + 21 tests, all mocked transport |
+| Tests | `tests/test_s1_screenshot_flow.py`, `tests/test_s1_mcp_helpers.py` | 69 + 31 tests, all mocked transport |
 
-Everything is INERT until the engine drives it (wave 5). No skill text was
-changed; no call sites exist besides the MCP tool registration.
+No automatic callers exist until the engine drives the flow (wave 5) and no
+skill text references the tools — but the MCP tools themselves are
+registered and functional: any agent session with the plugin installed can
+invoke them. That is the registration the brief sanctioned. Note
+`upload_project_file` is a NEW capability class (arbitrary readable local
+file up to 100 MiB → project uploads, visible to anyone with project read
+access); it requires an absolute path, and its first live use is wave 5.
+Operator sign-off on that surface is requested in the PR.
 
 ## Detection (extensions-dominant)
 
@@ -68,15 +74,16 @@ ever gated on it.
 
 | Event | Function | Rules |
 |---|---|---|
-| review round | `decide_review_ask(state, round, detection, mr_state, mr_draft)` | terminal MR → stop; draft → wait for Ready flip; strong → ONE ask per round (adds both labels); weak → mention only; posted → no re-ask |
-| ask posted | `record_ask(state, round, discussion_id)` | persists the thread id replies match against |
+| review round | `decide_review_ask(state, round, detection, mr_state, mr_draft)` | terminal MR → stop; draft → wait for Ready flip; strong → ONE ask per round, capped (adds both labels); weak → mention only; posted → no re-ask. First ask posts a NEW thread (`post_as: "new_thread"`); a later-round ask while unanswered posts a REPLY on the recorded thread (`post_as: "reply_on_recorded_thread"`) |
+| ask posted | `record_ask(state, round, discussion_id)` | persists the thread id replies match against — the FIRST recorded id wins; record_ask never replaces it, so a late image reply on the original thread always matches |
 | comment webhook | `detect_image_reply(recorded_id, event_id, body)` | reply must be on the RECORDED discussion id AND the body must match `![…](/uploads/…)` (the note `attachment` boolean is legacy-unreliable — never use it) |
 | image detected | `on_image_reply(state)` | state → posted, clear `screenshot-requested`, one 👍 reaction |
 | push | `decide_push_reask(state, round, detection, mr_state, mr_draft)` | only a STRONG frontend push AFTER an image landed re-arms: back to requested, re-add the label, ONE re-ask per round on the EXISTING thread; non-frontend/weak pushes never churn anything |
 
 Every function returns a decision plan
-`{"action", "reason", "labels_add", "labels_remove", "react", "state"}`
-and never mutates its input. The engine persists `plan["state"]` only
+`{"action", "reason", "labels_add", "labels_remove", "react", "state",
+"post_as"}` and never mutates its input. `labels_add`/`labels_remove` are
+LISTS; `_update_mr_labels` accepts them verbatim (or comma-strings). The engine persists `plan["state"]` only
 AFTER the accompanying post/label call succeeds. Unknown
 `screenshot_state` values raise — ledger drift must fail loud.
 
@@ -121,8 +128,10 @@ The engine drives; the plugin decides. On each event, call the pure
 function, then execute the emitted actions via the MCP helpers:
 
 1. review round on an MR → classify changed files → `decide_review_ask`
-   → if `ask`: `post_mr_note` the ask → `update_mr_labels(add=…)` →
-   `record_ask` and persist the plan state to the ledger.
+   → if `ask`: post per `post_as` (first ask: `post_mr_note` → record the
+   returned discussion id; later-round asks: `reply_to_discussion` on the
+   recorded thread) → `update_mr_labels(add=…)` → `record_ask` and persist
+   the plan state to the ledger. `round` must be a positive int (fail loud).
 2. comment webhook → `detect_image_reply(ledger.discussion_id, …)` → if
    true: `on_image_reply` → `update_mr_labels(remove=…)` + one reaction →
    persist.
@@ -132,3 +141,28 @@ function, then execute the emitted actions via the MCP helpers:
 
 Rate-limit note (gitlab.com): notes 60/min — the flow posts at most one
 ask + one re-ask per review round by construction.
+
+## No-network dry-run substitute
+
+`TestSSequence::test_s1_full_ask_reply_clear_sequence`
+(tests/test_s1_mcp_helpers.py) is the mocked end-to-end walk the S1 brief's
+"dry run on a real frontend MR" acceptance becomes under tonight's
+no-network constraint: classify → decide → post (mocked) → record →
+author image reply detection → label clear → push re-arm + cap, asserting
+the exact values crossing the pure-logic ↔ MCP seam. The LIVE dry run on a
+real MR remains a wave-5 item (with the glab Content-Type verification
+above).
+
+## Interpretation choices flagged for the operator
+
+- "One ask per review round" is implemented as a CAP (never more than one
+  ask event per round), not as an automatic re-ask each round: while an
+  ask is unanswered the flow does not nag on review rounds alone — but a
+  NEW round DOES allow one more ask (as a reply on the same thread) if the
+  operator wants cadence; the push-driven re-arm is the primary re-ask.
+- The weak vocabulary includes css-family extensions and package.json
+  (rev-3 doc names them alongside path hints); weak is mention-only, so
+  nothing labels/asks on it tonight or in wave 5's current contract.
+- `upload_project_file` accepts any absolute readable path (not just the
+  repo subtree): wave-5 render outputs may live outside the repo (CI
+  artifacts, /tmp renders). See the capability note above.

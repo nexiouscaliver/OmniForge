@@ -10,9 +10,11 @@ Detection (extensions-dominant)
 -------------------------------
 The strong signal is FILE EXTENSIONS: .tsx .jsx .vue .svelte on new/modified
 files. Paths (components/ pages/ src/ui stories/) are a WEAK tiebreaker only -
-they produce a "mention", never the label or the ask. `app/` is NEVER a
-signal: the fleet's FastAPI backends live under app/ and pattern-matching it
-false-positives on every backend MR (this negative is pinned by test).
+they produce a "mention", never the label or the ask. A top-level app/
+directory confers nothing (path hints are suppressed under it): the fleet's
+FastAPI backends live under app/ and pattern-matching it false-positives on
+every backend MR (this negative is pinned by test). Weak stylesheets and
+package.json remain weak (mention-only) even under app/.
 
 Label vocabulary
 ----------------
@@ -26,10 +28,13 @@ convention for the whole flow, change LABEL_CONVENTION below (one place).
 
 Ask-the-author flow
 -------------------
-One bot thread asks the author for a screenshot of the rendered change.
-Replies are detected by regexing note bodies for image markdown pointing at
-/uploads/ on the RECORDED discussion id (the note `attachment` boolean is
-legacy-unreliable and must not be used). State lives in the engine ledger
+ONE bot thread asks the author for a screenshot of the rendered change:
+the first ask opens the thread; every later ask (new review round, push
+re-arm) posts as a REPLY on it, and record_ask never replaces a recorded
+discussion id - so a late image reply on the original thread always
+matches. Replies are detected by regexing note bodies for image markdown
+pointing at /uploads/ on the RECORDED discussion id (the note `attachment`
+boolean is legacy-unreliable and must not be used). State lives in the engine ledger
 ("screenshot_state"); it records COMPLIANCE, not correctness - nothing is
 ever gated on it. Asks are capped at one per review round, re-asks (fired by
 a frontend-touching push after an image landed) at one per round; draft MRs
@@ -161,7 +166,8 @@ TERMINAL_MR_STATES = ("merged", "closed", "locked")
 IMAGE_UPLOAD_RE = re.compile(r"!\[[^\]]*\]\([^)]*/uploads/[^)]+\)")
 
 
-def _plan(action, reason, state, labels_add=(), labels_remove=(), react=False):
+def _plan(action, reason, state, labels_add=(), labels_remove=(),
+          react=False, post_as=None):
     return {
         "action": action,
         "reason": reason,
@@ -169,6 +175,7 @@ def _plan(action, reason, state, labels_add=(), labels_remove=(), react=False):
         "labels_remove": list(labels_remove),
         "react": react,
         "state": dict(state),
+        "post_as": post_as,
     }
 
 
@@ -197,6 +204,15 @@ def validate_state(state):
     return state
 
 
+def _require_round(round):
+    """Rounds are 1-based ints from the engine ledger; anything else is
+    ledger drift and must fail loud (never compare across types)."""
+    if not isinstance(round, int) or isinstance(round, bool) or round < 1:
+        raise ValueError(
+            "round must be a positive integer; got: %r" % (round,))
+    return round
+
+
 def _asked_this_round(state, round):
     return state.get("asked_round") is not None and state["asked_round"] >= round
 
@@ -216,6 +232,7 @@ def decide_review_ask(state, round, detection, mr_state="opened",
     posted until a frontend push re-arms it (decide_push_reask).
     """
     validate_state(state)
+    _require_round(round)
     if mr_state.lower() in TERMINAL_MR_STATES:
         return _plan("none", "mr_terminal", state)
     if mr_draft:
@@ -229,17 +246,27 @@ def decide_review_ask(state, round, detection, mr_state="opened",
         return _plan("none", "already_posted", state)
     if _asked_this_round(state, round):
         return _plan("none", "already_asked_this_round", state)
+    # One bot thread: the first ask opens it; later-round asks ride it.
+    if state["screenshot_state"] == STATE_REQUESTED and state["discussion_id"]:
+        return _plan("ask", "round_reask_existing_thread", state,
+                     labels_add=(UI_LABEL, SCREENSHOT_REQUESTED_LABEL),
+                     post_as="reply_on_recorded_thread")
     return _plan("ask", "frontend_round_ask", state,
-                 labels_add=(UI_LABEL, SCREENSHOT_REQUESTED_LABEL))
+                 labels_add=(UI_LABEL, SCREENSHOT_REQUESTED_LABEL),
+                 post_as="new_thread")
 
 
 def record_ask(state, round, discussion_id):
     """Persist a successful ask: the posted thread's discussion id is the
-    durable identity replies are matched against."""
+    durable identity replies are matched against. The FIRST recorded id
+    wins: later asks are replies on the same thread, so a different id
+    passed here never orphans the original thread."""
     validate_state(state)
+    _require_round(round)
     recorded = dict(state)
     recorded["screenshot_state"] = STATE_REQUESTED
-    recorded["discussion_id"] = discussion_id
+    if not recorded["discussion_id"]:
+        recorded["discussion_id"] = discussion_id
     recorded["asked_round"] = round
     return recorded
 
@@ -278,6 +305,7 @@ def decide_push_reask(state, round, detection, mr_state="opened",
     landed re-arms the request - one re-ask per round, on the EXISTING
     thread. Non-frontend pushes never churn labels or state."""
     validate_state(state)
+    _require_round(round)
     if mr_state.lower() in TERMINAL_MR_STATES:
         return _plan("none", "mr_terminal", state)
     if mr_draft:

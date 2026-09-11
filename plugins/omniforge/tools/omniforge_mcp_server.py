@@ -3,9 +3,11 @@
 
 import asyncio
 import json
+import mimetypes
 import os
 import re
 import shutil
+import tempfile
 
 # ── Constants ──────────────────────────────────────────────
 
@@ -987,8 +989,13 @@ def build_multipart_upload_body(file_path: str) -> bytes:
     directly. The body is built here and sent raw via `glab api --input`
     with an explicit Content-Type header carrying the same boundary.
     """
-    import mimetypes
     filename = os.path.basename(file_path)
+    if not filename or re.search(r'[\x00-\x1f\x7f"]', filename):
+        # the name lands inside a MIME header; quotes/newlines would break
+        # part framing (header injection into the request body)
+        raise ValueError(
+            "file name contains quotes or control characters; refusing to "
+            "build the multipart body")
     with open(file_path, "rb") as fh:
         content = fh.read()
     if MULTIPART_BOUNDARY.encode() in content:
@@ -1012,11 +1019,29 @@ async def _update_mr_labels(mr_id: str, add_labels: str = "",
     Uses the merge request API's add_labels/remove_labels params directly
     (auto-create semantics, no label pre-creation, no GET-merge-PUT race).
     """
+    def _normalize_labels(labels, arg_name):
+        """Accept a comma-separated string OR the list a decision plan
+        emits; anything else is a validation error, never a TypeError."""
+        if labels is None:
+            return ""
+        if isinstance(labels, str):
+            return validate_labels(labels)
+        if isinstance(labels, (list, tuple)):
+            for item in labels:
+                if not isinstance(item, str):
+                    raise ValueError(
+                        f"{arg_name} list items must be strings; got: "
+                        f"{item!r}")
+            return validate_labels(",".join(labels))
+        raise ValueError(
+            f"{arg_name} must be a comma-separated string or a list of "
+            f"strings; got: {type(labels).__name__}")
+
     try:
         mr_id = validate_mr_id(mr_id)
         repo_root = validate_repo_root(repo_root)
-        add_labels = validate_labels(add_labels)
-        remove_labels = validate_labels(remove_labels)
+        add_labels = _normalize_labels(add_labels, "add_labels")
+        remove_labels = _normalize_labels(remove_labels, "remove_labels")
     except ValueError as e:
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
@@ -1137,13 +1162,18 @@ async def _upload_project_file(file_path: str, repo_root: str) -> dict:
     sent raw via `glab api --input` with the matching Content-Type header.
     The body file is temporary and always removed.
     """
-    import tempfile
     try:
         repo_root = validate_repo_root(repo_root)
     except ValueError as e:
         return {"success": False, "error": str(e), "error_type": "validation_error"}
 
-    if not file_path or not os.path.isfile(file_path):
+    if not file_path or not os.path.isabs(file_path):
+        return {
+            "success": False,
+            "error": f"file_path must be absolute: {file_path}",
+            "error_type": "validation_error",
+        }
+    if not os.path.isfile(file_path):
         return {
             "success": False,
             "error": f"File not found: {file_path}",
@@ -1167,8 +1197,8 @@ async def _upload_project_file(file_path: str, repo_root: str) -> dict:
     try:
         with tempfile.NamedTemporaryFile(
                 prefix="omni-upload-", suffix=".multipart", delete=False) as tmp:
+            tmp_name = tmp.name  # captured first: a failed write must not leak
             tmp.write(body)
-            tmp_name = tmp.name
         r = await run_exec(
             [
                 "glab", "api", "projects/:fullpath/uploads",

@@ -120,9 +120,9 @@ The MCP server provides platform-specific tools for both GitLab and GitHub. Work
 | `cleanup_omnifix_worktrees` | Fix (shared) |
 | `create_gitlab_mr` | Create |
 | `approve_mr` | Check |
-| `update_mr_labels` | S1 screenshot flow (inert until engine drives it) |
-| `post_mr_note` | S1 screenshot flow (returns the discussion id) |
-| `upload_project_file` | S1 screenshot flow (multipart via glab api --input) |
+| `update_mr_labels` | S1 screenshot flow (no skill references until wave 5) |
+| `post_mr_note` | S1 screenshot flow (returns the discussion id; no skill references until wave 5) |
+| `upload_project_file` | S1 screenshot flow (multipart via glab api --input; no skill references until wave 5) |
 
 **GitHub Tools (gh CLI):**
 
