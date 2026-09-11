@@ -1,0 +1,13 @@
+{
+  "skip": null,
+  "residual": {
+    "files": ["src/runners.py", "src/new_thing.py", "src/more.py", "tests/t.py", "docs/n.md"],
+    "additions": 180,
+    "deletions": 4,
+    "shapes": ["code", "tests-only", "docs", "new file"]
+  },
+  "residual_decision": {
+    "threshold_met": true,
+    "reason": "5 residual files > 3"
+  }
+}

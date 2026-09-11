@@ -429,6 +429,55 @@ class SkillContractTests(unittest.TestCase):
         phase5 = t[t.index("## Phase 5"):t.index("## Phase 6")]
         self.assertIn("BEFORE any permitted cleanup", phase5)
 
+    # ── P3 pins (delta review — tier-1 push re-check) ───────────────
+
+    def test_phase1_documents_delta_review_run(self):
+        # WP-P3: the delta-review invocation rides the normal Phase 1 with
+        # --delta-files/--delta-base; a dedicated subsection must exist
+        # inside Phase 1 and carry the load-bearing anchoring rule
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        self.assertIn("### Delta review runs", span)
+        self.assertIn("--delta-files", span)
+        self.assertIn("--delta-base", span)
+
+    def test_phase1_delta_section_pins_anchoring_rules(self):
+        # rev-2 tier-1 constraints: the full-MR gather stays the anchor
+        # truth; a --since-sha gather is FORBIDDEN (delta-relative line
+        # numbers mis-anchor threads); priors are authoritative, never
+        # re-adjudicated; new findings land as anchored threads in a round
+        # addendum
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        delta = span[span.index("### Delta review runs"):]
+        self.assertIn("--since-sha", delta)
+        self.assertIn("never", delta.lower())
+        self.assertIn("anchor", delta.lower())
+        self.assertIn("Priors are authoritative", delta)
+        self.assertIn("never re-adjudicated", delta)
+        self.assertIn("round addendum", delta)
+        self.assertIn("--prior-report", delta)
+
+    def test_phase1_delta_flags_in_optional_sentence_exist_in_parser(self):
+        # the drift pin (test_skill_prepare_command_flags_match_script)
+        # already enforces bracketed-flag parity; this pin guarantees the
+        # delta flags are actually documented in the optional-flags
+        # sentence, not only in the subsection
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        primary = t[phase1:phase2][
+            :t[phase1:phase2].index("### Fallback")]
+        bracketed = re.findall(r"\[[^\[\]\n]*--[a-z][a-z-]*[^\[\]\n]*\]",
+                               primary)
+        joined = "\n".join(bracketed)
+        self.assertIn("--delta-files", joined)
+        self.assertIn("--delta-base", joined)
+
 
 if __name__ == "__main__":
     unittest.main()
