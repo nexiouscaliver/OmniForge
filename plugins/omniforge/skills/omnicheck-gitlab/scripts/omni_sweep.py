@@ -12,7 +12,10 @@ a `claude -p` spawn; DirectProviderAPI is an interface stub and touches no
 secrets. Wiring to the engine trigger/queue is E2/E3 (the seam), not here.
 
 Zero network writes: nothing in this module posts anything, ever. Posting is
-the seam session's job.
+the seam session's job. The E3 seam contract adds --ledger (the engine's
+mr-state path): READ-ONLY consumption for skip guards (opt-out,
+head==sweep_head), the sweep number, transitions vs memoized last_verdicts,
+and the living-report publish hint — the engine writes the ledger back.
 """
 
 import json
@@ -410,6 +413,87 @@ def sweep_skip_decision(diff, findings, tree_hash_equal):
     return None
 
 
+# ── Engine ledger consumption (E3 seam — READ-ONLY) ────────────────────────
+#
+# The engine's seam dispatcher passes --ledger <mr-state path>. The engine
+# OWNS that file (mr_state.py's single-writer rule): this script only reads
+# it — skip guards, the sweep number, memoized verdicts for transitions, and
+# the living-report note id for the publish hint. Every unreadable shape
+# degrades (no skip, defaults) with ledger_error=True in the result so the
+# dispatcher can say so; nothing here ever raises or writes.
+
+def read_ledger(path):
+    """The engine ledger as a dict, or None (missing/corrupt/non-dict)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def ledger_sweep_number(state):
+    """counters.sweeps + 1 (today's), or None when the counters are
+    unreadable — the breadcrumb's 'sweep #N' is per-UTC-day by
+    construction (the counters reset on date rollover)."""
+    counters = state.get("counters")
+    if not isinstance(counters, dict):
+        return None
+    try:
+        return int(counters.get("sweeps", 0)) + 1
+    except (TypeError, ValueError):
+        return None
+
+
+def ledger_last_verdicts(state):
+    """The memoized {thread_id: verdict} of the previous sweep."""
+    out = {}
+    for entry in state.get("last_verdicts") or []:
+        if isinstance(entry, dict) and "thread_id" in entry \
+                and "verdict" in entry:
+            out[entry["thread_id"]] = entry["verdict"]
+    return out
+
+
+def compute_transitions(verdicts, last_verdicts):
+    """Verdict CHANGES vs the previous sweep — the only threads a reply is
+    ever owed (rev-3 step 8: ≤1 per thread per sweep, identical repeats
+    suppressed). A finding absent from the current sweep has no new state
+    and gets no row."""
+    memo = dict(last_verdicts or {})
+    out = []
+    for v in verdicts or []:
+        fid = v.get("finding_id")
+        current = v.get("verdict")
+        if fid in memo and memo[fid] != current:
+            out.append({"thread_id": fid, "from": memo[fid], "to": current})
+    return out
+
+
+def residual_threshold(residual):
+    """The E3-default tier-1 triage flag (rev-3 step 7 defaults): >3 files,
+    >50 added lines, any non-test/docs content, or a manifest/CI/migration
+    shape trips it. Computed from the aggregate inventory (the shapes set
+    is a union — 'code' in it means unreviewed code content exists, a
+    conservative superset of 'any new non-test file'); per-project
+    overrides are P3's scope."""
+    residual = residual or {}
+    files = residual.get("files") or []
+    shapes = set(residual.get("shapes") or [])
+    if len(files) > 3:
+        return True, "%d residual files > 3" % len(files)
+    try:
+        if int(residual.get("additions", 0)) > 50:
+            return True, "residual additions > 50"
+    except (TypeError, ValueError):
+        pass
+    if shapes & {"code", "migration"}:
+        return True, "non-test residual content present"
+    if shapes & {"manifest", "ci"}:
+        return True, "manifest/CI residual present"
+    return False, ""
+
+
 # ── Providers (call-path policy: claude -p spawn only, direct API = stub) ─
 
 class DirectProviderAPI:
@@ -556,7 +640,18 @@ def _git(repo_root, *args):
 def run_sweep(repo_root, reviewed_head, head, findings, provider,
               sweep_number=1, dry_run=False, delta_review_queued=False):
     """Run one sweep. Returns skip reason (or None), verdicts, partition,
-    and the rendered report + breadcrumb. Never posts anything."""
+    and the rendered report + breadcrumb. Never posts anything.
+
+    Model-degradation contract (E3): a provider that fails — spawn error,
+    timeout, unparseable reply — NEVER fails the sweep; every open finding
+    comes back needs_judgment with the stated reason and the result carries
+    model_degraded=True (the report says so; the engine logs it). The
+    timings dict {code_s, model_s} is the per-leg latency evidence the
+    seam's MR body quotes."""
+    import time as _time
+    t_start = _time.time()
+    model_degraded = False
+    model_s = 0.0
     # Ancestry: rebase/force-push => stale markings, report-only
     rc, _ = _git(repo_root, "merge-base", "--is-ancestor", reviewed_head, head)
     non_ancestor = rc != 0
@@ -573,7 +668,9 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
     if skip in ("SKIP_EMPTY_DELTA", "SKIP_TREE_HASH_EQUAL"):
         return {"skip": skip, "verdicts": [], "findings": [],
                 "residual": None, "report": "", "breadcrumb": "",
-                "relevant_files": []}
+                "relevant_files": [], "model_degraded": False,
+                "timings": {"code_s": _time.time() - t_start,
+                            "model_s": 0.0}}
 
     if non_ancestor:
         anchor_map = stale_markings(findings)
@@ -605,14 +702,29 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
             packets = build_evidence_packets(diff_text, open_findings,
                                              anchor_map)
             prompt = build_batch_prompt(packets)
-            reply = provider.call(prompt)
-            verdicts += ClaudeSpawnProvider.parse_verdicts(reply)
-            verdicts = apply_citation_rule(verdicts, packets)
+            t_model = _time.time()
+            try:
+                reply = provider.call(prompt)
+                verdicts += ClaudeSpawnProvider.parse_verdicts(reply)
+                verdicts = apply_citation_rule(verdicts, packets)
+            except Exception as exc:      # spawn/timeout/parse: degrade,
+                # never fail — every open finding needs_judgment with the
+                # stated reason, model_degraded flags it to the engine
+                model_degraded = True
+                verdicts += [{"finding_id": f["id"],
+                              "verdict": "needs_judgment",
+                              "reason": "model unavailable: %s"
+                                        % str(exc)[:200]}
+                             for f in open_findings]
+            model_s = _time.time() - t_model
 
     relevant_files = sorted({h["file"] for h in partition["relevant_hunks"]})
     residual = partition["residual"]
     report = render_report(head, reviewed_head, findings, anchor_map,
                            verdicts, residual)
+    if model_degraded:
+        report = ("**⚠ Model leg unavailable this sweep — open findings "
+                  "deferred to judgment, nothing auto-closed.**\n\n" + report)
     breadcrumb = render_breadcrumb(
         head, sweep_number, verdicts, findings, residual,
         delta_review_queued, reviewed_head)
@@ -625,6 +737,9 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
         "relevant_files": relevant_files,
         "report": report,
         "breadcrumb": breadcrumb,
+        "model_degraded": model_degraded,
+        "timings": {"code_s": _time.time() - t_start - model_s,
+                    "model_s": model_s},
     }
 
 
@@ -661,13 +776,52 @@ def main(argv=None):
                          "records) or {threads: [...]} to classify")
     ap.add_argument("--model", choices=("none", "claude-spawn"),
                     default="none")
-    ap.add_argument("--sweep-number", type=int, default=1)
+    ap.add_argument("--sweep-number", type=int, default=None,
+                    help="explicit sweep number — wins over the ledger's "
+                         "counters.sweeps+1 default")
     ap.add_argument("--dry-run", action="store_true",
                     help="no model call: every open finding comes back "
                          "needs_judgment with a stated reason")
+    ap.add_argument("--ledger", default="",
+                    help="engine mr-state ledger path (READ-ONLY: skip "
+                         "guards, sweep number, transitions, publish hint)")
     ap.add_argument("--out-report", default="")
     ap.add_argument("--out-breadcrumb", default="")
     args = ap.parse_args(argv or sys.argv[1:])
+
+    # Ledger consumption (E3 seam): read-ONLY, every unreadable shape
+    # degrades with ledger_error=True — the sweep itself never dies on it.
+    state = read_ledger(args.ledger) if args.ledger else None
+    ledger_error = bool(args.ledger) and state is None
+    if state is not None and state.get("opt_out"):
+        result = {"skip": "SKIP_OPT_OUT", "verdicts": [], "residual": None,
+                  "report": "", "breadcrumb": "", "relevant_files": [],
+                  "model_degraded": False,
+                  "timings": {"code_s": 0.0, "model_s": 0.0}}
+        enrich = {"sweep_number": args.sweep_number or 1,
+                  "transitions": [], "ledger_error": False,
+                  "publish": {"action": "create", "note_id": None},
+                  "residual_decision": {"threshold_met": False,
+                                        "reason": "opted out"}}
+        result.update(enrich)
+        print(json.dumps(result, indent=1))
+        return 0
+    if state is not None and state.get("sweep_head") == args.head:
+        result = {"skip": "SKIP_ALREADY_SWEPT", "verdicts": [],
+                  "residual": None, "report": "", "breadcrumb": "",
+                  "relevant_files": [], "model_degraded": False,
+                  "timings": {"code_s": 0.0, "model_s": 0.0}}
+        result.update({"sweep_number": args.sweep_number or 1,
+                       "transitions": [], "ledger_error": False,
+                       "publish": {"action": "create", "note_id": None},
+                       "residual_decision": {"threshold_met": False,
+                                             "reason": "already swept"}})
+        print(json.dumps(result, indent=1))
+        return 0
+    sweep_number = args.sweep_number
+    if sweep_number is None:
+        sweep_number = (ledger_sweep_number(state)
+                        if state is not None else None) or 1
 
     payload = json.load(open(args.findings))
     if isinstance(payload, dict) and "threads" in payload:
@@ -679,8 +833,24 @@ def main(argv=None):
         else DirectProviderAPI()
 
     result = run_sweep(args.repo_root, args.reviewed_head, args.head,
-                       findings, provider, sweep_number=args.sweep_number,
+                       findings, provider, sweep_number=sweep_number,
                        dry_run=args.dry_run or args.model == "none")
+    note_id = state.get("report_note_id") if state is not None else None
+    result.update({
+        "sweep_number": sweep_number,
+        "transitions": compute_transitions(
+            result["verdicts"],
+            ledger_last_verdicts(state) if state is not None else {}),
+        "publish": ({"action": "edit", "note_id": int(note_id)}
+                    if isinstance(note_id, int)
+                    and not isinstance(note_id, bool)
+                    else {"action": "create", "note_id": None}),
+        "residual_decision": (lambda mr: {"threshold_met": mr[0],
+                                          "reason": mr[1]})(
+            residual_threshold(result["residual"])),
+    })
+    if ledger_error:
+        result["ledger_error"] = True
     print(json.dumps({k: v for k, v in result.items()
                       if k != "findings"}, indent=1))
     if args.out_report and result["report"]:

@@ -80,8 +80,10 @@ class E3Fixture:
                  "def run():\n    return 1\n\ndef other():\n    return 2\n")
         e3_commit(self.git, "base")
         self.reviewed = e3_sha(self.path)
-        e3_write(self.path, "src/app.py",
-                 "def run():\n    return guarded()\n\ndef other():\n    return 2\n")
+        # the fix lands CROSS-FILE (src/app.py's locus untouched — a delta
+        # on the locus line itself reanchors to obsolete, P2 semantics)
+        e3_write(self.path, "src/runners.py",
+                 "def run():\n    return guarded()\n\ndef guarded():\n    return 1\n")
         e3_write(self.path, "docs/notes.md", "# Notes\nnew\n")
         e3_commit(self.git, "fix + docs")
         self.head = e3_sha(self.path)
