@@ -5,22 +5,6 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.5.0] - 2026-09-12
-
-Verification model v2, sweep intelligence, the engine seam, and tier-1 delta review. This bump is the release unlock: the merged engine's sweep arm resolves the installed plugin at **>= 3.5.0** (E3 seam decision — numeric version ordering, trust-checked resolution path); installs below it stay exit-6.
-
-### Added
-- **Tier-1 delta review (WP-P3, this PR)** — when a push adds substantial new work, omnireview reviews exactly that delta, once per batch, anchored safely. Configurable residual threshold in `omni_sweep.py` (`--threshold-config` inline JSON or `@file`, keys `files_min`/`additions_min`/`non_test_content`/`manifest_ci`; rev-3 defaults unchanged; the flag REPLACES the `OMNIFORGE_DELTA_THRESHOLD` env fallback, never merged); anchoring-safe delta scoping via `omni_prepare.py --delta-files`/`--delta-base` (both-or-neither): the full-MR gather and the on-disk `partition.json` stay the anchor truth, the delta applies as a FILE-SET OVERLAY — agents deep-dive only `delta_files ∩ full-MR_files`, cross-cutting sweep depth unchanged, NEVER a `--since-sha` gather; `prepare.json` records the scope (`delta.base_sha` + scoped files); dispatch caps in the new `omni_delta.py` CLI (one delta review per push batch, per-MR daily cap default 1, never on non-ancestor deltas — ancestry consumed from the dispatcher); priors injected as authoritative via the existing retrospective `--prior-report` machinery; new findings post as anchored threads in a round addendum with Jaccard association to moved priors
-- **Verification model v2 (PR #36)** — `omni_verdict.py`: structured per-thread classification (artifact/disposition/severity/kind), the batched one-call sweep adjudicator with the citation rule (an uncited `fixed` verdict downgrades to `needs_judgment`), and the corpus replay harness that pinned 0 blocking-class flips on the 55-run audit corpus
-- **Sweep intelligence (PR #36)** — `omni_sweep.py`: delta partition (finding-relevant vs residual), line-map re-anchoring (deleted/renamed loci never silently closed), capped evidence packets, living report + breadcrumb renderers, ledger consumption strictly READ-ONLY
-- **Engine seam (E3, engine MR !30 + PR #37)** — the engine dispatcher resolves this plugin's sweep script through the installed-plugin path (version-gated >= 3.5.0), owns all GitLab I/O and ledger writes; plugin-side fixes from the guarded dogfood: classified threads carry the body, and the sweep's own posted artifacts are artifact-classified (never re-ingested as findings)
-
-### Changed
-- `omnireview-gitlab` SKILL.md Phase 1 documents the delta-review invocation and the never-`--since-sha` anchoring rule (contract-pinned)
-- Test suite 729 + 128 subtests at this branch's base; +61 P3 tests (threshold matrix + arg/env precedence, overlay unit + prepare integration over the http-server harness, decision guard order, contract pins)
-
----
-
 ## [3.4.0] - 2026-09-06
 
 Round-2 latency release — deterministic pre-dispatch, judgment-only adjudication, the fix-brief note, and a cost-weighted 3-agent partition. R2-E A/B validation verdict: **GO** (full evidence: `round2-validation.md` in the engine repo's speed-campaign artifacts).
