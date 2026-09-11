@@ -864,11 +864,13 @@ def main(argv=None):
 
     # P3: resolve the threshold override FIRST — a malformed config is
     # fatal (exit 2) before any sweep work, never silently defaulted.
+    # A blank env value (exported-but-empty, the common CI pattern) means
+    # UNSET, not a fatal parse — only a non-empty value is a config.
     try:
         threshold_override = threshold_config_from_spec(
             args.threshold_config,
             None if args.threshold_config is not None
-            else os.environ.get("OMNIFORGE_DELTA_THRESHOLD"))
+            else (os.environ.get("OMNIFORGE_DELTA_THRESHOLD") or None))
     except ValueError as e:
         print("omni_sweep: --threshold-config %s" % e, file=sys.stderr)
         return 2
@@ -886,7 +888,8 @@ def main(argv=None):
                   "transitions": [], "ledger_error": False,
                   "publish": {"action": "create", "note_id": None},
                   "residual_decision": {"threshold_met": False,
-                                        "reason": "opted out"}}
+                                        "reason": "opted out",
+                                        "config": threshold_override}}
         result.update(enrich)
         print(json.dumps(result, indent=1))
         return 0
@@ -899,7 +902,8 @@ def main(argv=None):
                        "transitions": [], "ledger_error": False,
                        "publish": {"action": "create", "note_id": None},
                        "residual_decision": {"threshold_met": False,
-                                             "reason": "already swept"}})
+                                             "reason": "already swept",
+                                             "config": threshold_override}})
         print(json.dumps(result, indent=1))
         return 0
     sweep_number = args.sweep_number
@@ -920,6 +924,8 @@ def main(argv=None):
                        findings, provider, sweep_number=sweep_number,
                        dry_run=args.dry_run or args.model == "none")
     note_id = state.get("report_note_id") if state is not None else None
+    threshold_met, threshold_reason = residual_threshold(
+        result["residual"], threshold_override)
     result.update({
         "sweep_number": sweep_number,
         "transitions": compute_transitions(
@@ -929,10 +935,9 @@ def main(argv=None):
                     if isinstance(note_id, int)
                     and not isinstance(note_id, bool)
                     else {"action": "create", "note_id": None}),
-        "residual_decision": (lambda mr: {"threshold_met": mr[0],
-                                          "reason": mr[1],
-                                          "config": threshold_override})(
-            residual_threshold(result["residual"], threshold_override)),
+        "residual_decision": {"threshold_met": threshold_met,
+                              "reason": threshold_reason,
+                              "config": threshold_override},
     })
     if ledger_error:
         result["ledger_error"] = True

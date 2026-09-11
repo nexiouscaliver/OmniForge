@@ -64,10 +64,11 @@ def load_delta_spec(path):
     if files is None or not all(isinstance(f, str) and f
                                 for f in files):
         return None, "unrecognized shape"
-    seen = []
-    for f in files:
-        if f not in seen:
-            seen.append(f)
+    # order-preserving de-dup; an EMPTY spec is a caller bug, never a
+    # silent 0-scope run (full gather, three dispatches, nothing owned)
+    seen = list(dict.fromkeys(files))
+    if not seen:
+        return None, "unrecognized shape"
     return seen, "ok"
 
 

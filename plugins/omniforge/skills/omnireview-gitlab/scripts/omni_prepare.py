@@ -10,7 +10,8 @@ Stdlib only; sibling scripts resolve relative to this file, never CWD.
 CLI:
   python3 omni_prepare.py --project <id-or-fullpath> --iid <n> \
       --review-id <id> --run-dir <dir> \
-      [--prior-report <path>] [--verify-head <sha>] [--dry-run]
+      [--prior-report <path>] [--verify-head <sha>] [--dry-run] \
+      [--delta-files <path> --delta-base <sha>]
 
 --iid maps to the fetcher's --mr. --dry-run validates the invocation only:
 ONE plan JSON line, no network, no mkdir, no writes, no token; a bad
@@ -28,6 +29,8 @@ Exit codes:
        "internal","detail":<short str>} + one stderr diagnostic line.
   2   argparse usage (natural); --prior-report missing/unreadable/invalid
       JSON/unrecognized shape (stderr "omni_prepare: --prior-report
+      <reason>"); a --delta-files/--delta-base half pair or a bad delta
+      spec (same discipline, stderr "omni_prepare: --delta-files
       <reason>"); unwritable run-dir or OSError writing/wiping outputs
       (no stdout JSON).
   3   token missing at start, or the fetch child exited 1 with integer
