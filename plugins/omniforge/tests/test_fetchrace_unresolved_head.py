@@ -79,18 +79,17 @@ def _main(repo, reviewed, head, findings):
 class FetchRaceWitness(unittest.TestCase):
 
     def test_fetchrace_plugin_witness_missing_head_skips_empty_delta_today(self):
-        # DEFECT RECEIPT (RED phase): rev-parse of a missing sha yields
-        # EMPTY stdout, the diff fails to empty text, so the plugin answers
-        # rc 0 skip=SKIP_EMPTY_DELTA — the exact production mechanism.
-        # Rewritten in the GREEN commit to expect exit 3.
+        # GREEN rewrite of the defect receipt: the same argv that used to
+        # answer rc 0 SKIP_EMPTY_DELTA now fails loud.
         with tempfile.TemporaryDirectory() as td:
             repo, git = _repo(td)
             _write(repo, "a.py", "x = 1\n")
             _commit(git, "base")
             reviewed = _head(repo)
             rc, out, err = _main(repo, reviewed, DEAD40, _findings(td))
-            self.assertEqual(rc, 0)
-            self.assertEqual(json.loads(out)["skip"], "SKIP_EMPTY_DELTA")
+            self.assertEqual(rc, 3)
+            self.assertIn("UNRESOLVED_HEAD", err)
+            self.assertEqual(out.strip(), "")
 
 
 class FetchRaceUnresolvedHead(unittest.TestCase):
