@@ -16,6 +16,12 @@ the seam session's job. The E3 seam contract adds --ledger (the engine's
 mr-state path): READ-ONLY consumption for skip guards (opt-out,
 head==sweep_head), the sweep number, transitions vs memoized last_verdicts,
 and the living-report publish hint — the engine writes the ledger back.
+
+Exit codes: 0 normal (result JSON, incl. skip results, on stdout); 2 config
+error (--threshold-config) or argparse usage; 3 UNRESOLVED_HEAD — a
+requested head sha does not resolve in --repo-root (one loud stderr REASON
+line, no stdout JSON). Release-notes note: omni_prepare.py in the
+omnireview skill separately uses exit 3 = auth failed — different script.
 """
 
 import json
@@ -703,6 +709,20 @@ def _git(repo_root, *args):
     return r.returncode, r.stdout
 
 
+def unresolvable_heads(repo_root, shas):
+    """The subset of `shas` that do not resolve as commits in repo_root
+    (FR-2, 2026-09-13 fetch race): a head missing from the checkout is a
+    LOUD failure (exit 3 from main), never a bogus SKIP_EMPTY_DELTA —
+    rev-parse of a missing sha yields empty stdout, which the skip logic
+    would otherwise misread as an empty delta."""
+    missing = []
+    for sha in shas:
+        rc, _ = _git(repo_root, "cat-file", "-e", sha + "^{commit}")
+        if rc != 0:
+            missing.append(sha)
+    return missing
+
+
 def run_sweep(repo_root, reviewed_head, head, findings, provider,
               sweep_number=1, dry_run=False, delta_review_queued=False):
     """Run one sweep. Returns skip reason (or None), verdicts, partition,
@@ -917,6 +937,15 @@ def main(argv=None):
     else:
         findings = payload if isinstance(payload, list) else payload.get(
             "findings", [])
+    missing = unresolvable_heads(args.repo_root,
+                                 [args.reviewed_head, args.head])
+    if missing:
+        which = ("reviewed-head" if missing[0] == args.reviewed_head
+                 else "head")
+        print("omni_sweep: REASON: UNRESOLVED_HEAD %s (%s) not present in "
+              "%s" % (which, missing[0][:8], args.repo_root),
+              file=sys.stderr)
+        return 3
     provider = ClaudeSpawnProvider() if args.model == "claude-spawn" \
         else DirectProviderAPI()
 

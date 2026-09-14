@@ -5,6 +5,19 @@ All notable changes to OmniForge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-09-13
+
+Screenshots (plugin side) and the sweep loud-failure backstop. This patch release exists because the engine's plugin floor is `MIN_PLUGIN_VERSION=(3,5,0)` — it still admits 3.5.0 — so the backstop below only goes live on the box once the installed plugin reports **> 3.5.0**.
+
+### Added
+- **Frontend screenshot, ask-the-author flow — plugin side (PR #39, WP-S1)** — frontend-change detection (`omni_ui_screenshot.py::classify_frontend_change`: extensions-dominant `.tsx/.jsx/.vue/.svelte`; css-family/`package.json`/path hints are mention-only weak signals; top-level `app/` NEVER signals — the fleet's FastAPI backends live there); dash-style labels `omniforge-ui` / `omniforge-screenshot-requested` (deliberately NOT `omniforge::`-scoped — Premium scoped labels sharing a key are mutually exclusive; convention flippable in one place via `LABEL_CONVENTION`); a pure, zero-I/O ask-author state machine (one ask per review round, draft MRs wait for the Ready flip, merged/closed/locked terminal, re-ask capped once per round, image-reply detection by `/uploads/` markdown regex keyed on the recorded discussion id — the note `attachment` boolean is legacy-unreliable; first ask opens a thread, later asks reply on it); three MCP helpers (`update_mr_labels` single-PUT add/remove semantics, `post_mr_note` returning the discussion id, `upload_project_file` multipart with a fixed deterministic boundary). All of it is INERT until the engine drives it (wave-5 activation); 102 new tests, all transport mocked, zero live writes. Known caveat carried in PR #39: whether glab preserves the multipart boundary header is unverified until first live use of `upload_project_file`.
+- **Sweep loud-failure backstop (PR #40, pairs with engine MR !34)** — plugin `omni_sweep.py` now **exits 3 with UNRESOLVED_HEAD naming the missing sha** instead of fabricating `SKIP_EMPTY_DELTA` when a delta endpoint cannot be resolved. `SKIP_EMPTY_DELTA` is legal ONLY when both shas resolve and the tree diff is genuinely empty (merge/rebase-only). Root cause this closes: the 2026-09-13 box canary silently skipped two real fix pushes because the sweep raced the repo fetch (FETCH_HEAD landed 2s after the sweep) and the unresolvable head was misread as an empty delta — the exact silent-no-op class the E3 brief banned. The engine-side fix (MR !34: synchronous ensure-fetch with bounded retry + MR-ref fallback, exit 8 `UNRESOLVED_HEAD`, `push_checks` counter bump, git-output secret scrub) is the primary defense and works against plugin 3.5.0; this backstop is the plugin's own fail-loud floor.
+
+### Changed
+- Nothing else; no skill-contract surface moved in this release (PR #39 adds tools + tests only; PR #40 touches `omni_sweep.py` internals + 6 tests).
+
+---
+
 ## [3.5.0] - 2026-09-12
 
 Verification model v2, sweep intelligence, the engine seam, and tier-1 delta review. This bump is the release unlock: the merged engine's sweep arm resolves the installed plugin at **>= 3.5.0** (E3 seam decision — numeric version ordering, trust-checked resolution path); installs below it stay exit-6.
