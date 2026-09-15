@@ -447,35 +447,44 @@ class ChunkProvider:
 @contextlib.contextmanager
 def _chunk_repo(n_open):
     """A push delta with a small a.py fix, a big.py carrying 8 oversized
-    hunks, and a deleted gone.py. Findings: f1..fN open (f1 anchored at
-    big.py — its packet alone exceeds MAX_PACKET_CHARS; the rest anchored
-    at a.py) plus one obsolete-anchored finding on the deleted file."""
+    hunks, and a deleted gone.py. Open findings f1..fN anchored at a.py,
+    except f8 (big.py — its packet alone exceeds MAX_PACKET_CHARS), plus
+    one obsolete-anchored finding on the deleted file."""
     import pathlib
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         path, git = p2_repo(pathlib.Path(td), "chunky")
         base_big = ["line %03d" % i for i in range(1, 241)]
-        p2_write(path, "a.py", "x = 1\n")
+        p2_write(path, "a.py", "keep = 0\nx = 1\n")
         p2_write(path, "big.py", "\n".join(base_big) + "\n")
         p2_write(path, "gone.py", "g = 1\n")
         p2_commit(git, "base")
         reviewed = subprocess.run(
             ["git", "-C", path, "rev-parse", "HEAD"],
             capture_output=True, text=True).stdout.strip()
-        push_big = list(base_big)
-        for start in (10, 40, 70, 100, 130, 160, 190, 220):
-            push_big[start - 1:start] = ["# fat %03d %s" % (start, "z" * 84)
-                                         for _ in range(45)]
+        push_big = []
+        for lineno, line in enumerate(base_big, start=1):
+            if lineno in (10, 40, 70, 100, 130, 160, 190, 220):
+                push_big.extend("# fat %03d %s" % (lineno, "z" * 84)
+                                for _ in range(45))
+            else:
+                push_big.append(line)
         p2_write(path, "big.py", "\n".join(push_big) + "\n")
-        p2_write(path, "a.py", "x = 2\n")
+        p2_write(path, "a.py", "keep = 0\nx = 2\n")
         os.remove(os.path.join(path, "gone.py"))
         p2_commit(git, "push")
         head = subprocess.run(
             ["git", "-C", path, "rev-parse", "HEAD"],
             capture_output=True, text=True).stdout.strip()
-        findings = [p2_finding("f1", "the oversized concern", "big.py", 5)]
-        findings += [p2_finding("f%d" % i, "small concern", "a.py", 1)
-                     for i in range(2, n_open + 1)]
+        findings = [p2_finding("f%d" % i, "small concern", "a.py", 1)
+                    for i in range(1, n_open + 1)]
+        if n_open >= 8:
+            # f8 (chunk 1's LAST finding at the 16-finding split) carries
+            # the oversized packet: everything before it in chunk 1 keeps
+            # evidence, and only a fresh chunk-2 budget can save the
+            # findings after it.
+            findings[7] = p2_finding("f8", "the oversized concern",
+                                     "big.py", 5)
         findings.append(p2_finding("gone1", "deleted locus", "gone.py", 1))
         yield path, reviewed, head, findings
 
@@ -487,7 +496,7 @@ def _reload_with_env(over):
     for k, v in over.items():
         os.environ[k] = v
     try:
-        return _load("omni_sweep_env_reload")
+        return _load("omni_sweep")
     finally:
         for k, v in saved.items():
             if v is None:
@@ -533,17 +542,19 @@ class TestChunkThresholdAndSplit(unittest.TestCase):
             self.assertEqual(len(ids1 | ids2), 31)
 
     def test_per_chunk_fresh_evidence_budget(self):
-        # f1's oversized big.py packet alone exhausts a MAX_PACKET_CHARS
-        # budget; a SHARED budget would starve every chunk-2 finding — a
-        # fresh per-chunk budget is the fix being pinned here.
+        # f8's oversized big.py packet alone exhausts a MAX_PACKET_CHARS
+        # budget (it truncates even on a fresh one); a budget SHARED across
+        # the two calls would starve every chunk-2 finding — the fresh
+        # per-chunk budget is the fix being pinned here.
         with _chunk_repo(16) as (path, reviewed, head, findings):
             provider = ChunkProvider()
             omni_sweep.run_sweep(path, reviewed, head, findings, provider)
             self.assertEqual(len(provider.calls), 2)
             chunk1 = _prompt_packets(provider.calls[0]["prompt"])
             chunk2 = _prompt_packets(provider.calls[1]["prompt"])
-            self.assertTrue(chunk1[0].get("evidence_truncated"))
-            self.assertTrue(chunk1[1].get("no_evidence"))  # starved in-chunk
+            self.assertFalse(chunk1[0].get("no_evidence"))  # f1 keeps evidence
+            self.assertEqual(chunk1[-1]["finding_id"], "f8")
+            self.assertTrue(chunk1[-1].get("evidence_truncated"))
             for packet in chunk2:
                 self.assertTrue(packet["candidate_hunks"],
                                 packet["finding_id"])
