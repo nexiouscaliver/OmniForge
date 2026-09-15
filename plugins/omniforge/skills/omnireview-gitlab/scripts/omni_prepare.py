@@ -546,10 +546,10 @@ def _cannot_write(path, e):
 
 
 def _wipe_run_dir(run_dir):
-    """R1: remove every entry inside run_dir EXCEPT phases.jsonl and det-scan.txt (by-name exemptions) (the
-    exemption is BY NAME — files, dirs, and symlinks alike), so every
-    successful run starts fresh while the append journal survives. Runs
-    after preconditions, before the fetch: a failing invocation never
+    """R1: remove every entry inside run_dir EXCEPT phases.jsonl and
+    det-scan.txt (by-name exemptions — files, dirs, and symlinks alike),
+    so every successful run starts fresh while the append journal survives.
+    Runs after preconditions, before the fetch: a failing invocation never
     destroys a prior run's artifacts."""
     for name in os.listdir(run_dir):
         # det-scan.txt: the det-scan pre-step receipt survives the

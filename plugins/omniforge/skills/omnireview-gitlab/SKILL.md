@@ -70,17 +70,28 @@ authenticated host glab (never printed):
 If the engine set `OMNIFORGE_DET_SCAN_PACKET` (and the file exists), consume the
 det-scan v1 evidence packet BEFORE the gather below — the posted evidence threads
 then ride this run's discussions envelope into the digest and the reviewer agents'
-context. Idempotency FIRST: if `/tmp/omni_run_{id}/det-scan.txt` already exists (a
-prior receipt), skip re-invocation entirely — never rely on `--since` alone.
-Otherwise (the run dir does not exist yet on a fresh session — create it first):
+context. Idempotency FIRST: skip re-invocation only when
+`/tmp/omni_run_{id}/det-scan.txt` exists AND is non-empty (`test -s`) — that is
+a prior receipt line. An EMPTY file (left by a failed run's redirect) does not
+count: the step re-runs and the `>` redirect overwrites it — never rely on
+`--since` alone. Otherwise (the run dir does not exist yet on a fresh session —
+create it first):
 
 ```bash
 mkdir -p /tmp/omni_run_{id}
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_det_scan.py" \
-  --packet "$OMNIFORGE_DET_SCAN_PACKET" --project {project} --mr {id} \
-  --since "${OMNIFORGE_DET_SCAN_EPOCH:-0}" \
-  > /tmp/omni_run_{id}/det-scan.txt
+if [ -s /tmp/omni_run_{id}/det-scan.txt ]; then
+  echo "omni_det_scan: prior receipt present, skipping re-invocation" >&2
+else
+  timeout 120 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_det_scan.py" \
+    --packet "$OMNIFORGE_DET_SCAN_PACKET" --project {project} --mr {id} \
+    --since "${OMNIFORGE_DET_SCAN_EPOCH:-0}" \
+    > /tmp/omni_run_{id}/det-scan.txt
+fi
 ```
+
+On hosts without GNU `timeout` (stock macOS), omit the wrapper — the consumer's
+own bounded attempts/backoff keep each network call finite; the 120s cap protects
+the review lane's wall budget.
 
 `OMNIFORGE_DET_SCAN_EPOCH` is the ENGINE's scan-round start (captured BEFORE the
 packet write), passed through as `--since`; the `${...:-0}` default passes

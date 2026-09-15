@@ -224,7 +224,7 @@ override) · `--attempts` · `--backoff-base`. The token comes from `GITLAB_TOKE
 |------|---------|
 | `0` | posted, or scan-skipped (benign no-op — receipt `action="skipped"`) |
 | `1` | posting failure after retries — prior artifacts stay |
-| `2` | validation: `unknown-top-level-field:<k>`, `unsupported-schema-version`, `packet-not-json`, `packet-unreadable`, `bad-field:<locus>`, `packet-mr-mismatch`, or missing token |
+| `2` | argparse usage, or validation: `unknown-top-level-field:<k>`, `unsupported-schema-version`, `packet-not-json`, `packet-unreadable`, `bad-field:<locus>`, `packet-mr-mismatch`, or missing token |
 | `3` | refusal: `stale-packet`, `det-scan-already-posted`, `head-sha-mismatch` |
 
 **Exit 1 (mid-batch posting failure):** resolve manually using the receipt counts and

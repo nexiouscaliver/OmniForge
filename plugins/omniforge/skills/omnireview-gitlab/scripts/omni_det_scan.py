@@ -10,34 +10,18 @@ an explicit `needs_judgment` disposition. Scanner = evidence, model = verdict
 — no plugin component ever auto-resolves these threads, and the flow never
 touches GitLab labels.
 
-This file implements the pure packet layer:
-
-- `load_packet` — read + JSON-parse; OSError -> UsageError
-  "packet-unreadable", ValueError (json.JSONDecodeError AND
-  UnicodeDecodeError) -> UsageError "packet-not-json".
-- `validate_packet` — strict top-level schema (unknown top-level keys are
-  rejected naming the key — fail-closed on schema evolution; unknown NESTED
-  keys are tolerated everywhere, v1 additive tolerance), TYPE-STRICT
-  schema_version int 1, nested presence/type/enum checks returning
-  "bad-field:<locus>". Empty findings is a valid clean scan.
-- `packet_mr_matches` — mr.iid (and, for a numeric --project, project_id)
-  compared as INTEGERS after coercion; any coercion failure is a clean
-  False, never a traceback (A5c).
-- `map_severity` — critical->critical, high->important, medium/low->minor.
-- `thread_body` / `summary_body` — the EXACT FR-7/FR-11 templates (single
-  source of truth; downstream classification imports thread_body). The
-  thread body NEVER contains "Confidence: " or "Found by: " (A4: those
-  strings would flip is_omniforge_note's conjunction and route det-scan
-  threads into the never-re-adjudicate priors channel), and the summary
-  body carries NO severity marker tokens (FR-6).
-
-Siblings are reused via same-directory in-process import (parsing and
-assembly are NEVER re-implemented): omni_glab_api (transport, incl. get_all),
-omni_post_review (thread_form, path builders, guards), omni_fetch_mr
-(assemble_diff + parse_diff_line_map anchor chain). The network engine layer
-(T2) adds the FR-4 head-sha guard, the FR-8 anchor chain, and the FR-3 dedup
-guard. The CLI layer (T3) adds parse_args/main/emit — the pinned guard order,
-posting, dry-run, and the one-JSON-line receipt. Zero network at import time.
+The module is three layers as they now stand. The packet layer validates and
+renders the packet — `load_packet`, `validate_packet` (strict fail-closed
+top-level schema; empty findings is a valid clean scan), `packet_mr_matches`
+(INTEGER comparison; coercion failures are a clean False), `map_severity`, and
+the exact FR-7/FR-11 `thread_body`/`summary_body` templates. The network
+engine layer posts through same-directory siblings reused by in-process import
+(parsing and assembly are NEVER re-implemented: omni_glab_api transport,
+omni_post_review thread_form/path builders/guards, omni_fetch_mr assemble_diff
++ parse_diff_line_map anchor chain), behind the FR-4 head-sha guard, the FR-8
+anchor chain, and the FR-3 dedup guard. The CLI layer (parse_args/main/emit)
+pins the guard order, posting, dry-run, and the one-JSON-line receipt. Zero
+network at import time.
 """
 
 import argparse
