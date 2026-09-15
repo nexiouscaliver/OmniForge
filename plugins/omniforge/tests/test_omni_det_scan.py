@@ -44,13 +44,30 @@ with the FakeTransport from test_omni_post_review.py, same patcher pattern):
   (a mid-body occurrence never trips the guard), iso_to_epoch None
   semantics, note returned iff created is not None and created > since
   (FR-3, SC-2b).
+
+T3 pins the CLI (main() under the raw_poster convention — controlled env,
+redirected stdout/stderr, FakeTransport). Guard order is schema (exit 2, no
+stdout) -> staleness (3) -> scan-skipped (exit-0 no-op, ZERO network) ->
+token (2, AFTER all local guards — A5d) -> head-sha (3) -> dedup (3) ->
+post; posting is summary-first then threads in packet order; dry-run emits
+N+1 plan lines with the sibling PLACEHOLDER_REFS and ZERO transport calls;
+every 0/1/3 exit prints exactly ONE 13-key JSON receipt line (exit 2 never
+does). Packet fixtures are COPIED into a per-test tmp dir so os.utime mtime
+control and head-sha variants never touch the repo.
 """
 
 import importlib.util
+import io
 import json
 import os
+import re
+import shutil
 import sys
+import tempfile
+import time
+import types
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -122,6 +139,17 @@ DET_SCAN_EPOCH = datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc).timestamp()
 
 DET_SCAN_NOTE = {"body": "det-scan: scanner evidence — MR !136 @ bbb222",
                  "created_at": "2026-09-02T10:00:00Z"}
+
+
+def run_env(token="tok-test"):
+    """A clean env for main() runs: token vars replaced by `token` (None
+    removes both), host envs stripped — the raw_poster convention."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("GITLAB_TOKEN", "OMNIFORGE_GITLAB_TOKEN",
+                        "GITLAB_HOST", "CI_API_V4_URL")}
+    if token is not None:
+        env["GITLAB_TOKEN"] = token
+    return env
 
 
 class FakeTransport:
@@ -471,6 +499,435 @@ class DetScanEngineTests(unittest.TestCase):
         # unanchorable are returned for disclosure, never silently dropped
         self.assertEqual(len(anchored) + len(unanchored),
                          len(pkt["findings"]))
+
+
+NOTES_BASE_PATH = MR_PATH + "/notes"
+DISCUSSIONS_PATH = MR_PATH + "/discussions"
+
+
+class DetScanCliTests(unittest.TestCase):
+    """T3 CLI contract: the pinned guard order, posting, dry-run, and the
+    one-JSON-line receipt (FR-2/FR-5/FR-7..FR-11, A5a/b/d). main() runs
+    under the raw_poster convention; packet fixtures are COPIED into a
+    per-test tmp dir (mtime control via os.utime; head-sha variants edited
+    in-memory) so nothing ever writes into the repo."""
+
+    def setUp(self):
+        _require_det_scan()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.transport = FakeTransport()
+        patcher = mock.patch.object(omni_glab_api, "request",
+                                    self.transport.request)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        # default seeding: MR metadata GET, empty notes page 1, both diffs
+        # pages (page 1 carries src/app.py:42, page 2 src/util.py:7 —
+        # anchors cross the pagination boundary)
+        self.transport.gets[MR_PATH] = DIFF_REFS
+        self.transport.gets[NOTES_PAGE1] = []
+        self.transport.gets[DIFFS_PAGE1] = diffs_page(
+            "detfilter_mr_diffs_page1.json")
+        self.transport.gets[DIFFS_PAGE2] = diffs_page(
+            "detfilter_mr_diffs_page2.json")
+        self._packet_seq = 0
+
+    # ── helpers (raw_poster mirror) ────────────────────────────────────
+
+    def tmp_packet(self, source, mutate=None):
+        """Copy a packet fixture (name or already-parsed dict) into self.tmp;
+        mutate(obj) may edit it in place first. tmp copies keep os.utime
+        mtime control and in-memory variants OUT of the repo."""
+        if isinstance(source, dict):
+            obj = source
+        else:
+            with open(os.path.join(DETFILTER, source),
+                      encoding="utf-8") as fh:
+                obj = json.load(fh)
+        if mutate is not None:
+            mutate(obj)
+        self._packet_seq += 1
+        path = os.path.join(self.tmp, "packet-%d.json" % self._packet_seq)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh)
+        return path
+
+    def tmp_copy(self, name):
+        """Byte-copy a fixture into self.tmp (for the non-JSON fixtures)."""
+        self._packet_seq += 1
+        dst = os.path.join(self.tmp, "copy-%d" % self._packet_seq)
+        shutil.copyfile(os.path.join(DETFILTER, name), dst)
+        return dst
+
+    def raw_det(self, *argv, token="tok-test"):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, run_env(token), clear=True), \
+                redirect_stdout(out), redirect_stderr(err):
+            try:
+                code = omni_det_scan.main(list(argv))
+            except SystemExit as e:              # argparse usage errors (2)
+                code = e.code
+        return types.SimpleNamespace(returncode=code, stdout=out.getvalue(),
+                                     stderr=err.getvalue())
+
+    def run_det(self, *extra, packet=None, name="detfilter_packet_ok.json",
+                token="tok-test"):
+        """main() with the default argv prefix (tmp-copied fixture + the
+        plan's fixed flags); `packet` overrides with a pre-made path."""
+        ppath = packet if packet is not None else self.tmp_packet(name)
+        argv = ["--packet", ppath, "--project", PROJECT, "--mr", MR,
+                "--backoff-base", "0"] + list(extra)
+        return self.raw_det(*argv, token=token)
+
+    def receipt(self, result):
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+        return json.loads(lines[-1])
+
+    def posts(self, path):
+        return [c for c in self.transport.calls
+                if c[0] == "POST" and c[1] == path]
+
+    def post_posts(self):
+        return [c for c in self.transport.calls if c[0] == "POST"]
+
+    def form_value(self, call, key):
+        for k, v in call[2]:
+            if k == key:
+                return v
+        return None
+
+    # ── FR-1: validation exits 2, NO stdout ────────────────────────────
+
+    def test_unknown_top_level_field_rejected(self):
+        r = self.run_det(name="detfilter_packet_unknown_top.json")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("unknown-top-level-field:extra", r.stderr)
+        self.assertEqual(self.transport.calls, [])
+        self.assertEqual(r.stdout, "")            # exit 2: no receipt
+
+    def test_packet_not_json_and_unreadable_exit2_no_stdout(self):
+        for name in ("detfilter_packet_not_json.txt",
+                     "detfilter_packet_unreadable.bin"):
+            r = self.run_det(packet=self.tmp_copy(name))
+            self.assertEqual(r.returncode, 2, name)
+            self.assertEqual(r.stdout, "", name)
+            self.assertIn("packet-not-json", r.stderr, name)
+        # a DIRECTORY as --packet: IsADirectoryError -> packet-unreadable
+        r = self.run_det(packet=self.tmp)
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stdout, "")
+        self.assertIn("packet-unreadable", r.stderr)
+
+    def test_packet_mr_mismatch_exit2(self):
+        r = self.run_det(name="detfilter_packet_other_mr.json")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("packet-mr-mismatch", r.stderr)
+        self.assertEqual(r.stdout, "")
+        # A5c: non-numeric --mr coerces to a clean mismatch — no traceback
+        r = self.run_det("--mr", "abc")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("packet-mr-mismatch", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
+    # ── FR-2: staleness guard (local, before any network) ──────────────
+
+    def test_stale_packet_refuses(self):
+        r = self.run_det("--since", "1000", "--packet-epoch", "500")
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.post_posts(), [])
+        receipt = self.receipt(r)
+        self.assertEqual(receipt["action"], "skipped")
+        self.assertEqual(receipt["skip_reason"], "stale-packet")
+
+    def test_packet_epoch_overrides_mtime(self):
+        ppath = self.tmp_packet()
+        # old mtime + --packet-epoch >= since: the EXPLICIT epoch wins
+        os.utime(ppath, (1, 1))
+        r = self.run_det("--since", "500", "--packet-epoch", "600",
+                         packet=ppath)
+        self.assertEqual(r.returncode, 0)
+        # fresh mtime + --packet-epoch < since: the EXPLICIT epoch still wins
+        now = time.time()
+        os.utime(ppath, (now, now))
+        r = self.run_det("--since", "500", "--packet-epoch", "400",
+                         packet=ppath)
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.receipt(r)["skip_reason"], "stale-packet")
+
+    def test_epoch_wiring(self):
+        ppath = self.tmp_packet()
+        engine_epoch = time.time()
+        # (a) engine epoch present (--since) + old packet mtime -> stale
+        os.utime(ppath, (engine_epoch - 50,) * 2)
+        r = self.run_det("--since", str(engine_epoch), packet=ppath)
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.receipt(r)["skip_reason"], "stale-packet")
+        # (b) mtime >= engine epoch -> proceeds and posts
+        os.utime(ppath, (engine_epoch + 50,) * 2)
+        r = self.run_det("--since", str(engine_epoch), packet=ppath)
+        self.assertEqual(r.returncode, 0)
+        self.assertTrue(self.posts(NOTES_BASE_PATH))
+        # (c) epoch absent -> --since 0 default -> guard dormant -> proceeds
+        r = self.run_det(packet=ppath)
+        self.assertEqual(r.returncode, 0)
+
+    # ── FR-5: scan-status handling ─────────────────────────────────────
+
+    def test_scan_skipped_is_benign_noop(self):
+        r = self.run_det(name="detfilter_packet_skipped.json")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(self.post_posts(), [])
+        receipt = self.receipt(r)
+        self.assertEqual(receipt["action"], "skipped")
+        self.assertEqual(receipt["skip_reason"],
+                         "scan-skipped:no pipeline token")
+
+    def test_skipped_with_mismatched_head_zero_calls(self):
+        # the skipped check runs BEFORE any network guard — a mismatched
+        # head never even fetches the MR (R10 ordering)
+        pkt = packet("detfilter_packet_skipped.json")
+        pkt["mr"]["head_sha"] = "deadbee"         # != the seeded bbb222
+        r = self.run_det(packet=self.tmp_packet(pkt))
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(self.transport.calls, [])
+
+    def test_incomplete_posts_with_disclosure(self):
+        r = self.run_det(name="detfilter_packet_incomplete.json")
+        self.assertEqual(r.returncode, 0)
+        notes_posts = self.posts(NOTES_BASE_PATH)
+        self.assertEqual(len(notes_posts), 1)
+        body = self.form_value(notes_posts[0], "body")
+        self.assertIn("incomplete", body)
+        self.assertIn("trivy", body)
+        self.assertIn("timeout", body)
+        self.assertIn("**Capped:** True · overflow not adjudicated: 3", body)
+        self.assertIn("**How to read this:**", body)
+
+    # ── FR-4 / FR-3: the two network guards ────────────────────────────
+
+    def test_head_sha_mismatch_refuses(self):
+        r = self.run_det(name="detfilter_packet_head_mismatch.json")
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.post_posts(), [])
+        receipt = self.receipt(r)
+        self.assertEqual(receipt["action"], "skipped")
+        self.assertEqual(receipt["skip_reason"], "head-sha-mismatch")
+        # stderr names both shas (8-char prefixes)
+        self.assertIn("deadbee", r.stderr)
+        self.assertIn("bbb222", r.stderr)
+
+    def test_dedup_refuses_on_fresh_note(self):
+        self.transport.gets[NOTES_PAGE1] = [DET_SCAN_NOTE]
+        r = self.run_det("--since", str(DET_SCAN_EPOCH - 100))
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.post_posts(), [])
+        receipt = self.receipt(r)
+        self.assertEqual(receipt["action"], "skipped")
+        self.assertEqual(receipt["skip_reason"], "det-scan-already-posted")
+
+    def test_old_det_scan_note_proceeds(self):
+        self.transport.gets[NOTES_PAGE1] = [DET_SCAN_NOTE]
+        r = self.run_det("--since", str(DET_SCAN_EPOCH + 100))
+        self.assertEqual(r.returncode, 0)
+        self.assertTrue(self.posts(NOTES_BASE_PATH))
+
+    def test_force_overrides_dedup(self):
+        self.transport.gets[NOTES_PAGE1] = [DET_SCAN_NOTE]
+        r = self.run_det("--since", str(DET_SCAN_EPOCH - 100), "--force")
+        self.assertEqual(r.returncode, 0)
+        self.assertTrue(self.posts(NOTES_BASE_PATH))
+
+    # ── FR-10: dry-run + receipt contract ──────────────────────────────
+
+    def test_dry_run_zero_transport_calls(self):
+        r = self.run_det("--dry-run", token=None)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(self.transport.calls, [])
+        receipt = self.receipt(r)
+        self.assertTrue(receipt["dry_run"])
+        self.assertEqual(receipt["threads"], 0)
+        self.assertEqual(receipt["unanchored"], 0)
+        self.assertEqual(receipt["planned_findings"], 2)
+
+    def test_dry_run_receipt_and_placeholder_plan_lines(self):
+        r = self.run_det("--dry-run")
+        # chunk on the "DRY-RUN: " prefix, never on newlines (dry_line's
+        # contract — bodies contain newlines); the LAST chunk also carries
+        # the receipt after its trailing newline
+        chunks = r.stdout.split("DRY-RUN: ")[1:]
+        notes = [c for c in chunks
+                 if c.startswith("POST %s " % NOTES_BASE_PATH)]
+        discs = [c for c in chunks
+                 if c.startswith("POST %s " % DISCUSSIONS_PATH)]
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(len(discs), 2)
+        # A5a/b: the sibling PLACEHOLDER_REFS tokens, substring-matched
+        # (shlex.quote wraps them in quotes)
+        for chunk in discs:
+            for placeholder in ("<base_sha>", "<start_sha>", "<head_sha>"):
+                self.assertIn(placeholder, chunk)
+            self.assertIn("position[position_type]=text", chunk)
+        # per-finding anchors in packet order (app.py:42 then util.py:7 —
+        # anchorability is unknown in dry-run, so ALL findings are planned)
+        self.assertIn("position[new_path]=src/app.py", discs[0])
+        self.assertIn("position[new_line]=42", discs[0])
+        self.assertIn("position[new_path]=src/util.py", discs[1])
+        self.assertIn("position[new_line]=7", discs[1])
+        receipt = self.receipt(r)
+        self.assertTrue(receipt["dry_run"])
+        self.assertEqual(receipt["threads"], 0)
+        self.assertEqual(receipt["planned_findings"], 2)
+
+    def test_missing_token_exit2_and_stale_no_token_exits3(self):
+        # real run without a token: exit 2 naming the sibling fix line
+        r = self.run_det(token=None)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("glab auth status", r.stderr)
+        self.assertEqual(self.transport.calls, [])
+        # A5d: the token check runs AFTER all local guards — a stale packet
+        # with no token exits 3 (stale-packet), not 2
+        r = self.run_det("--packet-epoch", "1", "--since", "1000",
+                         token=None)
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.receipt(r)["skip_reason"], "stale-packet")
+
+    def test_exit3_receipts_distinguishable(self):
+        stale = self.receipt(
+            self.run_det("--since", "1000", "--packet-epoch", "500"))
+        head = self.receipt(
+            self.run_det(name="detfilter_packet_head_mismatch.json"))
+        self.transport.gets[NOTES_PAGE1] = [DET_SCAN_NOTE]
+        dedup = self.receipt(
+            self.run_det("--since", str(DET_SCAN_EPOCH - 100)))
+        for receipt in (stale, head, dedup):
+            self.assertEqual(receipt["action"], "skipped")
+        self.assertEqual(len({stale["skip_reason"], head["skip_reason"],
+                              dedup["skip_reason"]}), 3)
+        self.assertEqual(stale["skip_reason"], "stale-packet")
+        self.assertEqual(head["skip_reason"], "head-sha-mismatch")
+        self.assertEqual(dedup["skip_reason"], "det-scan-already-posted")
+
+    # ── FR-9: side-effect discipline (SC-4) ────────────────────────────
+
+    def test_only_get_post_methods_and_no_label_paths(self):
+        r = self.run_det()
+        self.assertEqual(r.returncode, 0)
+        for method, path, form in self.transport.calls:
+            self.assertIn(method, ("GET", "POST"), (method, path))
+            self.assertNotIn("label", path, path)
+            self.assertIsNone(
+                re.search(r"/discussions/[^/]+/notes", path), path)
+
+    # ── FR-7: posting failures keep prior artifacts ────────────────────
+
+    def test_mid_post_failure_exit1(self):
+        # thread 1 succeeds, thread 2 exhausts its retries
+        self.transport.script(DISCUSSIONS_PATH,
+                              [(200, {}), 500, 500, 500])
+        r = self.run_det()
+        self.assertEqual(r.returncode, 1)
+        receipt = self.receipt(r)
+        self.assertGreaterEqual(receipt["failures"], 1)
+        self.assertEqual(receipt["threads"], 1)
+        self.assertTrue(self.posts(NOTES_BASE_PATH))   # summary stays up
+
+    def test_summary_post_failure_exit1(self):
+        # summary-first: a failed summary POST aborts before ANY thread
+        self.transport.script(NOTES_BASE_PATH, [500, 500, 500])
+        r = self.run_det()
+        self.assertEqual(r.returncode, 1)
+        receipt = self.receipt(r)
+        self.assertFalse(receipt["posted_summary"])
+        self.assertEqual(receipt["threads"], 0)
+        self.assertEqual(self.posts(DISCUSSIONS_PATH), [])
+        self.assertGreaterEqual(receipt["failures"], 1)
+
+    # ── FR-8: unanchored disclosure ────────────────────────────────────
+
+    def test_unanchored_disclosed_no_thread_counts(self):
+        r = self.run_det(name="detfilter_packet_unanchored.json")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(len(self.posts(DISCUSSIONS_PATH)), 2)
+        body = self.form_value(self.posts(NOTES_BASE_PATH)[0], "body")
+        self.assertIn("### Unanchored evidence", body)
+        self.assertIn("src/ghost.py:3", body)
+        self.assertIn("src/app.py:999", body)
+        receipt = self.receipt(r)
+        self.assertEqual(receipt["threads"], 2)
+        self.assertEqual(receipt["unanchored"], 2)
+        self.assertEqual(receipt["findings_total"], 4)
+        self.assertEqual(receipt["findings_total"],
+                         receipt["threads"] + receipt["unanchored"])
+
+    # ── FR-7/SC-3: the E2E path — packet in, MR artifacts out ──────────
+
+    def test_end_to_end_packet_to_mr_threads(self):
+        r = self.run_det()
+        self.assertEqual(r.returncode, 0)
+        calls = self.transport.calls
+
+        # exactly ONE summary note POST, det-scan:-prefixed
+        notes_posts = self.posts(NOTES_BASE_PATH)
+        self.assertEqual(len(notes_posts), 1)
+        self.assertTrue(self.form_value(notes_posts[0], "body")
+                        .startswith("det-scan:"))
+
+        # exactly TWO discussion POSTs in packet order, anchored across the
+        # pagination boundary (app.py:42 lives on page 1, util.py:7 on page 2)
+        disc_posts = self.posts(DISCUSSIONS_PATH)
+        self.assertEqual(len(disc_posts), 2)
+        expected = [("src/app.py", "42"), ("src/util.py", "7")]
+        for call, (new_path, new_line) in zip(disc_posts, expected):
+            form = dict(call[2])
+            body = form["body"]
+            self.assertTrue(body.startswith("det-scan:"), body[:40])
+            self.assertEqual(form["position[position_type]"], "text")
+            self.assertEqual(form["position[base_sha]"], "aaa111")
+            self.assertEqual(form["position[start_sha]"], "ccc333")
+            self.assertEqual(form["position[head_sha]"], "bbb222")
+            self.assertEqual(form["position[new_path]"], new_path)
+            self.assertEqual(form["position[new_line]"], new_line)
+            self.assertNotIn("position[old_line]", form)   # no old-side locus
+            self.assertNotIn("position[line_range]", form)
+            self.assertIn("**Disposition: needs_judgment**", body)
+        first = dict(disc_posts[0][2])["body"]
+        second = dict(disc_posts[1][2])["body"]
+        # mapped marker AND raw packet severity (FR-6), preview verbatim
+        self.assertIn("**Critical** — scanner severity critical", first)
+        self.assertIn("AWS Access Key ID=REDACTED:secret:ab12cd34", first)
+        self.assertIn("**Minor** — scanner severity medium", second)
+        self.assertIn('query = f"SELECT * FROM t WHERE '
+                      'id={REDACTED:secret:ef56ab78}"', second)
+
+        # exactly ONE MR metadata GET (N+1 discipline) + the 2 diffs GETs
+        meta_gets = [c for c in calls if c[0] == "GET" and c[1] == MR_PATH]
+        self.assertEqual(len(meta_gets), 1)
+        diffs_gets = [c for c in calls
+                      if c[0] == "GET" and "/diffs?per_page=100" in c[1]]
+        self.assertEqual(len(diffs_gets), 2)
+
+        # summary posted BEFORE the first thread (call-order)
+        self.assertLess(calls.index(notes_posts[0]),
+                        calls.index(disc_posts[0]))
+
+        # the receipt: full 13-key shape, executed (not planned) counts
+        receipt = self.receipt(r)
+        self.assertEqual(set(receipt), {
+            "action", "skip_reason", "posted_summary", "threads",
+            "unanchored", "planned_findings", "findings_total",
+            "scan_status", "packet_epoch", "head_sha", "dry_run",
+            "failures", "elapsed_ms"})
+        self.assertEqual(receipt["action"], "posted")
+        self.assertTrue(receipt["posted_summary"])
+        self.assertEqual(receipt["threads"], 2)
+        self.assertEqual(receipt["unanchored"], 0)
+        self.assertEqual(receipt["findings_total"], 2)
+        self.assertEqual(receipt["planned_findings"], 0)
+        self.assertEqual(receipt["scan_status"], "ok")
+        self.assertEqual(receipt["head_sha"], "bbb222")
+        self.assertFalse(receipt["dry_run"])
+        self.assertEqual(receipt["failures"], 0)
+        self.assertIsNone(receipt["skip_reason"])
 
 
 if __name__ == "__main__":
