@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "mr": {
+    "project_id": 73279395,
+    "iid": 136,
+    "head_sha": "bbb222",
+    "base_sha": "aaa111"
+  },
+  "scan": {
+    "status": "skipped",
+    "reason": "no pipeline token",
+    "tools": [
+      {
+        "name": "gitleaks",
+        "version": "8.18.0",
+        "duration_s": 4.2,
+        "status": "ok"
+      },
+      {
+        "name": "opengrep",
+        "version": "1.2.3",
+        "duration_s": 11.5,
+        "status": "ok"
+      }
+    ]
+  },
+  "findings": [],
+  "meta": {
+    "capped": false,
+    "overflow_not_adjudicated": 0,
+    "redaction": "REDACTED:<type>:<hash8>"
+  }
+}
