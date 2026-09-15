@@ -604,14 +604,14 @@ class ClaudeSpawnProvider:
 
     def __init__(self, timeout=None):
         # D11: the ENGINE kill at OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS is the
-        # binding ceiling — this per-call timeout sits 60s above it (fallback
-        # 660 = 600 + 60; the engine's PLUGIN_TIMEOUT_SECS is today 240 and
-        # is spec-raised to 600 in the engine task, so the +60 grace keeps
-        # the engine kill binding in both cases; replaces the old hardcoded
-        # 300).
+        # binding ceiling — this per-call timeout sits 60s above it (env
+        # absent: fallback base 600 + 60 grace = 660 total; the engine's
+        # PLUGIN_TIMEOUT_SECS is today 240 and is spec-raised to 600 in the
+        # engine task, so the +60 grace keeps the engine kill binding in both
+        # cases; replaces the old hardcoded 300).
         if timeout is None:
             timeout = _env_int_positive(
-                "OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS", 660) + 60
+                "OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS", 600) + 60
         self.timeout = timeout
 
     def build_command(self, prompt, session_id=None):

@@ -710,9 +710,10 @@ class TestSessionsKey(unittest.TestCase):
 
 class TestProviderSessionAndTimeout(unittest.TestCase):
     """D11 wiring: the spawn timeout sits 60s above the forwarded engine
-    ceiling (fallback 660 = engine default 600 + 60; replaces the old
-    hardcoded 300), and build_command appends --session-id only when one
-    is known (explicit arg over the forwarded env)."""
+    ceiling (env absent: fallback base 600, total 660 = engine default
+    600 + 60; replaces the old hardcoded 300), and build_command appends
+    --session-id only when one is known (explicit arg over the forwarded
+    env)."""
 
     def test_timeout_from_env_plus_grace(self):
         with mock.patch.dict(os.environ,
@@ -721,11 +722,11 @@ class TestProviderSessionAndTimeout(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if k != "OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS"}
         with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 720)
+            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 660)
         with mock.patch.dict(
                 os.environ,
                 {"OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS": "garbage"}):
-            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 720)
+            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 660)
 
     def test_build_command_session_id_flag(self):
         provider = omni_sweep.ClaudeSpawnProvider()
