@@ -997,6 +997,33 @@ class PrepareOutputTests(unittest.TestCase):
         self.assertEqual([e["review_id"] for e in entries],
                          ["first", "second"])
 
+    def test_prepare_wipe_preserves_det_scan_receipt(self):
+        # A1: the det-scan pre-step receipt (written BEFORE this phase ran,
+        # on a fresh session that mkdir'd the run dir first) survives the
+        # same-phase wipe by name — the phases.jsonl precedent
+        d = tmp_dir(self)
+        run_dir = os.path.join(d, "run")
+        rc, so, se, run_dir = self._run(review_id="first",
+                                        run_dir=run_dir)
+        self.assertEqual(rc, 0, se)
+        receipt = '{"action": "posted"}'
+        with open(os.path.join(run_dir, "det-scan.txt"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(receipt)
+        with open(os.path.join(run_dir, "stale.txt"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("stale")
+        rc2, so2, se2, run_dir = self._run(review_id="second",
+                                           run_dir=run_dir)
+        self.assertEqual(rc2, 0, se2)
+        # det-scan.txt survives the re-run with contents intact...
+        with open(os.path.join(run_dir, "det-scan.txt"),
+                  encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), receipt)
+        # ...while a same-aged stale file is gone
+        self.assertFalse(os.path.exists(
+            os.path.join(run_dir, "stale.txt")))
+
     def test_prepare_phases_append_is_last_writer(self):
         # a DIRECTORY named phases.jsonl survives the wipe (name-only
         # exemption) and then breaks the append open() -> exit 2 AFTER

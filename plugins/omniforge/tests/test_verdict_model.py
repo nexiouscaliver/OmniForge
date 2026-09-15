@@ -27,6 +27,22 @@ def _load():
 
 omni_verdict = _load()
 
+DET_SCAN_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
+    "skills", "omnireview-gitlab", "scripts", "omni_det_scan.py"))
+
+
+def _load_det_scan():
+    """The det-scan producer — FR-13's tests classify the REAL FR-7 thread
+    template body (A4: never a hand-copied template)."""
+    spec = importlib.util.spec_from_file_location(
+        "omni_det_scan_for_verdict_tests", DET_SCAN_SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+omni_det_scan = _load_det_scan()
+
 
 class VocabularyTests(unittest.TestCase):
     def test_dispositions_closed_set(self):
@@ -271,6 +287,35 @@ class ClassifyThreadTests(unittest.TestCase):
             thread("a6", "## OmniForge\n\n**Verdict:** REQUEST_CHANGES\n", resolvable=False),
             verification=None)
         self.assertEqual(rec["disposition"], "artifact")
+
+    def test_det_scan_thread_is_artifact(self):
+        # FR-13: det-scan evidence threads are artifact inputs
+        # (needs_judgment, pending model adjudication), never fix-targets —
+        # even though FR-6 gives their bodies **Critical markers on code
+        # files. Body rendered by the REAL producer (leading whitespace
+        # tolerated by is_artifact's existing strip).
+        body = "  " + omni_det_scan.thread_body({
+            "tool": "gitleaks", "rule_id": "aws-access-key",
+            "file": "src/app.py", "line": 42, "severity": "critical",
+            "class": "secret",
+            "preview_redacted": "REDACTED:secret:ab12cd34"})
+        rec = omni_verdict.classify_thread(
+            thread("d1", body, file_path="src/app.py"), verification=None)
+        self.assertEqual(rec["disposition"], "artifact")
+        findings, artifacts = omni_verdict.classify_run(
+            [thread("d1", body, file_path="src/app.py")])
+        self.assertEqual(findings, [])              # never a fix-target
+        self.assertEqual([a["id"] for a in artifacts], ["d1"])
+
+    def test_midline_det_scan_quote_stays_finding(self):
+        # a finding that QUOTES "det-scan:" mid-line stays a finding — the
+        # marker matches at stripped start or line start only, like the
+        # sweep markers above it
+        body = "**Important** — the det-scan: evidence prefix marks scanner notes"
+        self.assertFalse(omni_verdict.is_artifact(body))
+        rec = omni_verdict.classify_thread(
+            thread("d2", body, file_path="src/app.py"), verification=None)
+        self.assertNotEqual(rec["disposition"], "artifact")
 
     def test_severity_and_kind_extracted(self):
         rec = omni_verdict.classify_thread(

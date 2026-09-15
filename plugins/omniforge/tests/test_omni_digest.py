@@ -17,6 +17,7 @@ bad-discussions modes degrade (exit 0 + one stderr warning +
 retrospective: false) — never a hard failure.
 """
 
+import importlib.util
 import json
 import os
 import shutil
@@ -69,6 +70,40 @@ def run_digest(mr_path, discussions_path=None, out_dir=None, out=None,
     if prior_out is not None:
         args += ["--prior-out", prior_out]
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+
+# --- det-scan producer (the REAL FR-7 template body — A4) ------------------
+#
+# FR-12's consumer tests render the body through omni_det_scan.thread_body
+# itself (the single source of truth), never a hand-copied template: A4 pins
+# that the EXACT FR-7 thread body keeps is_omniforge_note False, and a
+# re-rendered copy here would drift silently.
+
+DET_SCAN_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
+    "skills", "omnireview-gitlab", "scripts", "omni_det_scan.py"))
+
+_DET_SCAN = None
+
+
+def load_det_scan():
+    """Load omni_det_scan.py in-process (cached per test process)."""
+    global _DET_SCAN
+    if _DET_SCAN is None:
+        spec = importlib.util.spec_from_file_location(
+            "omni_det_scan_for_digest_tests", DET_SCAN_SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _DET_SCAN = mod
+    return _DET_SCAN
+
+
+def det_scan_body(preview="x" * 800):
+    """One det-scan finding-thread body from the REAL producer (>500 chars
+    total with the default 800-char preview)."""
+    return load_det_scan().thread_body({
+        "tool": "gitleaks", "rule_id": "aws-access-key", "file": "src/app.py",
+        "line": 42, "severity": "critical", "class": "secret",
+        "preview_redacted": preview})
 
 
 # --- fixtures ---------------------------------------------------------
@@ -586,6 +621,88 @@ class GatherFileShimTests(unittest.TestCase):
             prior = json.load(fh)
         self.assertFalse(prior["retrospective"])
         self.assertEqual(prior["prior_findings"], [])
+
+
+class DetScanEvidenceTests(unittest.TestCase):
+    """FR-12 (SC-5 render half): det-scan scanner-evidence bodies get
+    bot-artifact treatment in the RENDER path only — verbatim, uncapped by
+    the 500-char prose cap, never dropped by the 8,000-char budget — while
+    the priors channel stays det-scan-free (is_omniforge_note untouched,
+    R9)."""
+
+    def test_det_scan_bodies_verbatim_in_digest(self):
+        # budget-overflow scenario mirroring test_overflow_drops_oldest_prose:
+        # the OLDEST thread is human prose, the det-scan thread is NEWER —
+        # overflow must drop the older human prose, never the evidence body
+        body = det_scan_body()
+        self.assertGreater(len(body), 500)         # over the prose cap
+        threads = [thread("oldhum", "OLDPROSE " + "o" * 600,
+                          created_at="2026-09-01T09:00:00Z")]
+        for i in range(1, 20):                     # filler human prose
+            threads.append(thread(
+                "t%02d" % i, ("PROSE-%02d " % i) + "p" * (PROSE_CAP - 20),
+                created_at="2026-09-01T10:%02d:00Z" % i))
+        threads.append(thread("detscan1", body, file_path="src/app.py",
+                              line_number=42,
+                              created_at="2026-09-01T11:00:00Z"))
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data(diff="", comments=""))
+        disc = write_json(d, "disc.json", discussions_payload(threads))
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, disc, out_dir=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        digest = read_file(out, "digest.md")
+        self.assertLessEqual(len(digest), 8000)    # budget enforced
+        # the det-scan body rides BYTE-IDENTICAL — no truncation marker
+        # anywhere inside its rendered span
+        idx = digest.find(body)
+        self.assertGreaterEqual(idx, 0, "det-scan body not verbatim")
+        self.assertNotIn("[…truncated", digest[idx:idx + len(body)])
+        self.assertIn("## Thread detscan1", digest)  # thread id remains
+        # the OLDER human thread's prose is the one that dropped; its
+        # machine fields (heading/resolved state) remain like every thread
+        self.assertNotIn("OLDPROSE", digest)
+        self.assertIn("## Thread oldhum", digest)
+        self.assertIn("PROSE-19", digest)          # newest prose survives
+        st = stdout_json(proc)
+        self.assertEqual(st["threads_total"], 21)
+        self.assertFalse(st["retrospective"])      # no priors from evidence
+        self.assertEqual(st["prior_count"], 0)
+
+    def test_det_scan_never_enters_priors(self):
+        # A4: the EXACT FR-7 template body (standard template preview). A
+        # preview_redacted that ITSELF contained "Confidence: " and
+        # "Found by: " would legitimately flip is_omniforge_note for that
+        # one thread into the priors channel — previews are not
+        # marker-free by contract, so this test uses the standard preview.
+        body = det_scan_body()
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data())
+        disc = write_json(d, "disc.json", discussions_payload([
+            thread("detscan1", body, file_path="src/app.py", line_number=42,
+                   created_at="2026-09-01T11:00:00Z"),
+            thread("bot1", BOT_FINDING_NOTE, file_path="src/app.py",
+                   line_number=42, created_at="2026-09-01T10:00:00Z"),
+        ]))
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, disc, out_dir=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        digest = read_file(out, "digest.md")
+        self.assertIn(body, digest)                # render carries it verbatim
+        with open(os.path.join(out, "prior-findings.json"),
+                  encoding="utf-8") as fh:
+            prior = json.load(fh)
+        # NO det-scan entry in the priors channel (FR-12 AC-b)...
+        for p in prior["prior_findings"]:
+            self.assertFalse(p["body"].lstrip().startswith("det-scan:"))
+        # ...while the ONE true OmniForge bot note still becomes a prior
+        self.assertEqual([p["thread_id"] for p in prior["prior_findings"]],
+                         ["bot1"])
+        self.assertEqual(prior["prior_findings"][0]["body"], BOT_FINDING_NOTE)
+        self.assertTrue(prior["retrospective"])
+        st = stdout_json(proc)
+        self.assertTrue(st["retrospective"])
+        self.assertEqual(st["prior_count"], 1)
 
 
 if __name__ == "__main__":
