@@ -33,8 +33,9 @@ This file currently implements ONLY the pure packet layer (T1):
 Siblings are reused via same-directory in-process import (parsing and
 assembly are NEVER re-implemented): omni_glab_api (transport, incl. get_all),
 omni_post_review (thread_form, path builders, guards), omni_fetch_mr
-(assemble_diff + parse_diff_line_map anchor chain). The engine network
-layer arrives in T2; the CLI in T3. Zero network at import time.
+(assemble_diff + parse_diff_line_map anchor chain). The network engine layer
+(T2) adds the FR-4 head-sha guard, the FR-8 anchor chain, and the FR-3 dedup
+guard; the CLI arrives in T3. Zero network at import time.
 """
 
 import argparse
@@ -310,3 +311,85 @@ def summary_body(packet, iid, anchored_count, unanchored):
                 finding["line"], finding["severity"],
                 finding["preview_redacted"]))
     return "\n".join(lines)
+
+
+# ── network engine (T2): head-sha guard, anchor chain, dedup guard ─────────
+
+
+def head_sha_matches(packet_head, refs_head):
+    """FR-4: packet.mr.head_sha vs the MR's diff_refs.head_sha (the SAME sha
+    later used in position[head_sha]), CASE-INSENSITIVE (GitLab hex shas may
+    arrive upper- or lower-case). Empty on either side never matches —
+    never anchor evidence onto an unknown head."""
+    left = (packet_head or "").lower()
+    right = (refs_head or "").lower()
+    return bool(left) and bool(right) and left == right
+
+
+def fetch_anchor_map(project, mr, token, host, attempts, backoff_base):
+    """FR-8 anchor map — the three-step reuse chain (parsing and assembly
+    are NEVER re-implemented; NEVER a since-sha/delta diff — the full-MR
+    diff is the anchoring surface):
+
+    1. paginated GET <mr_path>/diffs via omni_glab_api.get_all — the REAL
+       array-of-items JSON shape [{diff, old_path, new_path, ...}];
+    2. omni_fetch_mr.assemble_diff(items) — reconstructs the `+++ b/`-headed
+       diff text (the raw /diffs response carries headerless per-file hunks;
+       feeding it straight to the parser yields an EMPTY map — the sibling
+       exists precisely for this);
+    3. omni_fetch_mr.parse_diff_line_map(text) — the same pure function that
+       builds gather.json's diff_line_map.
+    """
+    items = omni_glab_api.get_all(
+        omni_post_review.mr_path(project, mr) + "/diffs", token, host=host,
+        attempts=attempts, backoff_base=backoff_base)
+    text = omni_fetch_mr.assemble_diff(items)
+    return omni_fetch_mr.parse_diff_line_map(text)
+
+
+def anchorable(finding, anchor_map):
+    """A finding is anchorable iff its file is in the map AND its line is in
+    that file's added_lines — position[new_line] must land on a line the MR
+    actually added."""
+    return finding["file"] in anchor_map \
+        and finding["line"] in anchor_map[finding["file"]]["added_lines"]
+
+
+def split_findings(packet, anchor_map):
+    """Split packet findings into (anchored, unanchored) — packet findings
+    order preserved in BOTH lists. Unanchorable findings (wrong file, wrong
+    line, or both) are never silently dropped: they are returned for
+    disclosure in the summary (FR-8)."""
+    anchored, unanchored = [], []
+    for finding in packet["findings"]:
+        if anchorable(finding, anchor_map):
+            anchored.append(finding)
+        else:
+            unanchored.append(finding)
+    return anchored, unanchored
+
+
+def newer_det_scan_note(project, mr, since, token, host, attempts,
+                        backoff_base):
+    """Return the det-scan summary note newer than `since`, else None —
+    mirroring omni_post_review.newer_summary_note EXACTLY: the listing
+    paginates via omni_glab_api.get_all (per_page=100 — a busy MR with 100+
+    notes cannot hide a prior det-scan note on page 2), the body matches
+    with lstrip().startswith(DET_SCAN_PREFIX) (leading whitespace tolerated;
+    a mid-body occurrence never trips the guard), created_at goes through
+    the sibling iso_to_epoch (an unparseable timestamp never trips the
+    guard), and the note is returned iff created is not None and
+    created > since (FR-3, SC-2b)."""
+    notes = omni_glab_api.get_all(
+        omni_post_review.notes_base_path(project, mr), token, host=host,
+        attempts=attempts, backoff_base=backoff_base)
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        body = note.get("body") or ""
+        if not body.lstrip().startswith(DET_SCAN_PREFIX):
+            continue
+        created = omni_post_review.iso_to_epoch(note.get("created_at"))
+        if created is not None and created > since:
+            return note
+    return None
