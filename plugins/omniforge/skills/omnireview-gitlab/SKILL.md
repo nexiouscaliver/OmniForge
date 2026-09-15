@@ -65,7 +65,34 @@ Fetch ALL data before dispatching agents. Agents get data injected — they neve
 authenticated host glab (never printed):
 `export GITLAB_TOKEN=$(glab auth status --hostname <host> -t 2>/dev/null | sed -n 's/^.*- Token: //p')`
 
-**Primary (all runs) — FIRST ACTION:** run the shipped pre-dispatch script. ONE invocation
+### Scanner evidence pre-step (det-scan)
+
+If the engine set `OMNIFORGE_DET_SCAN_PACKET` (and the file exists), consume the
+det-scan v1 evidence packet BEFORE the gather below — the posted evidence threads
+then ride this run's discussions envelope into the digest and the reviewer agents'
+context. Idempotency FIRST: if `/tmp/omni_run_{id}/det-scan.txt` already exists (a
+prior receipt), skip re-invocation entirely — never rely on `--since` alone.
+Otherwise (the run dir does not exist yet on a fresh session — create it first):
+
+```bash
+mkdir -p /tmp/omni_run_{id}
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_det_scan.py" \
+  --packet "$OMNIFORGE_DET_SCAN_PACKET" --project {project} --mr {id} \
+  --since "${OMNIFORGE_DET_SCAN_EPOCH:-0}" \
+  > /tmp/omni_run_{id}/det-scan.txt
+```
+
+`OMNIFORGE_DET_SCAN_EPOCH` is the ENGINE's scan-round start (captured BEFORE the
+packet write), passed through as `--since`; the `${...:-0}` default passes
+`--since 0` when it is unset — the age guard is dormant and the head-sha guard is
+the staleness protection. NEVER mint an epoch in this step. Exit 0 (posted or
+scan-skipped) proceeds; exits 2 and 3 are noted in one line and the review
+continues; exit 1 is surfaced with the receipt line and the review still
+continues — this step NEVER blocks the review. `det-scan:` threads are
+`needs_judgment` inputs: adjudicate them like any other finding by posting your
+own findings referencing the evidence; no plugin component ever resolves them.
+
+**Primary (all runs):** run the shipped pre-dispatch script. ONE invocation
 performs the single HTTP-pass gather (via `omni_fetch_mr.py`), partitions deep-dive
 ownership (via `omni_partition.py`), and renders the three reviewer briefs into the run dir:
 

@@ -200,3 +200,75 @@ Open-prior replies in interactive MCP installs use `mcp__omniforge__reply_to_dis
 standalone (stdlib only, glab subprocess only) so posting still works when the MCP server cannot start.
 
 **No AI attribution in any posted content.** Write as a standard code review comment.
+
+---
+
+## det-scan evidence posting (omni_det_scan.py)
+
+Scanner-evidence posting is a separate flow from the `## OmniForge` verdict artifacts
+above: `scripts/omni_det_scan.py` consumes the engine's det-scan v1 evidence packet and
+posts the evidence directly — the scanner is evidence, the model is the verdict. Every
+body it posts starts `det-scan:`; the threads carry disposition `needs_judgment` and are
+NEVER auto-resolved by any plugin component — the review agents adjudicate them like any
+other finding. The flow NEVER touches GitLab labels.
+
+**Flags:** `--packet` (path to the evidence packet) · `--project` · `--mr` · `--since`
+(engine scan-round epoch; the skill passes `"${OMNIFORGE_DET_SCAN_EPOCH:-0}"`) ·
+`--host` · `--force` · `--dry-run` · `--packet-epoch` (consumer-level packet mtime
+override) · `--attempts` · `--backoff-base`. The token comes from `GITLAB_TOKEN` /
+`OMNIFORGE_GITLAB_TOKEN` env only — there is no flag for it.
+
+**Exit codes:**
+
+| Exit | Meaning |
+|------|---------|
+| `0` | posted, or scan-skipped (benign no-op — receipt `action="skipped"`) |
+| `1` | posting failure after retries — prior artifacts stay |
+| `2` | validation: `unknown-top-level-field:<k>`, `unsupported-schema-version`, `packet-not-json`, `packet-unreadable`, `bad-field:<locus>`, `packet-mr-mismatch`, or missing token |
+| `3` | refusal: `stale-packet`, `det-scan-already-posted`, `head-sha-mismatch` |
+
+**Exit 1 (mid-batch posting failure):** resolve manually using the receipt counts and
+thread ids; do NOT `--force` to resume — it re-posts everything. On every exit 1 the
+receipt's `action` field still reads `"posted"` — the counts
+(`posted_summary`/`threads`/`failures`) carry the truth.
+
+**Epoch-absent consequence:** with no engine epoch, `--since 0` makes the dedup guard
+refuse ANY re-post on re-reviews — safe: refuse beats duplicate, and the receipt surfaces
+it.
+
+**Summary note template** (posted to `.../notes`):
+
+```markdown
+det-scan: scanner evidence — MR !{iid} @ {head_sha first 8}
+
+**Scan status:** {scan.status} — {scan.reason}
+
+**Tools:**
+- {name} {version} — {status} ({duration_s}s)
+
+**Findings:** {N} total · {A} anchored (threads below) · {U} unanchored (see below)
+**Capped:** {meta.capped} · overflow not adjudicated: {meta.overflow_not_adjudicated}
+**Redaction:** {meta.redaction}
+
+**How to read this:** the scanner is evidence, the model is the verdict. Every `det-scan:`
+thread below carries disposition `needs_judgment` and is adjudicated by the review agents —
+this note is not a verdict and these threads are never auto-resolved.
+
+### Unanchored evidence (no anchorable diff line — adjudicate from the file)
+- [{tool}] {rule_id} — {file}:{line} — severity {severity} — {preview_redacted}
+```
+
+The `### Unanchored evidence` section (heading + list) renders ONLY when U > 0.
+
+**Finding thread body template** (posted to `.../discussions`, anchored at `{file}`/`{line}`):
+
+```markdown
+det-scan: [{tool}] {rule_id} — {file}:{line}
+
+**{Critical|Important|Minor}** — scanner severity {severity} · class {class}
+
+{preview_redacted}
+
+**Disposition: needs_judgment** — scanner evidence, not a verdict. This thread is
+adjudicated by the review agents and is never auto-resolved.
+```
