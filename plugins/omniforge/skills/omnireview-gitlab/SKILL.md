@@ -70,17 +70,27 @@ authenticated host glab (never printed):
 If the engine set `OMNIFORGE_DET_SCAN_PACKET` (and the file exists), consume the
 det-scan v1 evidence packet BEFORE the gather below — the posted evidence threads
 then ride this run's discussions envelope into the digest and the reviewer agents'
-context. Idempotency FIRST: skip re-invocation only when
-`/tmp/omni_run_{id}/det-scan.txt` exists AND is non-empty (`test -s`) — that is
-a prior receipt line. An EMPTY file (left by a failed run's redirect) does not
-count: the step re-runs and the `>` redirect overwrites it — never rely on
-`--since` alone. Otherwise (the run dir does not exist yet on a fresh session —
-create it first):
+context. Idempotency FIRST: skip re-invocation only when a prior receipt exists —
+`/tmp/omni_run_{id}/det-scan.txt` exists AND is non-empty (`test -s`) AND its
+`head_sha` equals this packet's `mr.head_sha` (a round-2 packet for a new head is
+always consumed; an unparseable receipt or packet re-runs — fail open). An EMPTY
+file (left by a failed run's redirect) does not count: the step re-runs and the
+`>` redirect overwrites it — never rely on `--since` alone. Otherwise (the run
+dir does not exist yet on a fresh session — create it first):
 
 ```bash
 mkdir -p /tmp/omni_run_{id}
-if [ -s /tmp/omni_run_{id}/det-scan.txt ]; then
-  echo "omni_det_scan: prior receipt present, skipping re-invocation" >&2
+if [ -s /tmp/omni_run_{id}/det-scan.txt ] && python3 -c '
+import json, sys
+try:
+    packet = json.load(open(sys.argv[1]))
+    receipt = json.loads(open(sys.argv[2]).readline())
+    same = receipt.get("head_sha") == packet["mr"]["head_sha"]
+except ValueError:
+    same = False
+sys.exit(0 if same else 1)
+' "$OMNIFORGE_DET_SCAN_PACKET" /tmp/omni_run_{id}/det-scan.txt 2>/dev/null; then
+  echo "omni_det_scan: prior receipt for this head present, skipping re-invocation" >&2
 else
   timeout 120 python3 "${CLAUDE_PLUGIN_ROOT}/skills/omnireview-gitlab/scripts/omni_det_scan.py" \
     --packet "$OMNIFORGE_DET_SCAN_PACKET" --project {project} --mr {id} \

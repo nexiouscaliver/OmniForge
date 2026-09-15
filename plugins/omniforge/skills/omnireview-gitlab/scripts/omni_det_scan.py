@@ -409,8 +409,9 @@ def parse_args(argv=None):
     ap.add_argument("--force", action="store_true",
                     help="override the det-scan dedup guard")
     ap.add_argument("--dry-run", action="store_true",
-                    help="print the planned API calls, execute nothing "
-                         "(works without a token)")
+                    help="print only the planned POST calls and execute "
+                         "nothing (works without a token; a real run also "
+                         "makes read-only GETs — MR metadata, notes, diffs)")
     ap.add_argument("--packet-epoch", type=float, default=None,
                     help="override the packet file's mtime as its "
                          "effective epoch")
@@ -475,7 +476,8 @@ def main(argv=None):
             "findings_total": len(findings),
             "scan_status": pkt["scan"]["status"],
             "packet_epoch": effective_epoch,
-            "head_sha": pkt["mr"]["head_sha"],
+            # receipt carries bounded sha text only
+            "head_sha": pkt["mr"]["head_sha"][:64],
             "dry_run": dry_run,
             "failures": counts["failures"] if failures is None else failures,
             "elapsed_ms": int(round((time.time() - start) * 1000)),

@@ -35,7 +35,6 @@ import os
 import sys
 
 OMNIFORGE_HEADER = "## OmniForge"
-SCANNER_EVIDENCE_HEADER = "det-scan:"
 PROSE_CAP, HEAD, TAIL = 500, 400, 60
 BUDGET = 8000
 
@@ -65,11 +64,16 @@ def is_omniforge_note(body):
 
 def is_scanner_evidence_note(body):
     """det-scan scanner-evidence body: bot-artifact treatment in the RENDER
-    path only (verbatim, uncapped, budget-protected). NEVER extends
+    path only (verbatim, uncapped, budget-protected). Producer-shape match,
+    NOT a bare prefix: only the two frozen producer headers (the FR-7
+    thread shape and the FR-11 summary shape) count, so a forged bare
+    `det-scan:` note no longer buys bot-render privileges. NEVER extends
     is_omniforge_note — that predicate feeds build_prior_findings, and
     det-scan threads must NOT enter the never-re-adjudicate priors
-    channel."""
-    return body.lstrip().startswith(SCANNER_EVIDENCE_HEADER)
+    channel (build_prior_findings excludes them explicitly as well)."""
+    b = body.lstrip()
+    return (b.startswith("det-scan: [")                        # thread shape
+            or b.startswith("det-scan: scanner evidence — "))  # summary shape
 
 
 def note_bodies(d):
@@ -200,7 +204,11 @@ def build_prior_findings(threads):
     input: {thread_id, file_path, line_number, body, resolved, state}."""
     priors = []
     for t in threads:
-        body = next((b for b in t["notes"] if is_omniforge_note(b)), None)
+        # scanner evidence NEVER becomes a prior finding — even when a
+        # marker-laden preview would flip is_omniforge_note for that one
+        # thread (a det-scan producer shape is excluded first)
+        body = next((b for b in t["notes"] if is_omniforge_note(b)
+                     and not is_scanner_evidence_note(b)), None)
         if body is None:
             continue
         priors.append({

@@ -106,6 +106,37 @@ def det_scan_body(preview="x" * 800):
         "preview_redacted": preview})
 
 
+# A minimal valid det-scan v1 packet for summary_body renders (the pure
+# renderer only reads scan/meta/findings/mr.head_sha — no validation runs).
+DET_SCAN_SUMMARY_PACKET = {
+    "schema_version": 1,
+    "mr": {"project_id": 73279395, "iid": 21, "head_sha": "bbb22222",
+           "base_sha": "aaa111"},
+    "scan": {"status": "ok", "reason": "clean",
+             "tools": [{"name": "gitleaks", "version": "8.18.0",
+                        "duration_s": 4.2, "status": "ok"}]},
+    "findings": [],
+    "meta": {"capped": False, "overflow_not_adjudicated": 0,
+             "redaction": "REDACTED:<type>:<hash8>"},
+}
+
+_DIGEST = None
+
+
+def load_digest():
+    """Load omni_digest.py in-process (cached per test process) — pure
+    predicate checks (is_scanner_evidence_note / is_omniforge_note) run
+    against the same file the subprocess contract tests execute."""
+    global _DIGEST
+    if _DIGEST is None:
+        spec = importlib.util.spec_from_file_location(
+            "omni_digest_for_digest_tests", DIGEST)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _DIGEST = mod
+    return _DIGEST
+
+
 # --- fixtures ---------------------------------------------------------
 
 DIFF_TEXT = """diff --git a/src/app.py b/src/app.py
@@ -676,11 +707,22 @@ class DetScanEvidenceTests(unittest.TestCase):
         # one thread into the priors channel — previews are not
         # marker-free by contract, so this test uses the standard preview.
         body = det_scan_body()
+        # SHIP ROUND-1 fix 1b: a SECOND det-scan thread whose preview
+        # carries BOTH priors-channel markers ("Confidence: 85/100 |
+        # Found by:") — is_omniforge_note matches it (the hazard is real),
+        # yet a det-scan producer shape must NEVER become a prior: the
+        # body selection in build_prior_findings excludes scanner
+        # evidence even when the marker conjunction would match.
+        marker_laden = det_scan_body(
+            preview="Confidence: 85/100 | Found by: scanner preview text")
+        self.assertTrue(load_digest().is_omniforge_note(marker_laden))
         d = tmp_dir(self)
         mr = write_json(d, "mr.json", mr_data())
         disc = write_json(d, "disc.json", discussions_payload([
             thread("detscan1", body, file_path="src/app.py", line_number=42,
                    created_at="2026-09-01T11:00:00Z"),
+            thread("detscan2", marker_laden, file_path="src/util.py",
+                   line_number=7, created_at="2026-09-01T11:30:00Z"),
             thread("bot1", BOT_FINDING_NOTE, file_path="src/app.py",
                    line_number=42, created_at="2026-09-01T10:00:00Z"),
         ]))
@@ -689,10 +731,12 @@ class DetScanEvidenceTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         digest = read_file(out, "digest.md")
         self.assertIn(body, digest)                # render carries it verbatim
+        self.assertIn(marker_laden, digest)        # render: bot lane, verbatim
         with open(os.path.join(out, "prior-findings.json"),
                   encoding="utf-8") as fh:
             prior = json.load(fh)
-        # NO det-scan entry in the priors channel (FR-12 AC-b)...
+        # NO det-scan entry in the priors channel (FR-12 AC-b) — NEITHER
+        # the standard-preview thread NOR the marker-laden one...
         for p in prior["prior_findings"]:
             self.assertFalse(p["body"].lstrip().startswith("det-scan:"))
         # ...while the ONE true OmniForge bot note still becomes a prior
@@ -703,6 +747,20 @@ class DetScanEvidenceTests(unittest.TestCase):
         st = stdout_json(proc)
         self.assertTrue(st["retrospective"])
         self.assertEqual(st["prior_count"], 1)
+
+    def test_bare_det_scan_prefix_is_not_scanner_evidence(self):
+        # SHIP ROUND-1 fix 1a: is_scanner_evidence_note matches the two
+        # frozen PRODUCER shapes only (thread header / summary header) — a
+        # bare "det-scan:" prefix no longer buys bot-render privileges: a
+        # forged note rides the prose path like any human note.
+        digest = load_digest()
+        self.assertFalse(
+            digest.is_scanner_evidence_note("det-scan: not a producer shape"))
+        # the two real shapes, rendered by the REAL producer module, match
+        self.assertTrue(digest.is_scanner_evidence_note(det_scan_body()))
+        summary = load_det_scan().summary_body(
+            DET_SCAN_SUMMARY_PACKET, "21", 0, [])
+        self.assertTrue(digest.is_scanner_evidence_note(summary))
 
 
 if __name__ == "__main__":

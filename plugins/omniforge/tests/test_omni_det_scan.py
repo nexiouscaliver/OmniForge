@@ -807,6 +807,22 @@ class DetScanCliTests(unittest.TestCase):
         self.assertEqual(head["skip_reason"], "head-sha-mismatch")
         self.assertEqual(dedup["skip_reason"], "det-scan-already-posted")
 
+    def test_receipt_head_sha_bounded(self):
+        # SHIP ROUND-1 fix 2a: the receipt carries bounded sha text only —
+        # an (invalid-length) 100-char head_sha still validates (non-empty
+        # string) but the receipt reports at most 64 chars. Exit-3 path
+        # (stale packet) so no transport is ever touched.
+        long_sha = "a" * 100
+        pkt = packet("detfilter_packet_ok.json")
+        pkt["mr"]["head_sha"] = long_sha
+        r = self.run_det("--since", "1", "--packet-epoch", "0",
+                         packet=self.tmp_packet(pkt))
+        self.assertEqual(r.returncode, 3)
+        self.assertEqual(self.transport.calls, [])
+        receipt = self.receipt(r)
+        self.assertEqual(len(receipt["head_sha"]), 64)
+        self.assertEqual(receipt["head_sha"], long_sha[:64])
+
     # ── FR-9: side-effect discipline (SC-4) ────────────────────────────
 
     def test_only_get_post_methods_and_no_label_paths(self):

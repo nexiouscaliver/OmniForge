@@ -307,6 +307,22 @@ class ClassifyThreadTests(unittest.TestCase):
         self.assertEqual(findings, [])              # never a fix-target
         self.assertEqual([a["id"] for a in artifacts], ["d1"])
 
+        # SHIP ROUND-1 fix 3b extension: a reply that QUOTES the full
+        # thread template (header line + disposition line — the quoted
+        # template rides at line start after a newline, framed by a "> "
+        # quote-marker preamble) is still an artifact under the
+        # thread-shape conjunction.
+        quoted = ("> replying to the scanner thread, quoted in full:\n\n"
+                  + omni_det_scan.thread_body({
+                      "tool": "gitleaks", "rule_id": "aws-access-key",
+                      "file": "src/app.py", "line": 42,
+                      "severity": "critical", "class": "secret",
+                      "preview_redacted": "REDACTED:secret:ab12cd34"}))
+        self.assertTrue(omni_verdict.is_artifact(quoted))
+        rec = omni_verdict.classify_thread(
+            thread("d1q", quoted, file_path="src/app.py"), verification=None)
+        self.assertEqual(rec["disposition"], "artifact")
+
     def test_midline_det_scan_quote_stays_finding(self):
         # a finding that QUOTES "det-scan:" mid-line stays a finding — the
         # marker matches at stripped start or line start only, like the
@@ -316,6 +332,22 @@ class ClassifyThreadTests(unittest.TestCase):
         rec = omni_verdict.classify_thread(
             thread("d2", body, file_path="src/app.py"), verification=None)
         self.assertNotEqual(rec["disposition"], "artifact")
+
+    def test_linestart_det_scan_quote_without_disposition_stays_finding(self):
+        # SHIP ROUND-1 fix 3b: a LINE-START "det-scan: [" quote WITHOUT the
+        # needs_judgment disposition is a human finding quoting scanner
+        # output, not the artifact itself — the thread-shape conjunction
+        # requires both the producer header AND the disposition line, so a
+        # bare fenced quote stays a finding.
+        body = ("**Important** — the quoted scanner line below is evidence "
+                "for my concern, not a scanner thread\n\n```\n"
+                "det-scan: [gitleaks] aws-key — src/app.py:42\n```\n")
+        self.assertNotIn("**Disposition: needs_judgment**", body)
+        self.assertFalse(omni_verdict.is_artifact(body))
+        rec = omni_verdict.classify_thread(
+            thread("d3", body, file_path="src/app.py"), verification=None)
+        self.assertNotEqual(rec["disposition"], "artifact")
+        self.assertEqual(rec["disposition"], "not_fixed")
 
     def test_severity_and_kind_extracted(self):
         rec = omni_verdict.classify_thread(
