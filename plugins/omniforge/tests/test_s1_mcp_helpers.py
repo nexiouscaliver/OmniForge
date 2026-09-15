@@ -742,7 +742,7 @@ class TestSSelftest:
                     entry["body"] = fh.read().decode("latin1")
             with open(os.environ["GLAB_STUB_RECORD"], "a") as fh:
                 fh.write(json.dumps(entry) + "\\n")
-            if "uploads" in sys.argv:
+            if any("uploads" in a for a in sys.argv):
                 sys.stdout.write(json.dumps({
                     "markdown": "![x](/uploads/a.png)",
                     "url": "/uploads/a.png"}))
@@ -761,7 +761,8 @@ class TestSSelftest:
         assert proc.returncode == 0
         assert proc.stdout.splitlines() == ["BOUNDARY VERDICT: OK"]
         entries = [json.loads(line) for line in record.read_text().splitlines()]
-        upload = next(e for e in entries if "uploads" in e["argv"])
+        upload = next(e for e in entries
+                      if any("uploads" in a for a in e["argv"]))
         header = upload["argv"][upload["argv"].index("-H") + 1]
         assert header == (
             "Content-Type: multipart/form-data; boundary=omniforge-upload-3f2a8c1d")
