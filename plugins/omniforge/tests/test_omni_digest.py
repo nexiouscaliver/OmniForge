@@ -109,6 +109,20 @@ BOT_SUMMARY_NOTE = """
 Solid change; one important fix needed before merge.
 """
 
+# SC-9: the fix brief is posted wrapped in ONE fenced markdown block
+# (wrap_brief_md_block) — the "## OmniForge fix brief" heading sits one
+# line BELOW the opening fence, so it never starts the body. Deliberately
+# longer than PROSE_CAP: misclassification as prose would cap it at 500.
+WRAPPED_FIX_BRIEF = (
+    "````markdown\n"
+    "## OmniForge fix brief — paste this into your coding agent\n"
+    "\n"
+    "Fix the null-guard drift reported on this MR.\n"
+    "\n"
+    + "Step context. " * 80 + "\n"
+    "````"
+)
+
 
 def mr_data(**overrides):
     d = {
@@ -184,6 +198,37 @@ class TestOmniDigest(unittest.TestCase):
         self.assertTrue(st["retrospective"])
         self.assertEqual(st["prior_count"], 2)
         self.assertEqual(st["threads_total"], 2)
+
+    # --- AC-T7: the wrapped fix brief is a bot artifact, verbatim ---------
+
+    def test_wrapped_fix_brief_carried_verbatim(self):
+        # SC-9 wrap: the brief's "## OmniForge" heading is one line below
+        # the opening fence, so the startswith arm alone misses it — the
+        # note must STILL classify as a bot artifact and ride VERBATIM in
+        # the digest and prior-findings, never as 500-char-capped prose.
+        self.assertGreater(len(WRAPPED_FIX_BRIEF), PROSE_CAP)
+        d = tmp_dir(self)
+        mr = write_json(d, "mr.json", mr_data(diff="", comments=""))
+        disc = write_json(d, "disc.json", discussions_payload([
+            thread("brief01", WRAPPED_FIX_BRIEF,
+                   created_at="2026-09-01T10:00:00Z"),
+        ]))
+        out = os.path.join(d, "out")
+        proc = run_digest(mr, disc, out_dir=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        digest = read_file(out, "digest.md")
+        self.assertIn(WRAPPED_FIX_BRIEF, digest)      # byte-verbatim body
+        self.assertNotIn("[…truncated ", digest)      # never capped as prose
+        with open(os.path.join(out, "prior-findings.json"),
+                  encoding="utf-8") as fh:
+            prior = json.load(fh)
+        self.assertTrue(prior["retrospective"])
+        self.assertEqual([p["body"] for p in prior["prior_findings"]],
+                         [WRAPPED_FIX_BRIEF])         # verbatim prior body
+        st = stdout_json(proc)
+        self.assertTrue(st["retrospective"])
+        self.assertEqual(st["prior_count"], 1)
+        self.assertEqual(st["threads_truncated"], 0)
 
     # --- AC-T5.2: human prose cap + exact marker ------------------------
 

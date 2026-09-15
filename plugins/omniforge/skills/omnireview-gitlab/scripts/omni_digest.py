@@ -55,11 +55,18 @@ def truncate_prose(text):
 
 def is_omniforge_note(body):
     """Content-based OmniForge detection: the summary-note header, or the
-    posted-finding template (severity line + confidence + attribution)."""
-    return body.lstrip().startswith(OMNIFORGE_HEADER) or (
-        ("**Critical** — " in body or "**Important** — " in body
-         or "**Minor** — " in body)
-        and "Confidence: " in body and "Found by:" in body)
+    posted-finding template (severity line + confidence + attribution).
+
+    The header arm also matches at any LINE start ('\\n' + header): the fix
+    brief is posted wrapped in a fenced markdown block (wrap_brief_md_block,
+    SC-9), so its heading sits one line below the opening fence and never
+    starts the body. Same marker matching as omni_verdict.py is_artifact —
+    no fence parsing."""
+    return (body.lstrip().startswith(OMNIFORGE_HEADER)
+            or ("\n" + OMNIFORGE_HEADER) in body
+            or (("**Critical** — " in body or "**Important** — " in body
+                 or "**Minor** — " in body)
+                and "Confidence: " in body and "Found by:" in body))
 
 
 def note_bodies(d):
