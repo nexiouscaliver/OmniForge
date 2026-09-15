@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "mr": {
+    "project_id": 73279395,
+    "iid": 136,
+    "head_sha": "bbb222",
+    "base_sha": "aaa111"
+  },
+  "scan": {
+    "status": "ok",
+    "reason": "",
+    "tools": [
+      {
+        "name": "gitleaks",
+        "version": "8.18.0",
+        "duration_s": 4.2,
+        "status": "ok"
+      },
+      {
+        "name": "opengrep",
+        "version": "1.2.3",
+        "duration_s": 11.5,
+        "status": "ok"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "tool": "gitleaks",
+      "rule_id": "aws-access-key",
+      "file": "src/app.py",
+      "line": 42,
+      "severity": "critical",
+      "class": "secret",
+      "preview_redacted": "AWS Access Key ID=REDACTED:secret:ab12cd34"
+    },
+    {
+      "tool": "opengrep",
+      "rule_id": "sql-injection",
+      "file": "src/util.py",
+      "line": 7,
+      "severity": "medium",
+      "class": "vuln",
+      "preview_redacted": "query = f\"SELECT * FROM t WHERE id={REDACTED:secret:ef56ab78}\""
+    }
+  ],
+  "meta": {
+    "capped": false,
+    "overflow_not_adjudicated": 0,
+    "redaction": "REDACTED:<type>:<hash8>"
+  }
+}
