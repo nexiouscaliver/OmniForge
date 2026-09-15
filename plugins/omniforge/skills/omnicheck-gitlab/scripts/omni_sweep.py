@@ -605,7 +605,10 @@ class ClaudeSpawnProvider:
     def __init__(self, timeout=None):
         # D11: the ENGINE kill at OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS is the
         # binding ceiling — this per-call timeout sits 60s above it (fallback
-        # 660 = engine default 600 + 60; replaces the old hardcoded 300).
+        # 660 = 600 + 60; the engine's PLUGIN_TIMEOUT_SECS is today 240 and
+        # is spec-raised to 600 in the engine task, so the +60 grace keeps
+        # the engine kill binding in both cases; replaces the old hardcoded
+        # 300).
         if timeout is None:
             timeout = _env_int_positive(
                 "OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS", 660) + 60
@@ -912,8 +915,9 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
 
 
 def build_batch_prompt(packets):
-    """The ONE batched structured call per sweep: all findings, capped
-    candidate hunks, JSON reply contract (template:
+    """The batched structured call, one per chunk (a batch over
+    CHUNK_THRESHOLD splits once into two, SC-1): that chunk's findings,
+    capped candidate hunks, JSON reply contract (template:
     ../references/sweep-prompt.md)."""
     payload = json.dumps(packets, indent=1)
     return (

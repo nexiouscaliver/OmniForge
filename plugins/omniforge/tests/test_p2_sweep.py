@@ -491,8 +491,15 @@ def _chunk_repo(n_open):
 
 def _reload_with_env(over):
     """A fresh omni_sweep module loaded under a patched environment — the
-    OMNIFORGE_SWEEP_CHUNK_THRESHOLD knob is read at import time."""
-    saved = {k: os.environ.get(k) for k in over}
+    OMNIFORGE_SWEEP_CHUNK_THRESHOLD knob is read at import time. Ambient
+    OMNIFORGE_* knobs are scrubbed for the load (the e2e test's env
+    hygiene) so a dev box exporting them can't leak in; `over` wins."""
+    saved = {k: os.environ.get(k)
+             for k in list(over) + [k for k in os.environ
+                                    if k.startswith("OMNIFORGE_")]}
+    for k in saved:
+        if k not in over:
+            os.environ.pop(k, None)
     for k, v in over.items():
         os.environ[k] = v
     try:
@@ -510,14 +517,21 @@ class TestChunkThresholdAndSplit(unittest.TestCase):
     ONCE into contiguous halves (first ceil(n/2), rest); each chunk gets its
     own evidence budget, prompt, and model call."""
 
+    @classmethod
+    def setUpClass(cls):
+        # The module-level omni_sweep baked its CHUNK_THRESHOLD in from
+        # ambient env at import time — exercise a scrubbed reload so a dev
+        # box exporting the knob can't skew the 15/16 boundary.
+        cls.sweep = _reload_with_env({})
+
     def test_threshold_boundary_15_one_call_16_two(self):
         with _chunk_repo(15) as (path, reviewed, head, findings):
             provider = ChunkProvider()
-            omni_sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
             self.assertEqual(len(provider.calls), 1)   # 15 open: at threshold
         with _chunk_repo(16) as (path, reviewed, head, findings):
             provider = ChunkProvider()
-            omni_sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
             self.assertEqual(len(provider.calls), 2)   # 16 open: chunked
             sizes = [len(_prompt_packets(c["prompt"]))
                      for c in provider.calls]
@@ -528,7 +542,7 @@ class TestChunkThresholdAndSplit(unittest.TestCase):
         # threshold (split ONCE, never recursively)
         with _chunk_repo(31) as (path, reviewed, head, findings):
             provider = ChunkProvider()
-            omni_sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
             self.assertEqual(len(provider.calls), 2)
             sizes = [len(_prompt_packets(c["prompt"]))
                      for c in provider.calls]
@@ -548,7 +562,7 @@ class TestChunkThresholdAndSplit(unittest.TestCase):
         # per-chunk budget is the fix being pinned here.
         with _chunk_repo(16) as (path, reviewed, head, findings):
             provider = ChunkProvider()
-            omni_sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
             self.assertEqual(len(provider.calls), 2)
             chunk1 = _prompt_packets(provider.calls[0]["prompt"])
             chunk2 = _prompt_packets(provider.calls[1]["prompt"])
