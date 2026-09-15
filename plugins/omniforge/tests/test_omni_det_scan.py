@@ -534,7 +534,7 @@ class DetScanCliTests(unittest.TestCase):
 
     # ── helpers (raw_poster mirror) ────────────────────────────────────
 
-    def tmp_packet(self, source, mutate=None):
+    def tmp_packet(self, source="detfilter_packet_ok.json", mutate=None):
         """Copy a packet fixture (name or already-parsed dict) into self.tmp;
         mutate(obj) may edit it in place first. tmp copies keep os.utime
         mtime control and in-memory variants OUT of the repo."""

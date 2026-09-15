@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""omni_det_scan.py — det-scan v1 evidence consumer (pure packet layer, T1).
+"""omni_det_scan.py — det-scan v1 evidence consumer (packet layer + network
+engine + CLI).
 
 An external engine scanner stage produces "det-scan v1" evidence packets for
 GitLab MRs; this script consumes one packet and posts it onto the MR as
@@ -9,7 +10,7 @@ an explicit `needs_judgment` disposition. Scanner = evidence, model = verdict
 — no plugin component ever auto-resolves these threads, and the flow never
 touches GitLab labels.
 
-This file currently implements ONLY the pure packet layer (T1):
+This file implements the pure packet layer:
 
 - `load_packet` — read + JSON-parse; OSError -> UsageError
   "packet-unreadable", ValueError (json.JSONDecodeError AND
@@ -35,7 +36,8 @@ assembly are NEVER re-implemented): omni_glab_api (transport, incl. get_all),
 omni_post_review (thread_form, path builders, guards), omni_fetch_mr
 (assemble_diff + parse_diff_line_map anchor chain). The network engine layer
 (T2) adds the FR-4 head-sha guard, the FR-8 anchor chain, and the FR-3 dedup
-guard; the CLI arrives in T3. Zero network at import time.
+guard. The CLI layer (T3) adds parse_args/main/emit — the pinned guard order,
+posting, dry-run, and the one-JSON-line receipt. Zero network at import time.
 """
 
 import argparse
@@ -393,3 +395,215 @@ def newer_det_scan_note(project, mr, since, token, host, attempts,
         if created is not None and created > since:
             return note
     return None
+
+
+# ── CLI (T3): guard order, posting, dry-run, receipt (FR-2/5/7-11, A5) ──────
+
+
+def parse_args(argv=None):
+    """The det-scan consumer flags. NO --token — the token resolves from
+    env only (GITLAB_TOKEN > OMNIFORGE_GITLAB_TOKEN), and only on real
+    (non-dry) runs after every local guard has passed (A5d)."""
+    ap = argparse.ArgumentParser(
+        description="det-scan v1 evidence consumer: one packet in, one "
+                    "summary note + one inline thread per anchorable "
+                    "finding out (one JSON receipt line on stdout).")
+    ap.add_argument("--packet", required=True,
+                    help="path to the det-scan v1 evidence packet JSON")
+    ap.add_argument("--project", required=True,
+                    help="GitLab project ID, pre-encoded URL path, or bare "
+                         "full path (group/subgroup/project — URL-encoded "
+                         "automatically)")
+    ap.add_argument("--mr", required=True, help="merge request IID")
+    ap.add_argument("--since", type=float, default=0,
+                    help="scan-round epoch for the staleness and dedup "
+                         "guards (default 0: the age guard is dormant and "
+                         "any existing det-scan note refuses)")
+    ap.add_argument("--host", default=None,
+                    help="GitLab host (default: GITLAB_HOST env, "
+                         "CI_API_V4_URL env, then https://gitlab.com)")
+    ap.add_argument("--force", action="store_true",
+                    help="override the det-scan dedup guard")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the planned API calls, execute nothing "
+                         "(works without a token)")
+    ap.add_argument("--packet-epoch", type=float, default=None,
+                    help="override the packet file's mtime as its "
+                         "effective epoch")
+    ap.add_argument("--attempts", type=int, default=3,
+                    help="max attempts per API call (default 3)")
+    ap.add_argument("--backoff-base", type=float, default=2,
+                    help="exponential backoff base seconds "
+                         "(default 2: 2 s then 4 s)")
+    args = ap.parse_args(argv)
+    if args.attempts < 1:
+        ap.error("--attempts must be >= 1")            # exits 2
+    if args.backoff_base < 0:
+        ap.error("--backoff-base must be >= 0")
+    return args
+
+
+def main(argv=None):
+    # 1. parse + start
+    start = time.time()
+    args = parse_args(argv)
+
+    # 2. load / validate / mr-match -> exit 2, NO stdout receipt
+    try:
+        pkt = load_packet(args.packet)
+    except UsageError as e:
+        print("omni_det_scan: %s" % e, file=sys.stderr)
+        return EXIT_USAGE
+    reason = validate_packet(pkt)
+    if reason is None and not packet_mr_matches(pkt, args.mr, args.project):
+        reason = "packet-mr-mismatch"
+    if reason is not None:
+        print("omni_det_scan: %s" % reason, file=sys.stderr)
+        return EXIT_USAGE
+
+    findings = pkt["findings"]
+
+    # 3. staleness (local, no network): --packet-epoch overrides mtime
+    effective_epoch = args.packet_epoch if args.packet_epoch is not None \
+        else os.stat(args.packet).st_mtime
+
+    # Live posting state — the exit-1 receipt reports exactly the artifacts
+    # that succeeded (prior artifacts stay; no rollback).
+    counts = {"posted_summary": False, "threads": 0, "unanchored": 0,
+              "failures": 0}
+
+    def emit(action="skipped", skip_reason=None, posted_summary=None,
+             threads=None, unanchored=None, planned_findings=0, dry_run=False,
+             failures=None):
+        """Print exactly ONE JSON receipt line — exits 0/1/3 only, never 2.
+        Unspecified counts fall through to the live posting state; the
+        receipt carries counts and shas ONLY (never previews or packet body
+        text); planned_findings is nonzero only on the dry-run path."""
+        receipt = {
+            "action": action,
+            "skip_reason": skip_reason,
+            "posted_summary": counts["posted_summary"]
+            if posted_summary is None else posted_summary,
+            "threads": counts["threads"] if threads is None else threads,
+            "unanchored": counts["unanchored"]
+            if unanchored is None else unanchored,
+            "planned_findings": planned_findings,
+            "findings_total": len(findings),
+            "scan_status": pkt["scan"]["status"],
+            "packet_epoch": effective_epoch,
+            "head_sha": pkt["mr"]["head_sha"],
+            "dry_run": dry_run,
+            "failures": counts["failures"] if failures is None else failures,
+            "elapsed_ms": int(round((time.time() - start) * 1000)),
+        }
+        print(json.dumps(receipt))
+        return receipt
+
+    if effective_epoch < args.since:
+        print("omni_det_scan: REFUSING to post — stale packet: epoch %s < "
+              "--since %s" % (effective_epoch, args.since), file=sys.stderr)
+        emit(skip_reason="stale-packet")
+        return EXIT_GUARD
+
+    # 4. scan-status skipped: the benign exit-0 no-op — NOTHING posted, no
+    # network (evaluated BEFORE every network guard, R10: a skipped scan
+    # reports the skip regardless of head state)
+    if pkt["scan"]["status"] == "skipped":
+        emit(action="skipped",
+             skip_reason="scan-skipped:%s" % pkt["scan"]["reason"])
+        return EXIT_OK
+
+    # 5. dry-run: all local guards done, the token is NEVER resolved here,
+    # zero transport calls. N+1 plan lines — ONE notes POST for the summary
+    # plus ONE discussions POST per packet finding (ALL N: anchorability is
+    # unknown without the diff) rendered with the sibling PLACEHOLDER_REFS.
+    if args.dry_run:
+        omni_post_review.dry_line(
+            "POST", omni_post_review.notes_base_path(args.project, args.mr),
+            [("body", summary_body(pkt, args.mr, len(findings), []))])
+        for finding in findings:
+            omni_post_review.dry_line(
+                "POST",
+                omni_post_review.discussions_path(args.project, args.mr),
+                omni_post_review.thread_form(
+                    thread_body(finding), omni_post_review.PLACEHOLDER_REFS,
+                    finding["file"], finding["line"]))
+        emit(action="posted", posted_summary=True, threads=0, unanchored=0,
+             planned_findings=len(findings), dry_run=True)
+        return EXIT_OK
+
+    # 6. token (A5d: AFTER all local guards — a stale packet with no token
+    # already exited 3 above), env only
+    token = omni_glab_api.resolve_token()
+    if not token:
+        print("omni_det_scan: GITLAB_TOKEN is not set — fix:\n  %s"
+              % omni_post_review.TOKEN_FIX, file=sys.stderr)
+        return EXIT_USAGE
+
+    try:
+        # 7. head-sha (network guard 1): the ONE MR metadata GET per
+        # invocation (N+1 discipline) — its refs also anchor every thread
+        refs, _meta = omni_post_review.fetch_mr(
+            args.project, args.mr, token, args.host, args.attempts,
+            args.backoff_base, need_refs=True)
+        if not head_sha_matches(pkt["mr"]["head_sha"],
+                                refs.get("head_sha", "")):
+            print("omni_det_scan: REFUSING to post — packet head %s != MR "
+                  "head %s" % (pkt["mr"]["head_sha"][:8],
+                               refs.get("head_sha", "")[:8]),
+                  file=sys.stderr)
+            emit(skip_reason="head-sha-mismatch")
+            return EXIT_GUARD
+
+        # 8. dedup (network guard 2): runs AFTER head-sha so a moved head
+        # reports head-sha-mismatch, not a misleading dedup refusal
+        if not args.force:
+            note = newer_det_scan_note(args.project, args.mr, args.since,
+                                       token, args.host, args.attempts,
+                                       args.backoff_base)
+            if note is not None:
+                print("omni_det_scan: REFUSING to post — a det-scan note "
+                      "(created %s) newer than --since %s already exists on "
+                      "MR !%s; pass --force to override"
+                      % (note.get("created_at"), args.since, args.mr),
+                      file=sys.stderr)
+                emit(skip_reason="det-scan-already-posted")
+                return EXIT_GUARD
+
+        # 9. anchor + post: summary FIRST, then one thread per ANCHORABLE
+        # finding in packet order — unanchorable findings are disclosed in
+        # the summary, never silently dropped (FR-8)
+        anchor_map = fetch_anchor_map(args.project, args.mr, token, args.host,
+                                      args.attempts, args.backoff_base)
+        anchored, unanchored = split_findings(pkt, anchor_map)
+        counts["unanchored"] = len(unanchored)
+        omni_glab_api.request(
+            "POST", omni_post_review.notes_base_path(args.project, args.mr),
+            token, host=args.host,
+            form=[("body", summary_body(pkt, args.mr, len(anchored),
+                                        unanchored))],
+            attempts=args.attempts, backoff_base=args.backoff_base)
+        counts["posted_summary"] = True
+        for finding in anchored:
+            omni_glab_api.request(
+                "POST",
+                omni_post_review.discussions_path(args.project, args.mr),
+                token, host=args.host,
+                form=omni_post_review.thread_form(
+                    thread_body(finding), refs, finding["file"],
+                    finding["line"]),
+                attempts=args.attempts, backoff_base=args.backoff_base)
+            counts["threads"] += 1
+    except (omni_glab_api.GlabApiError, omni_post_review.PostingError) as e:
+        counts["failures"] += 1
+        print("omni_det_scan: %s" % e, file=sys.stderr)
+        emit(action="posted")
+        return EXIT_API
+
+    # 10. posted
+    emit(action="posted", posted_summary=True, threads=len(anchored))
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())
