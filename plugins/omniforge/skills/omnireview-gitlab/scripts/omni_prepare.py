@@ -552,7 +552,9 @@ def _wipe_run_dir(run_dir):
     after preconditions, before the fetch: a failing invocation never
     destroys a prior run's artifacts."""
     for name in os.listdir(run_dir):
-        if name == PHASES_NAME:
+        # det-scan.txt: the det-scan pre-step receipt survives the
+        # same-phase wipe (the phases.jsonl exemption precedent)
+        if name in (PHASES_NAME, "det-scan.txt"):
             continue
         path = os.path.join(run_dir, name)
         if os.path.isdir(path) and not os.path.islink(path):

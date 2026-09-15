@@ -35,6 +35,7 @@ import os
 import sys
 
 OMNIFORGE_HEADER = "## OmniForge"
+SCANNER_EVIDENCE_HEADER = "det-scan:"
 PROSE_CAP, HEAD, TAIL = 500, 400, 60
 BUDGET = 8000
 
@@ -60,6 +61,15 @@ def is_omniforge_note(body):
         ("**Critical** — " in body or "**Important** — " in body
          or "**Minor** — " in body)
         and "Confidence: " in body and "Found by:" in body)
+
+
+def is_scanner_evidence_note(body):
+    """det-scan scanner-evidence body: bot-artifact treatment in the RENDER
+    path only (verbatim, uncapped, budget-protected). NEVER extends
+    is_omniforge_note — that predicate feeds build_prior_findings, and
+    det-scan threads must NOT enter the never-re-adjudicate priors
+    channel."""
+    return body.lstrip().startswith(SCANNER_EVIDENCE_HEADER)
 
 
 def note_bodies(d):
@@ -215,7 +225,7 @@ def build_thread_blocks(threads):
             locus_str(t))
         segs, hit = [], False
         for body in t["notes"]:
-            if is_omniforge_note(body):
+            if is_omniforge_note(body) or is_scanner_evidence_note(body):
                 segs.append(("bot", body))
             else:
                 if len(body) > PROSE_CAP:

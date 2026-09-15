@@ -56,6 +56,11 @@ _ARTIFACT_BODY_MARKERS = (
     "**Push check complete — head ",         # the per-sweep breadcrumb
     "Push sweep at `",                       # a transition reply
     "**⚠ Model leg unavailable this sweep",  # the degraded banner
+    # det-scan scanner-evidence threads: needs_judgment inputs pending
+    # model adjudication, never fix-targets (matched at stripped start or
+    # line start, like the sweep markers above; a mid-line quote stays a
+    # finding)
+    "det-scan:",
 )
 
 _ROUND_SUMMARY_MARKER = re.compile(
