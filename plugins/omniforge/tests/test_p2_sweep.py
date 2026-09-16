@@ -7,11 +7,13 @@ rev 3), skip conditions, and the provider contract (claude -p spawn is the
 only live path; the direct provider API stays a stub).
 """
 
+import contextlib
 import importlib.util
 import json
 import os
 import subprocess
 import unittest
+from unittest import mock
 
 SCRIPTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
                                        "skills", "omnicheck-gitlab", "scripts"))
@@ -365,7 +367,7 @@ class TestSweepEndToEndOffline(unittest.TestCase):
             findings = [p2_finding("f1", "run() is unguarded", "src/app.py", 2)]
 
             class FakeProvider:
-                def call(self, prompt):
+                def call(self, prompt, session_id=None):
                     return json.dumps([{
                         "finding_id": "f1", "verdict": "fixed",
                         "evidence_hunk_id": "src/runners.py:H1",
@@ -400,7 +402,7 @@ class TestSweepEndToEndOffline(unittest.TestCase):
                                   capture_output=True, text=True).stdout.strip()
 
             class ExplodingProvider:
-                def call(self, prompt):
+                def call(self, prompt, session_id=None):
                     raise AssertionError("dry run must not call the provider")
 
             result = omni_sweep.run_sweep(
@@ -410,6 +412,338 @@ class TestSweepEndToEndOffline(unittest.TestCase):
             self.assertEqual(result["verdicts"][0]["verdict"], "needs_judgment")
             self.assertIn("dry run", result["verdicts"][0]["reason"])
             self.assertTrue(result["report"])
+
+
+def _prompt_packets(prompt):
+    """The packets JSON payload out of one build_batch_prompt string."""
+    return json.loads(prompt.split("Findings:\n", 1)[1])
+
+
+class ChunkProvider:
+    """Chunking test double: records every model call (prompt + the
+    session_id kwarg run_sweep threads through); replies come from
+    `replies` (one per call) or echo the prompt's finding ids; call
+    indexes in `fail_on` raise — the per-chunk degrade path."""
+
+    def __init__(self, replies=None, fail_on=()):
+        self.calls = []
+        self.replies = list(replies or [])
+        self.fail_on = set(fail_on)
+
+    def call(self, prompt, session_id=None):
+        index = len(self.calls)
+        self.calls.append({"prompt": prompt, "session_id": session_id})
+        if index in self.fail_on:
+            raise RuntimeError("spawn boom %d" % index)
+        if index < len(self.replies):
+            return self.replies[index]
+        ids = [p["finding_id"] for p in _prompt_packets(prompt)]
+        return json.dumps([
+            {"finding_id": i, "verdict": "not_fixed",
+             "evidence_hunk_id": None, "confidence": 80,
+             "one_line": "call-%d" % index} for i in ids])
+
+
+@contextlib.contextmanager
+def _chunk_repo(n_open):
+    """A push delta with a small a.py fix, a big.py carrying 8 oversized
+    hunks, and a deleted gone.py. Open findings f1..fN anchored at a.py,
+    except f8 (big.py — its packet alone exceeds MAX_PACKET_CHARS), plus
+    one obsolete-anchored finding on the deleted file."""
+    import pathlib
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        path, git = p2_repo(pathlib.Path(td), "chunky")
+        base_big = ["line %03d" % i for i in range(1, 241)]
+        p2_write(path, "a.py", "keep = 0\nx = 1\n")
+        p2_write(path, "big.py", "\n".join(base_big) + "\n")
+        p2_write(path, "gone.py", "g = 1\n")
+        p2_commit(git, "base")
+        reviewed = subprocess.run(
+            ["git", "-C", path, "rev-parse", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+        push_big = []
+        for lineno, line in enumerate(base_big, start=1):
+            if lineno in (10, 40, 70, 100, 130, 160, 190, 220):
+                push_big.extend("# fat %03d %s" % (lineno, "z" * 84)
+                                for _ in range(45))
+            else:
+                push_big.append(line)
+        p2_write(path, "big.py", "\n".join(push_big) + "\n")
+        p2_write(path, "a.py", "keep = 0\nx = 2\n")
+        os.remove(os.path.join(path, "gone.py"))
+        p2_commit(git, "push")
+        head = subprocess.run(
+            ["git", "-C", path, "rev-parse", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+        findings = [p2_finding("f%d" % i, "small concern", "a.py", 1)
+                    for i in range(1, n_open + 1)]
+        if n_open >= 8:
+            # f8 (chunk 1's LAST finding at the 16-finding split) carries
+            # the oversized packet: everything before it in chunk 1 keeps
+            # evidence, and only a fresh chunk-2 budget can save the
+            # findings after it.
+            findings[7] = p2_finding("f8", "the oversized concern",
+                                     "big.py", 5)
+        findings.append(p2_finding("gone1", "deleted locus", "gone.py", 1))
+        yield path, reviewed, head, findings
+
+
+def _reload_with_env(over):
+    """A fresh omni_sweep module loaded under a patched environment — the
+    OMNIFORGE_SWEEP_CHUNK_THRESHOLD knob is read at import time. Ambient
+    OMNIFORGE_* knobs are scrubbed for the load (the e2e test's env
+    hygiene) so a dev box exporting them can't leak in; `over` wins."""
+    saved = {k: os.environ.get(k)
+             for k in list(over) + [k for k in os.environ
+                                    if k.startswith("OMNIFORGE_")]}
+    for k in saved:
+        if k not in over:
+            os.environ.pop(k, None)
+    for k, v in over.items():
+        os.environ[k] = v
+    try:
+        return _load("omni_sweep")
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+class TestChunkThresholdAndSplit(unittest.TestCase):
+    """SC-1/D1/D2: batches over CHUNK_THRESHOLD (15, env-overridable) split
+    ONCE into contiguous halves (first ceil(n/2), rest); each chunk gets its
+    own evidence budget, prompt, and model call."""
+
+    @classmethod
+    def setUpClass(cls):
+        # The module-level omni_sweep baked its CHUNK_THRESHOLD in from
+        # ambient env at import time — exercise a scrubbed reload so a dev
+        # box exporting the knob can't skew the 15/16 boundary.
+        cls.sweep = _reload_with_env({})
+
+    def test_threshold_boundary_15_one_call_16_two(self):
+        with _chunk_repo(15) as (path, reviewed, head, findings):
+            provider = ChunkProvider()
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.assertEqual(len(provider.calls), 1)   # 15 open: at threshold
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            provider = ChunkProvider()
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.assertEqual(len(provider.calls), 2)   # 16 open: chunked
+            sizes = [len(_prompt_packets(c["prompt"]))
+                     for c in provider.calls]
+            self.assertEqual(sizes, [8, 8])             # ceil(16/2) halves
+
+    def test_odd_batch_ceils_and_chunk_sizes_exceed_no_cap(self):
+        # 31 findings split 16/15 — chunks may themselves exceed the
+        # threshold (split ONCE, never recursively)
+        with _chunk_repo(31) as (path, reviewed, head, findings):
+            provider = ChunkProvider()
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.assertEqual(len(provider.calls), 2)
+            sizes = [len(_prompt_packets(c["prompt"]))
+                     for c in provider.calls]
+            self.assertEqual(sizes, [16, 15])
+            # contiguous: no finding in both chunks
+            ids1 = {p["finding_id"] for p in _prompt_packets(
+                provider.calls[0]["prompt"])}
+            ids2 = {p["finding_id"] for p in _prompt_packets(
+                provider.calls[1]["prompt"])}
+            self.assertFalse(ids1 & ids2)
+            self.assertEqual(len(ids1 | ids2), 31)
+
+    def test_per_chunk_fresh_evidence_budget(self):
+        # f8's oversized big.py packet alone exhausts a MAX_PACKET_CHARS
+        # budget (it truncates even on a fresh one); a budget SHARED across
+        # the two calls would starve every chunk-2 finding — the fresh
+        # per-chunk budget is the fix being pinned here.
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            provider = ChunkProvider()
+            self.sweep.run_sweep(path, reviewed, head, findings, provider)
+            self.assertEqual(len(provider.calls), 2)
+            chunk1 = _prompt_packets(provider.calls[0]["prompt"])
+            chunk2 = _prompt_packets(provider.calls[1]["prompt"])
+            self.assertFalse(chunk1[0].get("no_evidence"))  # f1 keeps evidence
+            self.assertEqual(chunk1[-1]["finding_id"], "f8")
+            self.assertTrue(chunk1[-1].get("evidence_truncated"))
+            for packet in chunk2:
+                self.assertTrue(packet["candidate_hunks"],
+                                packet["finding_id"])
+
+    def test_env_chunk_threshold_override(self):
+        mod = _reload_with_env({"OMNIFORGE_SWEEP_CHUNK_THRESHOLD": "4"})
+        self.assertEqual(mod.CHUNK_THRESHOLD, 4)
+        with _chunk_repo(5) as (path, reviewed, head, findings):
+            provider = ChunkProvider()
+            mod.run_sweep(path, reviewed, head, findings, provider)
+            self.assertEqual(len(provider.calls), 2)
+        self.assertEqual(_reload_with_env(
+            {"OMNIFORGE_SWEEP_CHUNK_THRESHOLD": "0"}).CHUNK_THRESHOLD, 15)
+        self.assertEqual(_reload_with_env(
+            {"OMNIFORGE_SWEEP_CHUNK_THRESHOLD": "abc"}).CHUNK_THRESHOLD, 15)
+
+
+class TestChunkMergeAndDegrade(unittest.TestCase):
+    """D2: merge order (obsolete-loci synthesized verdicts, then chunk-1,
+    then chunk-2), the per-chunk id-set DROP, the single citation-rule pass
+    over the concatenated packets, and per-chunk model-failure degrade."""
+
+    def test_merged_order_obsolete_then_chunk1_then_chunk2(self):
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                          ChunkProvider())
+            self.assertEqual(
+                [v["finding_id"] for v in result["verdicts"]],
+                ["gone1"] + ["f%d" % i for i in range(1, 17)])
+            self.assertEqual(result["verdicts"][0]["verdict"], "obsolete")
+
+    def test_cross_chunk_verdict_is_dropped(self):
+        # render_report's by_id map is last-wins: a chunk-2 verdict
+        # hallucinating a chunk-1 finding_id would shadow the real verdict.
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            provider = ChunkProvider(replies=[
+                json.dumps([{"finding_id": "f1", "verdict": "not_fixed",
+                             "evidence_hunk_id": None, "confidence": 80,
+                             "one_line": "real chunk-1 verdict"}]),
+                json.dumps([{"finding_id": "f1", "verdict": "fixed",
+                             "evidence_hunk_id": "a.py:H1",
+                             "confidence": 99,
+                             "one_line": "hallucinated shadow"},
+                            {"finding_id": "f9", "verdict": "not_fixed",
+                             "evidence_hunk_id": None, "confidence": 80,
+                             "one_line": "real chunk-2 verdict"}]),
+            ])
+            result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                          provider)
+            f1 = [v for v in result["verdicts"] if v["finding_id"] == "f1"]
+            self.assertEqual(len(f1), 1)
+            self.assertEqual(f1[0]["one_line"], "real chunk-1 verdict")
+            f9 = [v for v in result["verdicts"] if v["finding_id"] == "f9"]
+            self.assertEqual(f9[0]["one_line"], "real chunk-2 verdict")
+
+    def test_citation_rule_runs_once_over_merged_packets(self):
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            provider = ChunkProvider(replies=[
+                # chunk 1: f2 cites its own a.py hunk — survives
+                json.dumps([{"finding_id": "f2", "verdict": "fixed",
+                             "evidence_hunk_id": "a.py:H1",
+                             "confidence": 90, "one_line": "own hunk"}]),
+                # chunk 2: f9 cites a hunk in ITS candidate_hunks (only the
+                # merged packet list knows it); f10 cites a hunk in no
+                # packet at all — downgrade
+                json.dumps([{"finding_id": "f9", "verdict": "fixed",
+                             "evidence_hunk_id": "a.py:H1",
+                             "confidence": 90, "one_line": "own hunk"},
+                            {"finding_id": "f10", "verdict": "fixed",
+                             "evidence_hunk_id": "zz.py:H9",
+                             "confidence": 90, "one_line": "phantom"}]),
+            ])
+            result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                          provider)
+            by_id = {v["finding_id"]: v for v in result["verdicts"]}
+            self.assertEqual(by_id["f2"]["verdict"], "fixed")
+            self.assertEqual(by_id["f9"]["verdict"], "fixed")
+            self.assertEqual(by_id["f10"]["verdict"], "needs_judgment")
+            self.assertIn("citation", by_id["f10"]["reason"])
+
+    def test_chunk2_failure_degrades_chunk2_only(self):
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            provider = ChunkProvider(fail_on={1})
+            result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                          provider)
+            self.assertTrue(result["model_degraded"])
+            by_id = {v["finding_id"]: v for v in result["verdicts"]}
+            self.assertEqual(by_id["f2"]["one_line"], "call-0")  # chunk 1 kept
+            self.assertEqual(by_id["f9"]["verdict"], "needs_judgment")
+            self.assertIn("model unavailable", by_id["f9"]["reason"])
+            self.assertGreaterEqual(result["timings"]["model_s"], 0.0)
+
+    def test_chunk1_failure_degrades_chunk1_only(self):
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            provider = ChunkProvider(fail_on={0})
+            result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                          provider)
+            self.assertTrue(result["model_degraded"])
+            by_id = {v["finding_id"]: v for v in result["verdicts"]}
+            self.assertEqual(by_id["f2"]["verdict"], "needs_judgment")
+            self.assertIn("model unavailable", by_id["f2"]["reason"])
+            self.assertEqual(by_id["f9"]["one_line"], "call-1")  # chunk 2 kept
+
+
+class TestSessionsKey(unittest.TestCase):
+    """D11: result['sessions'] lists the session ids actually used, in call
+    order — call 1 rides the forwarded OMNIFORGE_SESSION_ID env, each
+    additional call mints a fresh uuid."""
+
+    def test_single_call_sessions_env_unset_then_set(self):
+        with _chunk_repo(5) as (path, reviewed, head, findings):
+            env = {k: v for k, v in os.environ.items()
+                   if k != "OMNIFORGE_SESSION_ID"}
+            with mock.patch.dict(os.environ, env, clear=True):
+                result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                              ChunkProvider())
+                self.assertEqual(result["sessions"], [])
+            with mock.patch.dict(os.environ, {"OMNIFORGE_SESSION_ID": "u1"}):
+                result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                              ChunkProvider())
+                self.assertEqual(result["sessions"], ["u1"])
+
+    def test_chunked_sessions_two_ids_first_is_env(self):
+        with _chunk_repo(16) as (path, reviewed, head, findings):
+            with mock.patch.dict(os.environ,
+                                 {"OMNIFORGE_SESSION_ID": "env-sid"}):
+                provider = ChunkProvider()
+                result = omni_sweep.run_sweep(path, reviewed, head, findings,
+                                              provider)
+                self.assertEqual(len(result["sessions"]), 2)
+                self.assertEqual(result["sessions"][0], "env-sid")
+                self.assertNotEqual(result["sessions"][1], "env-sid")
+                # call 1 rides the env (no explicit id); call 2 carries the
+                # minted one — and it must differ from the env id
+                self.assertIsNone(provider.calls[0]["session_id"])
+                self.assertEqual(provider.calls[1]["session_id"],
+                                 result["sessions"][1])
+
+
+class TestProviderSessionAndTimeout(unittest.TestCase):
+    """D11 wiring: the spawn timeout sits 60s above the forwarded engine
+    ceiling (env absent: fallback base 600, total 660 = engine default
+    600 + 60; replaces the old hardcoded 300), and build_command appends
+    --session-id only when one is known (explicit arg over the forwarded
+    env)."""
+
+    def test_timeout_from_env_plus_grace(self):
+        with mock.patch.dict(os.environ,
+                             {"OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS": "90"}):
+            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 150)
+        env = {k: v for k, v in os.environ.items()
+               if k != "OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 660)
+        with mock.patch.dict(
+                os.environ,
+                {"OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS": "garbage"}):
+            self.assertEqual(omni_sweep.ClaudeSpawnProvider().timeout, 660)
+
+    def test_build_command_session_id_flag(self):
+        provider = omni_sweep.ClaudeSpawnProvider()
+        env = {k: v for k, v in os.environ.items()
+               if k != "OMNIFORGE_SESSION_ID"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            cmd = provider.build_command("P")
+            self.assertEqual(cmd,
+                             ["claude", "-p", "P", "--output-format", "text"])
+            self.assertNotIn("--session-id", cmd)
+            self.assertEqual(provider.build_command("P", session_id="s2")[-2:],
+                             ["--session-id", "s2"])
+        with mock.patch.dict(os.environ, {"OMNIFORGE_SESSION_ID": "u"}):
+            self.assertEqual(provider.build_command("P")[-2:],
+                             ["--session-id", "u"])
+            self.assertEqual(provider.build_command("P", session_id="s2")[-2:],
+                             ["--session-id", "s2"])
 
 
 if __name__ == "__main__":

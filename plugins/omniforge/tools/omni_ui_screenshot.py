@@ -246,6 +246,12 @@ def decide_review_ask(state, round, detection, mr_state="opened",
         return _plan("none", "already_posted", state)
     if _asked_this_round(state, round):
         return _plan("none", "already_asked_this_round", state)
+    # A re-ask in this round already happened (decide_push_reask re-armed
+    # the request after an image landed): review_ask must not re-open it.
+    # The asked_round cap above cannot catch this - the re-ask advances
+    # only reasked_round, so asked_round can sit a round behind.
+    if _reasked_this_round(state, round):
+        return _plan("none", "reask_capped_this_round", state)
     # One bot thread: the first ask opens it; later-round asks ride it.
     if state["screenshot_state"] == STATE_REQUESTED and state["discussion_id"]:
         return _plan("ask", "round_reask_existing_thread", state,

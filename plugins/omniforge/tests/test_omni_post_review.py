@@ -143,10 +143,14 @@ def seed_brief_run(transport, project=PROJECT):
 
 
 def brief_posts(transport, project=PROJECT):
-    """POSTs to the notes endpoint whose body IS the fix brief."""
+    """POSTs to the notes endpoint whose body IS the fix brief (SC-9: the
+    posted body is the wrapped fenced-markdown block, so it starts with the
+    ````markdown fence line and the payload is headed "## OmniForge fix
+    brief")."""
     return [c for c in transport.calls if c[0] == "POST"
             and c[1] == summary_path(project)
-            and dict(c[2]).get("body", "").startswith("## OmniForge fix brief")]
+            and dict(c[2]).get("body", "").startswith(
+                "````markdown\n## OmniForge fix brief")]
 
 
 def summary_posts(transport, project=PROJECT):
@@ -806,7 +810,7 @@ class OmniPostReviewTests(unittest.TestCase):
         self.assertEqual(last[0], "POST")
         self.assertEqual(last[1], summary_path())
         self.assertTrue(dict(last[2])["body"].startswith(
-            "## OmniForge fix brief"))
+            "````markdown\n## OmniForge fix brief"))
         posted = brief_posts(self.transport)
         self.assertEqual(len(posted), 1)
         body = dict(posted[0][2])["body"]
