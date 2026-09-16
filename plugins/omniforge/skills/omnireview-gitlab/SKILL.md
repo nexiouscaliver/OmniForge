@@ -70,8 +70,8 @@ authenticated host glab (never printed):
 If the engine set `OMNIFORGE_DET_SCAN_PACKET` (and the file exists), consume the
 det-scan v1 evidence packet BEFORE the gather below — the posted evidence threads
 then ride this run's discussions envelope into the digest and the reviewer agents'
-context. Idempotency FIRST: skip re-invocation only when a prior POSTED receipt
-exists for the SAME head — `/tmp/omni_run_{id}/det-scan.txt` exists AND is
+context. Idempotency FIRST: skip re-invocation only when a prior POSTED non-dry-run
+receipt exists for the SAME head — `/tmp/omni_run_{id}/det-scan.txt` exists AND is
 non-empty (`test -s`) AND its `action` is `posted` AND its `head_sha` equals
 this packet's `mr.head_sha` (a round-2 packet for a new head is always consumed;
 an unparseable receipt or packet re-runs — fail open). Refusal receipts (exit-3
@@ -89,7 +89,7 @@ import json, sys
 try:
     packet = json.load(open(sys.argv[1]))
     receipt = json.loads(open(sys.argv[2]).readline())
-    same = (receipt.get("action") == "posted") and receipt.get("head_sha") == packet["mr"]["head_sha"]
+    same = (receipt.get("action") == "posted") and not receipt.get("dry_run") and receipt.get("head_sha") == packet["mr"]["head_sha"]
 except ValueError:
     same = False
 sys.exit(0 if same else 1)
