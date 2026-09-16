@@ -70,7 +70,12 @@ def is_scanner_evidence_note(body):
     `det-scan:` note no longer buys bot-render privileges. NEVER extends
     is_omniforge_note — that predicate feeds build_prior_findings, and
     det-scan threads must NOT enter the never-re-adjudicate priors
-    channel (build_prior_findings excludes them explicitly as well)."""
+    channel (build_prior_findings excludes them explicitly as well).
+    Accepted residual: forging the EXACT producer shapes still buys
+    verbatim/uncapped/budget-protected bot-lane rendering — the same
+    content-based-marker forgery class as the pre-existing ## OmniForge
+    header; the real mitigation is an authorship contract, a
+    cross-program follow-up."""
     b = body.lstrip()
     return (b.startswith("det-scan: [")                        # thread shape
             or b.startswith("det-scan: scanner evidence — "))  # summary shape
