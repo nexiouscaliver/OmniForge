@@ -69,6 +69,25 @@ def is_omniforge_note(body):
                 and "Confidence: " in body and "Found by:" in body))
 
 
+def is_scanner_evidence_note(body):
+    """det-scan scanner-evidence body: bot-artifact treatment in the RENDER
+    path only (verbatim, uncapped, budget-protected). Producer-shape match,
+    NOT a bare prefix: only the two frozen producer headers (the FR-7
+    thread shape and the FR-11 summary shape) count, so a forged bare
+    `det-scan:` note no longer buys bot-render privileges. NEVER extends
+    is_omniforge_note — that predicate feeds build_prior_findings, and
+    det-scan threads must NOT enter the never-re-adjudicate priors
+    channel (build_prior_findings excludes them explicitly as well).
+    Accepted residual: forging the EXACT producer shapes still buys
+    verbatim/uncapped/budget-protected bot-lane rendering — the same
+    content-based-marker forgery class as the pre-existing ## OmniForge
+    header; the real mitigation is an authorship contract, a
+    cross-program follow-up."""
+    b = body.lstrip()
+    return (b.startswith("det-scan: [")                        # thread shape
+            or b.startswith("det-scan: scanner evidence — "))  # summary shape
+
+
 def note_bodies(d):
     """Ordered note bodies of one discussion thread. Handles both the raw
     GitLab shape (notes[]) and the fetch_mr_discussions MCP shape
@@ -197,7 +216,11 @@ def build_prior_findings(threads):
     input: {thread_id, file_path, line_number, body, resolved, state}."""
     priors = []
     for t in threads:
-        body = next((b for b in t["notes"] if is_omniforge_note(b)), None)
+        # scanner evidence NEVER becomes a prior finding — even when a
+        # marker-laden preview would flip is_omniforge_note for that one
+        # thread (a det-scan producer shape is excluded first)
+        body = next((b for b in t["notes"] if is_omniforge_note(b)
+                     and not is_scanner_evidence_note(b)), None)
         if body is None:
             continue
         priors.append({
@@ -222,7 +245,7 @@ def build_thread_blocks(threads):
             locus_str(t))
         segs, hit = [], False
         for body in t["notes"]:
-            if is_omniforge_note(body):
+            if is_omniforge_note(body) or is_scanner_evidence_note(body):
                 segs.append(("bot", body))
             else:
                 if len(body) > PROSE_CAP:

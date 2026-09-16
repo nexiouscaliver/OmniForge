@@ -478,6 +478,25 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("--delta-files", joined)
         self.assertIn("--delta-base", joined)
 
+    # ── det-filter pins (scanner evidence pre-step) ────────────────
+
+    def test_skill_documents_det_scan_step(self):
+        t = read("SKILL.md")
+        phase1 = t.index("## Phase 1")
+        phase2 = t.index("## Phase 2")
+        span = t[phase1:phase2]
+        self.assertIn("### Scanner evidence pre-step", span)
+        pre_step = span[:span.index("omni_prepare.py")]
+        for literal in ("omni_det_scan.py", "OMNIFORGE_DET_SCAN_PACKET",
+                        "OMNIFORGE_DET_SCAN_EPOCH", "--since"):
+            self.assertIn(literal, pre_step, literal)
+        self.assertNotIn("DET_SCAN_EPOCH=", span)   # epoch never minted in-session
+        self.assertNotIn("FIRST ACTION", span)      # reworded for the pre-step
+        guide = read(os.path.join("references", "posting-guide.md"))
+        self.assertIn("det-scan evidence posting", guide)
+        self.assertIn("omni_det_scan.py", guide)
+        self.assertIn("needs_judgment", guide)
+
 
 if __name__ == "__main__":
     unittest.main()

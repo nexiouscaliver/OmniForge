@@ -1,0 +1,16 @@
+[
+  {
+    "diff": "@@ -7,0 +7,1 @@\n+query\n",
+    "old_path": "src/util.py",
+    "new_path": "src/util.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -0,0 +1,1 @@\n+added\n",
+    "old_path": "src/extra.py",
+    "new_path": "src/extra.py",
+    "new_file": true,
+    "deleted_file": false
+  }
+]

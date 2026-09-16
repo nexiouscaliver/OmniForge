@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "mr": {
+    "project_id": 73279395,
+    "iid": 136,
+    "head_sha": "bbb222",
+    "base_sha": "aaa111"
+  },
+  "scan": {
+    "status": "incomplete",
+    "reason": "trivy timed out",
+    "tools": [
+      {
+        "name": "gitleaks",
+        "version": "8.18.0",
+        "duration_s": 4.2,
+        "status": "ok"
+      },
+      {
+        "name": "opengrep",
+        "version": "1.2.3",
+        "duration_s": 11.5,
+        "status": "ok"
+      },
+      {
+        "name": "trivy",
+        "version": "0.55.0",
+        "duration_s": 600.0,
+        "status": "timeout"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "tool": "gitleaks",
+      "rule_id": "aws-access-key",
+      "file": "src/app.py",
+      "line": 42,
+      "severity": "critical",
+      "class": "secret",
+      "preview_redacted": "AWS Access Key ID=REDACTED:secret:ab12cd34"
+    }
+  ],
+  "meta": {
+    "capped": true,
+    "overflow_not_adjudicated": 3,
+    "redaction": "REDACTED:<type>:<hash8>"
+  }
+}

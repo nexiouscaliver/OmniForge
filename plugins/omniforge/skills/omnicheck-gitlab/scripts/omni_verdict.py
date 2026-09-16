@@ -56,6 +56,12 @@ _ARTIFACT_BODY_MARKERS = (
     "**Push check complete — head ",         # the per-sweep breadcrumb
     "Push sweep at `",                       # a transition reply
     "**⚠ Model leg unavailable this sweep",  # the degraded banner
+    # det-scan SUMMARY notes only: the summary-shape marker (the thread
+    # shape is matched by the thread-shape conjunction in is_artifact —
+    # header plus disposition together); matched at stripped start or
+    # line start, like the sweep markers above — a mid-line quote stays a
+    # finding
+    "det-scan: scanner evidence — ",
 )
 
 _ROUND_SUMMARY_MARKER = re.compile(
@@ -125,6 +131,13 @@ def is_artifact(body, author=None):
     for marker in _ARTIFACT_BODY_MARKERS:
         if stripped.startswith(marker) or ("\n" + marker) in body:
             return True
+    # det-scan THREAD shape: producer header (stripped start or line
+    # start) CONJOINED with the needs_judgment disposition line — a
+    # quoted header without the disposition is a human finding quoting
+    # scanner output, never the artifact itself
+    if (stripped.startswith("det-scan: [") or ("\ndet-scan: [") in body) \
+            and "**Disposition: needs_judgment**" in body:
+        return True
     if _ROUND_SUMMARY_MARKER.search(stripped[:200]) and _ROUND_SUMMARY_HEADER in body:
         return True
     return False

@@ -78,6 +78,15 @@ they are notes.
   `/omnireview`, `/omniforge`, or `/omnicheck`.
 - Nudge/verification bot replies ("This concern appears unaddressed…") —
   replies, never findings, never consent.
+- det-scan scanner-evidence summary notes (`det-scan: scanner evidence — `
+  at a line start).
+- det-scan scanner-evidence thread notes (`det-scan: [` at a line start AND
+  `**Disposition: needs_judgment**` in the body — a quoted header WITHOUT
+  the disposition line stays a finding).
+- Accepted residual (both det-scan shapes): exact-shape forgery (incl.
+  full-template quotes) is misclassified as artifact by design of the
+  content-based model — an authorship contract is the cross-program
+  follow-up.
 
 ## The gate (deterministic rule table)
 

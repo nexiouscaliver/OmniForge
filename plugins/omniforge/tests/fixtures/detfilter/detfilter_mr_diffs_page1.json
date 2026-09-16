@@ -1,0 +1,702 @@
+[
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f001.py",
+    "new_path": "src/f001.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f002.py",
+    "new_path": "src/f002.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f003.py",
+    "new_path": "src/f003.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f004.py",
+    "new_path": "src/f004.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f005.py",
+    "new_path": "src/f005.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f006.py",
+    "new_path": "src/f006.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f007.py",
+    "new_path": "src/f007.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f008.py",
+    "new_path": "src/f008.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f009.py",
+    "new_path": "src/f009.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f010.py",
+    "new_path": "src/f010.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f011.py",
+    "new_path": "src/f011.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f012.py",
+    "new_path": "src/f012.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f013.py",
+    "new_path": "src/f013.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f014.py",
+    "new_path": "src/f014.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f015.py",
+    "new_path": "src/f015.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f016.py",
+    "new_path": "src/f016.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f017.py",
+    "new_path": "src/f017.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f018.py",
+    "new_path": "src/f018.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f019.py",
+    "new_path": "src/f019.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f020.py",
+    "new_path": "src/f020.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f021.py",
+    "new_path": "src/f021.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f022.py",
+    "new_path": "src/f022.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f023.py",
+    "new_path": "src/f023.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f024.py",
+    "new_path": "src/f024.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f025.py",
+    "new_path": "src/f025.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f026.py",
+    "new_path": "src/f026.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f027.py",
+    "new_path": "src/f027.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f028.py",
+    "new_path": "src/f028.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f029.py",
+    "new_path": "src/f029.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f030.py",
+    "new_path": "src/f030.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f031.py",
+    "new_path": "src/f031.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f032.py",
+    "new_path": "src/f032.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f033.py",
+    "new_path": "src/f033.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f034.py",
+    "new_path": "src/f034.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f035.py",
+    "new_path": "src/f035.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f036.py",
+    "new_path": "src/f036.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f037.py",
+    "new_path": "src/f037.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f038.py",
+    "new_path": "src/f038.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f039.py",
+    "new_path": "src/f039.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f040.py",
+    "new_path": "src/f040.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f041.py",
+    "new_path": "src/f041.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f042.py",
+    "new_path": "src/f042.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f043.py",
+    "new_path": "src/f043.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f044.py",
+    "new_path": "src/f044.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f045.py",
+    "new_path": "src/f045.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f046.py",
+    "new_path": "src/f046.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f047.py",
+    "new_path": "src/f047.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f048.py",
+    "new_path": "src/f048.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f049.py",
+    "new_path": "src/f049.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f050.py",
+    "new_path": "src/f050.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f051.py",
+    "new_path": "src/f051.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f052.py",
+    "new_path": "src/f052.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f053.py",
+    "new_path": "src/f053.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f054.py",
+    "new_path": "src/f054.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f055.py",
+    "new_path": "src/f055.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f056.py",
+    "new_path": "src/f056.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f057.py",
+    "new_path": "src/f057.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f058.py",
+    "new_path": "src/f058.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f059.py",
+    "new_path": "src/f059.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f060.py",
+    "new_path": "src/f060.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f061.py",
+    "new_path": "src/f061.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f062.py",
+    "new_path": "src/f062.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f063.py",
+    "new_path": "src/f063.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f064.py",
+    "new_path": "src/f064.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f065.py",
+    "new_path": "src/f065.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f066.py",
+    "new_path": "src/f066.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f067.py",
+    "new_path": "src/f067.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f068.py",
+    "new_path": "src/f068.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f069.py",
+    "new_path": "src/f069.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f070.py",
+    "new_path": "src/f070.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f071.py",
+    "new_path": "src/f071.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f072.py",
+    "new_path": "src/f072.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f073.py",
+    "new_path": "src/f073.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f074.py",
+    "new_path": "src/f074.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f075.py",
+    "new_path": "src/f075.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f076.py",
+    "new_path": "src/f076.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f077.py",
+    "new_path": "src/f077.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f078.py",
+    "new_path": "src/f078.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f079.py",
+    "new_path": "src/f079.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f080.py",
+    "new_path": "src/f080.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f081.py",
+    "new_path": "src/f081.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f082.py",
+    "new_path": "src/f082.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f083.py",
+    "new_path": "src/f083.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f084.py",
+    "new_path": "src/f084.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f085.py",
+    "new_path": "src/f085.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f086.py",
+    "new_path": "src/f086.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f087.py",
+    "new_path": "src/f087.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f088.py",
+    "new_path": "src/f088.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f089.py",
+    "new_path": "src/f089.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f090.py",
+    "new_path": "src/f090.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f091.py",
+    "new_path": "src/f091.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f092.py",
+    "new_path": "src/f092.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f093.py",
+    "new_path": "src/f093.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f094.py",
+    "new_path": "src/f094.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f095.py",
+    "new_path": "src/f095.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f096.py",
+    "new_path": "src/f096.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f097.py",
+    "new_path": "src/f097.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f098.py",
+    "new_path": "src/f098.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -1,0 +1,1 @@\n+added\n",
+    "old_path": "src/f099.py",
+    "new_path": "src/f099.py",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "diff": "@@ -38,4 +39,5 @@\n ctx\n ctx\n ctx\n+leak = os.environ[\"KEY\"]\n ctx\n",
+    "old_path": "src/app.py",
+    "new_path": "src/app.py",
+    "new_file": false,
+    "deleted_file": false
+  }
+]
