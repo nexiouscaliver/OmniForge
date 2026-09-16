@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """OmniForge MCP Server — worktree and MR data tools for the merge request lifecycle."""
 
+import argparse
 import asyncio
 import json
 import mimetypes
@@ -8,6 +9,7 @@ import os
 import re
 import shutil
 import tempfile
+import zlib
 
 # ── Constants ──────────────────────────────────────────────
 
@@ -1204,7 +1206,10 @@ async def _upload_project_file(file_path: str, repo_root: str) -> dict:
                 "glab", "api", "projects/:fullpath/uploads",
                 "--method", "POST",
                 "--input", tmp_name,
-                "-H", multipart_content_type(),
+                # glab api -H requires "Key: value" form: a bare header VALUE
+                # is rejected locally (exit 1, "requires a value separated
+                # by ':'") and the boundary would never ride the request.
+                "-H", f"Content-Type: {multipart_content_type()}",
             ],
             cwd=repo_root, timeout=300,
         )
@@ -1234,6 +1239,72 @@ async def _upload_project_file(file_path: str, repo_root: str) -> dict:
         "full_url": payload.get("full_url", ""),
         "action": "file_uploaded",
     }
+
+
+# ── Upload Boundary Selftest (SC-8; explicit invoke only) ──────
+
+# The verdict reuses the plugin's own upload-markdown shape. omni_ui_
+# screenshot is a sibling module in tools/: prefer the flat import (script
+# launch and the test harness both put tools/ on sys.path), fall back to
+# the package-relative name for package-context imports.
+try:
+    from omni_ui_screenshot import IMAGE_UPLOAD_RE
+except ImportError:  # pragma: no cover - package-context import
+    from .omni_ui_screenshot import IMAGE_UPLOAD_RE
+
+SELFTEST_VERDICT_LINE = "BOUNDARY VERDICT: {}"
+
+
+def _png_chunk(tag: bytes, data: bytes) -> bytes:
+    """One PNG chunk: length + tag + data + CRC32 (stdlib only)."""
+    return (len(data).to_bytes(4, "big") + tag + data +
+            zlib.crc32(tag + data).to_bytes(4, "big"))
+
+
+def build_selftest_png() -> bytes:
+    """A minimal valid 1x1 RGB PNG: signature + IHDR + IDAT + IEND.
+
+    Stdlib only (zlib + crc32) — the selftest must not depend on imaging
+    libraries. One red pixel as a single filter-0 scanline, compressed.
+    """
+    ihdr = _png_chunk(
+        b"IHDR",
+        (1).to_bytes(4, "big") + (1).to_bytes(4, "big") + bytes([8, 2, 0, 0, 0]))
+    idat = _png_chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00"))
+    return b"\x89PNG\r\n\x1a\n" + ihdr + idat + _png_chunk(b"IEND", b"")
+
+
+def run_selftest(selftest_project: str) -> int:
+    """Upload a 1x1 PNG and judge whether the multipart boundary survived.
+
+    Verdict per D13: OK (exit 0) = upload succeeded AND the returned
+    markdown matches the plugin's ![...](.../uploads/...) upload shape;
+    STRIPPED (exit 4) = the call succeeded but the markdown is empty or
+    malformed (the boundary header was lost, GitLab saw garbage); FAILED
+    (exit 3) = the upload call failed or raised. Prints EXACTLY one
+    verdict line to stdout; the temp PNG is always removed.
+    """
+    fd, tmp_name = tempfile.mkstemp(prefix="omni-selftest-", suffix=".png")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(build_selftest_png())
+        try:
+            result = asyncio.run(
+                _upload_project_file(tmp_name, selftest_project))
+        except Exception as exc:  # verdict FAILED, never a traceback
+            result = {"success": False, "error": f"selftest upload raised: {exc}"}
+    finally:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+
+    if not result.get("success"):
+        verdict, code = "FAILED", 3
+    elif IMAGE_UPLOAD_RE.search(result.get("markdown") or ""):
+        verdict, code = "OK", 0
+    else:
+        verdict, code = "STRIPPED", 4
+    print(SELFTEST_VERDICT_LINE.format(verdict))
+    return code
 
 
 # ── OmniFix Cleanup ─────────────────────────────────────
@@ -2645,5 +2716,35 @@ async def _create_gitlab_mr(
 
 # ── Entry Point ───────────────────────────────────────────
 
-if __name__ == "__main__":
+
+def main(argv=None) -> int:
+    """CLI dispatch.
+
+    No flags: the MCP server starts exactly as before (mcp_server.run()).
+    --selftest (explicit invoke only): run the upload boundary selftest
+    and return its exit code; mcp_server.run() is NEVER called.
+    """
+    parser = argparse.ArgumentParser(
+        prog="omniforge_mcp_server.py",
+        description=(
+            "OmniForge MCP server. Pass --selftest with --selftest-project "
+            "to run the upload boundary selftest instead of the server."))
+    parser.add_argument(
+        "--selftest", action="store_true",
+        help="run the multipart upload boundary selftest and exit "
+             "(explicit invoke only; the MCP server is never started)")
+    parser.add_argument(
+        "--selftest-project", metavar="PATH",
+        help="repo checkout path to upload the selftest PNG against "
+             "(required when --selftest is given)")
+    args = parser.parse_args(argv)
+    if args.selftest:
+        if not args.selftest_project:
+            parser.error("--selftest requires --selftest-project")
+        return run_selftest(args.selftest_project)
     mcp_server.run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

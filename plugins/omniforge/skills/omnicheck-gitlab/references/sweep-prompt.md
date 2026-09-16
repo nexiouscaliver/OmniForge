@@ -1,8 +1,13 @@
 # Sweep batched-call prompt (P2)
 
-The ONE model call per sweep. The payload is built by
+One batched model call per chunk. At or below the chunk threshold
+(15, env `OMNIFORGE_SWEEP_CHUNK_THRESHOLD`) the sweep is ONE call; above
+it the batch splits once into two sequential calls, each carrying its own
+evidence packets under a fresh char budget. The payload is built by
 `omni_sweep.build_batch_prompt(packets)` — this file is the human-readable
-contract the code implements (keep them in sync; the code is authoritative).
+contract the code implements (keep them in sync; the code is
+authoritative). The reply contract — a JSON array of verdict objects —
+is unchanged either way.
 
 ## Contract
 
@@ -55,7 +60,8 @@ ancestry) and never come from the model.
 ## Call path (WP0 decision)
 
 The only live implementation tonight is `ClaudeSpawnProvider` — one
-`claude -p` spawn per sweep carrying the whole batch (~60 s floor).
+`claude -p` spawn per chunk carrying that chunk's batch (~60 s floor per
+call; two sequential spawns when the batch chunks, SC-1).
 `DirectProviderAPI` is a deliberate stub: the direct provider call needs a
 secrets/retry story designed in a supervised session, and touches no tokens
 tonight.

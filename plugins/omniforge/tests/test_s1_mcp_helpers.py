@@ -299,7 +299,10 @@ class TestSUploadProjectFile:
         assert args[:3] == ["glab", "api", "projects/:fullpath/uploads"]
         assert "--method" in args and "POST" in args
         assert "--input" in args
-        assert multipart_content_type() in args
+        # glab api -H requires "Key: value" form: a bare header VALUE is a
+        # local usage error (glab exits 1, "requires a value separated by
+        # ':'") and the boundary never rides the request. Pinned verbatim.
+        assert f"Content-Type: {multipart_content_type()}" in args
         assert "-H" in args
         # temp body file cleaned up after the call
         input_path = args[args.index("--input") + 1]
@@ -331,7 +334,8 @@ class TestSUploadProjectFile:
         result = asyncio.run(_upload_project_file(str(img), repo))
         assert result["success"] is True
         assert captured["body"] == expected
-        assert captured["header"] == multipart_content_type()
+        assert captured["header"] == (
+            f"Content-Type: {multipart_content_type()}")
 
     @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
     def test_s1_missing_file_validation_error(self, mock_run, tmp_path):
@@ -547,3 +551,224 @@ class TestSSequence:
         assert rearm["action"] == "reask"
         assert rearm["state"]["discussion_id"] == "abc-def-123"
         assert flow.decide_push_reask(rearm["state"], 1, detection)["action"] == "none"
+
+
+# -- SC-8: upload boundary --selftest (explicit invoke only) -----
+
+
+class TestSSelftest:
+    """The --selftest CLI verdicts (AC-8.1-8.6), transport mocked like
+    TestSUploadProjectFile plus one real-__main__ subprocess run with a
+    stub glab shadowed on PATH (hermetic: the stub never reaches the
+    network)."""
+
+    @patch("omniforge_mcp_server.mcp_server")
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_ok_exit_0_one_line(self, mock_run, mock_server, tmp_path,
+                                   capsys, monkeypatch):
+        import tempfile
+        from omniforge_mcp_server import main
+        tdir = tmp_path / "tempdir"
+        tdir.mkdir()
+        monkeypatch.setattr(tempfile, "tempdir", str(tdir))
+        repo = _make_repo(tmp_path)
+        mock_run.return_value = _make_result(0, UPLOAD_JSON)
+
+        code = main(["--selftest", "--selftest-project", repo])
+
+        assert code == 0
+        # EXACTLY one stdout line, the verdict
+        assert capsys.readouterr().out.splitlines() == ["BOUNDARY VERDICT: OK"]
+        mock_server.run.assert_not_called()  # flag path never runs the server
+        assert mock_run.call_count == 1  # one glab upload call
+        # both tempfiles cleaned up: the selftest PNG and the multipart body
+        assert list(tdir.iterdir()) == []
+
+    @patch("omniforge_mcp_server.mcp_server")
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_empty_markdown_exit_4_stripped(self, mock_run, mock_server,
+                                               tmp_path, capsys):
+        from omniforge_mcp_server import main
+        repo = _make_repo(tmp_path)
+        mock_run.return_value = _make_result(0, json.dumps({}))
+
+        code = main(["--selftest", "--selftest-project", repo])
+
+        assert code == 4
+        assert capsys.readouterr().out.splitlines() == [
+            "BOUNDARY VERDICT: STRIPPED"]
+        mock_server.run.assert_not_called()
+
+    @patch("omniforge_mcp_server.mcp_server")
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_malformed_markdown_exit_4_stripped(self, mock_run, mock_server,
+                                                   tmp_path, capsys):
+        from omniforge_mcp_server import main
+        repo = _make_repo(tmp_path)
+        mock_run.return_value = _make_result(
+            0, json.dumps({"markdown": "garbage", "url": "/uploads/x"}))
+
+        code = main(["--selftest", "--selftest-project", repo])
+
+        assert code == 4
+        assert capsys.readouterr().out.splitlines() == [
+            "BOUNDARY VERDICT: STRIPPED"]
+
+    @patch("omniforge_mcp_server.mcp_server")
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_glab_failure_exit_3_failed(self, mock_run, mock_server,
+                                           tmp_path, capsys):
+        from omniforge_mcp_server import main
+        repo = _make_repo(tmp_path)
+        mock_run.return_value = _make_result(1, stderr="500")
+
+        code = main(["--selftest", "--selftest-project", repo])
+
+        assert code == 3
+        assert capsys.readouterr().out.splitlines() == [
+            "BOUNDARY VERDICT: FAILED"]
+        mock_server.run.assert_not_called()
+
+    @patch("omniforge_mcp_server.mcp_server")
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_upload_raised_exit_3_failed(self, mock_run, mock_server,
+                                             tmp_path, capsys):
+        from omniforge_mcp_server import main
+        repo = _make_repo(tmp_path)
+        mock_run.side_effect = RuntimeError("boom")
+
+        code = main(["--selftest", "--selftest-project", repo])
+
+        assert code == 3
+        assert capsys.readouterr().out.splitlines() == [
+            "BOUNDARY VERDICT: FAILED"]
+
+    @patch("omniforge_mcp_server.mcp_server")
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_missing_project_exit_2_no_subprocess(self, mock_run,
+                                                     mock_server, capsys):
+        from omniforge_mcp_server import main
+
+        with pytest.raises(SystemExit) as exc:
+            main(["--selftest"])
+
+        assert exc.value.code == 2
+        assert mock_run.call_count == 0  # refused before any subprocess
+        mock_server.run.assert_not_called()
+        err = capsys.readouterr().err
+        assert "usage:" in err
+        assert "--selftest-project" in err
+
+    @patch("omniforge_mcp_server.mcp_server")
+    def test_s8_no_flags_runs_mcp_server_exactly_as_today(self, mock_server):
+        from omniforge_mcp_server import main
+
+        main([])
+
+        mock_server.run.assert_called_once_with()  # byte-identical call
+
+    def test_s8_selftest_png_is_a_valid_1x1_png(self):
+        # decoder check, not a vibe: walk every chunk, verify lengths,
+        # CRC32s, IHDR dims/depth/color, IEND, and that IDAT inflates to
+        # the exact scanline
+        import zlib
+        from omniforge_mcp_server import build_selftest_png
+        data = build_selftest_png()
+        assert data[:8] == b"\x89PNG\r\n\x1a\n"
+        chunks = []
+        pos = 8
+        while pos < len(data):
+            length = int.from_bytes(data[pos:pos + 4], "big")
+            tag = data[pos + 4:pos + 8]
+            payload = data[pos + 8:pos + 8 + length]
+            crc = int.from_bytes(data[pos + 8 + length:pos + 12 + length],
+                                 "big")
+            assert crc == zlib.crc32(tag + payload)
+            chunks.append((tag, payload))
+            pos += 12 + length
+        assert pos == len(data)  # no trailing garbage
+        assert chunks[0][0] == b"IHDR"
+        ihdr = chunks[0][1]
+        assert int.from_bytes(ihdr[0:4], "big") == 1  # width
+        assert int.from_bytes(ihdr[4:8], "big") == 1  # height
+        assert ihdr[8] == 8                            # bit depth
+        assert ihdr[9] in (2, 6)                       # color type RGB(A)
+        assert chunks[-1] == (b"IEND", b"")
+        idat = next(p for t, p in chunks if t == b"IDAT")
+        assert zlib.decompress(idat) == b"\x00\xff\x00\x00"  # filter+RGB pixel
+
+    @patch("omniforge_mcp_server.run_exec", new_callable=AsyncMock)
+    def test_s8_upload_argv_pins_boundary_header_verbatim(self, mock_run,
+                                                          tmp_path):
+        # the glab argv must carry the boundary where glab can use it:
+        # -H "Content-Type: <value>" (glab api rejects a bare value)
+        from omniforge_mcp_server import _upload_project_file
+        repo = _make_repo(tmp_path)
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"png")
+        captured = {}
+
+        async def fake_run(args, cwd=None, timeout=60, env=None):
+            captured["header"] = args[args.index("-H") + 1]
+            return _make_result(0, UPLOAD_JSON)
+
+        mock_run.side_effect = fake_run
+
+        result = asyncio.run(_upload_project_file(str(img), repo))
+        assert result["success"] is True
+        assert captured["header"] == (
+            "Content-Type: multipart/form-data; boundary=omniforge-upload-3f2a8c1d")
+
+    def test_s8_real_main_subprocess_ok(self, tmp_path):
+        # the REAL __main__ dispatch, hermetic: a stub glab is shadowed on
+        # PATH (it records its argv + request body and answers like the
+        # uploads endpoint; it never touches the network)
+        import subprocess
+        import textwrap
+        from omniforge_mcp_server import build_selftest_png
+        server_py = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "tools",
+            "omniforge_mcp_server.py"))
+        stub_dir = tmp_path / "bin"
+        stub_dir.mkdir()
+        record = tmp_path / "glab_calls.jsonl"
+        stub = stub_dir / "glab"
+        stub.write_text(textwrap.dedent('''\
+            #!/usr/bin/env python3
+            import json, os, sys
+            entry = {"argv": sys.argv}
+            if "--input" in sys.argv:
+                with open(sys.argv[sys.argv.index("--input") + 1], "rb") as fh:
+                    entry["body"] = fh.read().decode("latin1")
+            with open(os.environ["GLAB_STUB_RECORD"], "a") as fh:
+                fh.write(json.dumps(entry) + "\\n")
+            if any("uploads" in a for a in sys.argv):
+                sys.stdout.write(json.dumps({
+                    "markdown": "![x](/uploads/a.png)",
+                    "url": "/uploads/a.png"}))
+        '''))
+        stub.chmod(0o755)
+        repo = _make_repo(tmp_path)
+        env = os.environ.copy()
+        env["PATH"] = str(stub_dir) + os.pathsep + env.get("PATH", "")
+        env["GLAB_STUB_RECORD"] = str(record)
+
+        proc = subprocess.run(
+            [sys.executable, server_py, "--selftest",
+             "--selftest-project", repo],
+            capture_output=True, text=True, env=env, timeout=60)
+
+        assert proc.returncode == 0
+        assert proc.stdout.splitlines() == ["BOUNDARY VERDICT: OK"]
+        entries = [json.loads(line) for line in record.read_text().splitlines()]
+        upload = next(e for e in entries
+                      if any("uploads" in a for a in e["argv"]))
+        header = upload["argv"][upload["argv"].index("-H") + 1]
+        assert header == (
+            "Content-Type: multipart/form-data; boundary=omniforge-upload-3f2a8c1d")
+        # the request body is the multipart framing around the selftest PNG
+        body = upload["body"].encode("latin1")
+        assert body.startswith(b"--omniforge-upload-3f2a8c1d\r\n")
+        assert b"Content-Type: image/png\r\n" in body
+        assert build_selftest_png() in body
+        assert body.endswith(b"--omniforge-upload-3f2a8c1d--\r\n")

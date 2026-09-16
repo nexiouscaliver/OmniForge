@@ -400,6 +400,25 @@ class TestSOneThreadPolicy:
         assert plan["action"] == "ask"
         assert plan["post_as"] == "new_thread"
 
+    def test_s1_review_ask_after_same_round_reask_is_capped(self):
+        # Cross-round cap leak (T5 review): ask r1 -> image reply -> review
+        # completes (round 2) -> frontend push re-asks in r2 (state back to
+        # requested, reasked_round=2, asked_round STILL 1) -> another push
+        # in r2 routes here, where _asked_this_round alone (1 < 2) would
+        # green-light an EXTRA ask note + both labels — the re-ask cap must
+        # stop it: capped, no labels, nothing churned.
+        state = record_ask(new_state(), 1, "disc-1")
+        state = on_image_reply(state)["state"]
+        state = decide_push_reask(state, 2, STRONG)["state"]
+        assert state["screenshot_state"] == STATE_REQUESTED
+        assert state["reasked_round"] == 2
+        assert state["asked_round"] == 1
+        plan = decide_review_ask(state, 2, STRONG)
+        assert plan["action"] == "none"
+        assert plan["reason"] == "reask_capped_this_round"
+        assert plan["labels_add"] == []
+        assert plan["labels_remove"] == []
+
     def test_s1_record_ask_preserves_original_thread(self):
         state = record_ask(new_state(), 1, "disc-thread")
         state = record_ask(state, 2, "disc-thread")  # engine posts a reply

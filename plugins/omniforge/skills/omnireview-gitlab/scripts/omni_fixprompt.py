@@ -57,9 +57,10 @@ web_url check: mr_meta and thread_map values are the poster's trusted
 placeholder constants and render VERBATIM (angle brackets intact, no
 caps); finding fields are still fully sanitized.
 
-Exit codes: 0 rendered (stdout is exactly the brief, ending in one
-newline); 2 BriefSkip/UsageError/any input-file problem printed as
-"omni_fixprompt: <reason>" on stderr — never a traceback.
+Exit codes: 0 rendered (stdout is exactly the brief — one fenced markdown
+block per wrap_brief_md_block, SC-9); 2 BriefSkip/UsageError/any
+input-file problem printed as "omni_fixprompt: <reason>" on stderr — never
+a traceback.
 """
 
 import argparse
@@ -333,13 +334,31 @@ def _resolve_finding(entry, note_id, meta, offline):
     return (severity, title, locus, category, link, problem, recommendation)
 
 
+def wrap_brief_md_block(text):
+    """Wrap the composed brief in ONE copyable fenced markdown block (SC-9).
+
+    The payload must end in exactly one newline — asserted, never repaired:
+    inserting an extra "\\n" would leave a blank line before the closing
+    fence (D14). The fence is always at least 4 backticks and one longer
+    than the payload's longest backtick run, so no content can close the
+    block early (_sanitize_body already collapses every untrusted run, so
+    the longest run is a template code span — 1).
+    """
+    if not text.endswith("\n") or text.endswith("\n\n"):
+        raise AssertionError("brief must end in exactly one newline")
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(4, longest + 1)
+    return fence + "markdown\n" + text + fence
+
+
 def render_brief(findings, thread_map, mr_meta, mr_iid, project=None,
                  offline=False):
     """Render the fix brief from the RAW parsed findings array, this run's
     {array-index: note-id} thread map, and the MR metadata. Raises
     BriefSkip on any skip condition and UsageError on entry-content
-    problems; otherwise returns the brief markdown ending in exactly one
-    newline."""
+    problems; otherwise returns the brief wrapped in a fenced markdown
+    block (wrap_brief_md_block — payload ends in exactly one newline, no
+    extra newline before the closing fence)."""
     if not isinstance(findings, list):
         raise UsageError("findings is not an array")
 
@@ -441,7 +460,9 @@ def render_brief(findings, thread_map, mr_meta, mr_iid, project=None,
                      "here — %d more are in the inline threads above.)\n"
                      % (TOP_N, total - TOP_N))
     parts.append("\n" + _TAIL.format(target=head_target, source=head_source))
-    return "".join(parts)
+    # SC-9: the wrap is the LAST step — the posted body is one copyable
+    # fenced markdown block around the byte-identical composed payload.
+    return wrap_brief_md_block("".join(parts))
 
 
 def _load_json(path):

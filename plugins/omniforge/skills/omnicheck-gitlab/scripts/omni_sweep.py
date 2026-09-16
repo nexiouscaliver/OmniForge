@@ -3,7 +3,8 @@
 
 Everything deterministic about "did this push fix the findings, and is there
 new work?" lives here: delta partition, line-map re-anchoring, evidence
-selection, the batched model call (ONE call per sweep), the citation rule,
+selection, the batched model call (one call per chunk — a batch over
+CHUNK_THRESHOLD splits once into two, SC-1), the citation rule,
 and the renderers (living report + breadcrumb). The vocabulary is P1's
 omni_verdict module, reused verbatim — never a parallel one.
 
@@ -29,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import omni_verdict  # noqa: E402 — same directory, vocabulary reused verbatim
@@ -38,6 +40,23 @@ import omni_verdict  # noqa: E402 — same directory, vocabulary reused verbatim
 MAX_HUNKS_PER_FINDING = 8
 MAX_HUNK_EXCERPT_LINES = 40
 MAX_PACKET_CHARS = 20000
+
+
+def _env_int_positive(name, fallback):
+    """Positive int from env `name`; `fallback` on absent/unparseable/<=0."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return fallback
+    try:
+        value = int(raw)
+    except ValueError:
+        return fallback
+    return value if value > 0 else fallback
+
+
+# SC-1/D1: batches over this many open findings split once into two chunks
+# (env-overridable; the engine dispatcher forwards the knob).
+CHUNK_THRESHOLD = _env_int_positive("OMNIFORGE_SWEEP_CHUNK_THRESHOLD", 15)
 
 DOCS_SUFFIXES = (".md", ".rst", ".txt", ".adoc")
 CI_PATHS = (".gitlab-ci.yml", ".github/workflows/", "Jenkinsfile",
@@ -573,24 +592,41 @@ class DirectProviderAPI:
     is deliberately out of scope tonight (WP0 decision) — implementing this
     is a supervised-session task. Touches no tokens."""
 
-    def call(self, prompt):
+    def call(self, prompt, session_id=None):
         raise NotImplementedError(
             "DirectProviderAPI is a stub by design: the claude -p spawn "
             "(ClaudeSpawnProvider) is the only live call path.")
 
 
 class ClaudeSpawnProvider:
-    """ONE `claude -p` spawn per sweep carrying the whole batched payload."""
+    """ONE `claude -p` spawn per chunk carrying the whole batched payload
+    (two sequential spawns when the batch chunks, SC-1)."""
 
-    def __init__(self, timeout=300):
+    def __init__(self, timeout=None):
+        # D11: the ENGINE kill at OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS is the
+        # binding ceiling — this per-call timeout sits 60s above it (env
+        # absent: fallback base 600 + 60 grace = 660 total; the engine's
+        # PLUGIN_TIMEOUT_SECS is today 240 and is spec-raised to 600 in the
+        # engine task, so the +60 grace keeps the engine kill binding in both
+        # cases; replaces the old hardcoded 300).
+        if timeout is None:
+            timeout = _env_int_positive(
+                "OMNIFORGE_SWEEP_PLUGIN_TIMEOUT_SECS", 600) + 60
         self.timeout = timeout
 
-    def build_command(self, prompt):
-        return ["claude", "-p", prompt, "--output-format", "text"]
+    def build_command(self, prompt, session_id=None):
+        cmd = ["claude", "-p", prompt, "--output-format", "text"]
+        # D11/SC-6: --session-id only when one is known (explicit arg wins
+        # over the forwarded OMNIFORGE_SESSION_ID env).
+        sid = session_id or os.environ.get("OMNIFORGE_SESSION_ID")
+        if sid:
+            cmd += ["--session-id", sid]
+        return cmd
 
-    def call(self, prompt):
-        r = subprocess.run(self.build_command(prompt), capture_output=True,
-                           text=True, timeout=self.timeout)
+    def call(self, prompt, session_id=None):
+        r = subprocess.run(self.build_command(prompt, session_id),
+                           capture_output=True, text=True,
+                           timeout=self.timeout)
         if r.returncode != 0:
             raise RuntimeError("claude -p failed: %s" % r.stderr[:300])
         return r.stdout
@@ -723,6 +759,16 @@ def unresolvable_heads(repo_root, shas):
     return missing
 
 
+def _split_chunks(findings):
+    """SC-1/D2: batches over CHUNK_THRESHOLD split ONCE into contiguous
+    halves (first ceil(n/2), rest); at or below the threshold the whole
+    batch stays one chunk — exactly today's single call."""
+    if len(findings) <= CHUNK_THRESHOLD:
+        return [findings]
+    half = (len(findings) + 1) // 2
+    return [findings[:half], findings[half:]]
+
+
 def run_sweep(repo_root, reviewed_head, head, findings, provider,
               sweep_number=1, dry_run=False, delta_review_queued=False):
     """Run one sweep. Returns skip reason (or None), verdicts, partition,
@@ -731,13 +777,17 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
     Model-degradation contract (E3): a provider that fails — spawn error,
     timeout, unparseable reply — NEVER fails the sweep; every open finding
     comes back needs_judgment with the stated reason and the result carries
-    model_degraded=True (the report says so; the engine logs it). The
+    model_degraded=True (the report says so; the engine logs it). Under
+    chunking (SC-1) the degrade is per chunk: a failed chunk-2 call
+    degrades only chunk-2's findings, chunk-1's verdicts stand. The
     timings dict {code_s, model_s} is the per-leg latency evidence the
-    seam's MR body quotes."""
+    seam's MR body quotes (model_s sums both call windows under chunking),
+    and sessions lists the session ids used, in call order."""
     import time as _time
     t_start = _time.time()
     model_degraded = False
     model_s = 0.0
+    sessions = []  # D11: session ids actually used, in call order
     # Ancestry: rebase/force-push => stale markings, report-only
     rc, _ = _git(repo_root, "merge-base", "--is-ancestor", reviewed_head, head)
     non_ancestor = rc != 0
@@ -756,7 +806,7 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
                 "residual": None, "report": "", "breadcrumb": "",
                 "relevant_files": [], "model_degraded": False,
                 "timings": {"code_s": _time.time() - t_start,
-                            "model_s": 0.0}}
+                            "model_s": 0.0}, "sessions": []}
 
     if non_ancestor:
         anchor_map = stale_markings(findings)
@@ -785,24 +835,58 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
                           "reason": "dry run: no model call"}
                          for f in open_findings]
         else:
-            packets = build_evidence_packets(diff_text, open_findings,
-                                             anchor_map)
-            prompt = build_batch_prompt(packets)
-            t_model = _time.time()
-            try:
-                reply = provider.call(prompt)
-                verdicts += ClaudeSpawnProvider.parse_verdicts(reply)
-                verdicts = apply_citation_rule(verdicts, packets)
-            except Exception as exc:      # spawn/timeout/parse: degrade,
-                # never fail — every open finding needs_judgment with the
-                # stated reason, model_degraded flags it to the engine
-                model_degraded = True
-                verdicts += [{"finding_id": f["id"],
-                              "verdict": "needs_judgment",
-                              "reason": "model unavailable: %s"
-                                        % str(exc)[:200]}
-                             for f in open_findings]
-            model_s = _time.time() - t_model
+            chunks = _split_chunks(open_findings)
+            all_packets = []
+            chunk_verdicts = []
+            for index, chunk in enumerate(chunks):
+                # SC-1/D2: each chunk gets its OWN evidence budget (fresh
+                # MAX_PACKET_CHARS), its own prompt, and its own call.
+                packets = build_evidence_packets(diff_text, chunk,
+                                                 anchor_map)
+                all_packets.extend(packets)
+                prompt = build_batch_prompt(packets)
+                session_id = None
+                if index == 0:
+                    # the first call rides the forwarded OMNIFORGE_SESSION_ID
+                    # env (no explicit id — recorded when the env carries one)
+                    env_sid = os.environ.get("OMNIFORGE_SESSION_ID")
+                    if env_sid:
+                        sessions.append(env_sid)
+                else:
+                    # SC-6: each additional call mints a fresh id so the
+                    # chunks' transcripts never collide.
+                    session_id = str(uuid.uuid4())
+                    sessions.append(session_id)
+                t_model = _time.time()
+                try:
+                    reply = provider.call(prompt, session_id=session_id)
+                    parsed = ClaudeSpawnProvider.parse_verdicts(reply)
+                    if len(chunks) > 1:
+                        # cross-chunk shadowing guard: render_report's by_id
+                        # map is last-wins, so a verdict naming a finding
+                        # outside THIS chunk must never survive to the merge.
+                        # Below-threshold single calls keep the historical
+                        # passthrough, byte-identical.
+                        chunk_ids = {f["id"] for f in chunk}
+                        parsed = [v for v in parsed
+                                  if v.get("finding_id") in chunk_ids]
+                    chunk_verdicts.append(parsed)
+                except Exception as exc:  # spawn/timeout/parse: degrade,
+                    # never fail — THIS chunk's findings only, in chunk
+                    # order; earlier chunks' verdicts stand.
+                    model_degraded = True
+                    chunk_verdicts.append(
+                        [{"finding_id": f["id"],
+                          "verdict": "needs_judgment",
+                          "reason": "model unavailable: %s"
+                                    % str(exc)[:200]}
+                         for f in chunk])
+                model_s += _time.time() - t_model
+            for chunk_vs in chunk_verdicts:
+                verdicts.extend(chunk_vs)
+            # D2: the citation rule runs ONCE over the merged verdict set
+            # against the concatenated packets of every chunk.
+            verdicts = apply_citation_rule(verdicts, all_packets)
 
     relevant_files = sorted({h["file"] for h in partition["relevant_hunks"]})
     residual = partition["residual"]
@@ -826,12 +910,14 @@ def run_sweep(repo_root, reviewed_head, head, findings, provider,
         "model_degraded": model_degraded,
         "timings": {"code_s": _time.time() - t_start - model_s,
                     "model_s": model_s},
+        "sessions": sessions,
     }
 
 
 def build_batch_prompt(packets):
-    """The ONE batched structured call per sweep: all findings, capped
-    candidate hunks, JSON reply contract (template:
+    """The batched structured call, one per chunk (a batch over
+    CHUNK_THRESHOLD splits once into two, SC-1): that chunk's findings,
+    capped candidate hunks, JSON reply contract (template:
     ../references/sweep-prompt.md)."""
     payload = json.dumps(packets, indent=1)
     return (
@@ -903,7 +989,8 @@ def main(argv=None):
         result = {"skip": "SKIP_OPT_OUT", "verdicts": [], "residual": None,
                   "report": "", "breadcrumb": "", "relevant_files": [],
                   "model_degraded": False,
-                  "timings": {"code_s": 0.0, "model_s": 0.0}}
+                  "timings": {"code_s": 0.0, "model_s": 0.0},
+                  "sessions": []}
         enrich = {"sweep_number": args.sweep_number or 1,
                   "transitions": [], "ledger_error": False,
                   "publish": {"action": "create", "note_id": None},
@@ -917,7 +1004,8 @@ def main(argv=None):
         result = {"skip": "SKIP_ALREADY_SWEPT", "verdicts": [],
                   "residual": None, "report": "", "breadcrumb": "",
                   "relevant_files": [], "model_degraded": False,
-                  "timings": {"code_s": 0.0, "model_s": 0.0}}
+                  "timings": {"code_s": 0.0, "model_s": 0.0},
+                  "sessions": []}
         result.update({"sweep_number": args.sweep_number or 1,
                        "transitions": [], "ledger_error": False,
                        "publish": {"action": "create", "note_id": None},

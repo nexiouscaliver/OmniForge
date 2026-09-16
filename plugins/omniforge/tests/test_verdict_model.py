@@ -60,6 +60,16 @@ class ArtifactFilterTests(unittest.TestCase):
                 "Everything below the second divider is self-contained.")
         self.assertTrue(omni_verdict.is_artifact(body))
 
+    def test_wrapped_fix_brief_is_artifact(self):
+        # SC-9: the plugin posts the fix brief inside a >=4-backtick fenced
+        # markdown block — the "\n<marker>" arm of the marker match still
+        # classifies it as an artifact (the fence precedes the heading, so
+        # the startswith arm alone would miss it).
+        body = ("````markdown\n## OmniForge fix brief — paste this into your "
+                "coding agent\n\nEverything below the second divider is "
+                "self-contained.\n````")
+        self.assertTrue(omni_verdict.is_artifact(body))
+
     def test_disposition_summary_is_artifact(self):
         body = "## Disposition summary — 17 findings\n\nTwo commits, no history rewritten."
         self.assertTrue(omni_verdict.is_artifact(body))

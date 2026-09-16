@@ -179,6 +179,13 @@ Workflow:
 steps 1–6 for you.)
 """ % (WEB_URL, WEB_URL, WEB_URL)
 
+# SC-9: the SHIPPED brief is GOLDEN_BRIEF (the unwrapped pre-change compose,
+# kept byte-exact above as the payload-identity golden) wrapped in one fenced
+# markdown block — 4 backticks because the payload's longest backtick run is
+# 1 (template code spans; _sanitize_body collapses every untrusted run), the
+# "markdown" info string, and NO extra newline before the closing fence (D14).
+GOLDEN_WRAPPED_BRIEF = "````markdown\n" + GOLDEN_BRIEF + "````"
+
 ITEM_HEAD_RE = re.compile(
     r"^(\d+)\. \*\*\[([a-z]+)\] (.*)\*\* — `([^`]*)` — category: (.*) — thread: (.*)$")
 PROBLEM_PREFIX = "   - Problem: "
@@ -280,15 +287,17 @@ class FixPromptTests(unittest.TestCase):
     def test_cli_golden_render(self):
         code, out, err = self.run_cli(GOLDEN_FINDINGS, GOLDEN_MAP, GOLDEN_META)
         self.assertEqual(code, 0, err)
-        self.assertEqual(out, GOLDEN_BRIEF)
+        self.assertEqual(out, GOLDEN_WRAPPED_BRIEF)
         # guard clause FIRST — before any per-finding content
         self.assertLess(out.index("Step 0"), out.index("1. **[critical]"))
         # branches filled in BOTH the header and workflow item 1
         self.assertIn("git diff origin/main...feat/cache", out)
-        # the omnifix parenthetical is the last non-empty content
+        # the omnifix parenthetical is the last payload content and the
+        # closing fence is the output's final non-empty line (SC-9)
         lines = [ln for ln in out.splitlines() if ln.strip()]
-        self.assertEqual(lines[-1], "steps 1–6 for you.)")
-        self.assertTrue(lines[-2].startswith(
+        self.assertEqual(lines[-1], "````")
+        self.assertEqual(lines[-2], "steps 1–6 for you.)")
+        self.assertTrue(lines[-3].startswith(
             "(If you have the OmniForge plugin installed"))
         # the untrusted-data line is verbatim
         self.assertIn(UNTRUSTED_LINE, out)
@@ -325,9 +334,22 @@ class FixPromptTests(unittest.TestCase):
         code, out, err = self.run_cli(hostile, {"0": 101, "1": 102, "2": 103},
                                       GOLDEN_META)
         self.assertEqual(code, 0, err)
-        self.assertNotIn("```", out)
         self.assertNotIn("~~~", out)
         self.assertNotIn("<script", out)
+        # SC-9 rewrote the fence invariant: the brief itself is a >=4
+        # backtick fenced markdown block, so "```" IS a substring of the
+        # output — the invariant is that the ONLY backtick runs of length
+        # >=3 are exactly the two outer fence lines: equal runs, >=4, the
+        # first line is the opening fence + "markdown", and the last
+        # content line is the bare closing fence. An untrusted field
+        # collapsing into a >=3 run would surface as a third run here.
+        runs = re.findall(r"`{3,}", out)
+        self.assertEqual(len(runs), 2, out)
+        self.assertEqual(runs[0], runs[1])
+        self.assertGreaterEqual(len(runs[0]), 4)
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        self.assertEqual(lines[0], runs[0] + "markdown")
+        self.assertEqual(lines[-1], runs[0])
         # 3-line shape + no heading/quote/list line starts, by construction
         items = parse_finding_items(out)
         self.assertEqual(len(items), 3)

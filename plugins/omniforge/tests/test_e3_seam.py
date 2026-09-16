@@ -15,6 +15,7 @@ import json
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -222,7 +223,7 @@ class TestE3ConcernCarries(E3Fixture, unittest.TestCase):
         class RecordingProvider:
             prompt = None
 
-            def call(self, prompt):
+            def call(self, prompt, session_id=None):
                 type(self).prompt = prompt
                 return json.dumps([{
                     "finding_id": "t1", "verdict": "not_fixed",
@@ -314,7 +315,7 @@ class TestE3ModelDegradation(E3Fixture, unittest.TestCase):
 
     def test_e3_model_failure_degrades_to_needs_judgment(self):
         class DeadProvider:
-            def call(self, prompt):
+            def call(self, prompt, session_id=None):
                 raise RuntimeError("claude -p failed: boom")
 
         result = omni_sweep.run_sweep(
@@ -329,7 +330,7 @@ class TestE3ModelDegradation(E3Fixture, unittest.TestCase):
 
     def test_e3_model_reply_without_json_degrades_too(self):
         class GarbageProvider:
-            def call(self, prompt):
+            def call(self, prompt, session_id=None):
                 return "I am not a JSON array at all"
 
         result = omni_sweep.run_sweep(
@@ -349,6 +350,83 @@ class TestE3Timings(E3Fixture, unittest.TestCase):
         self.assertIn("model_s", timings)
         self.assertGreaterEqual(timings["code_s"], 0.0)
         self.assertGreaterEqual(timings["model_s"], 0.0)
+
+
+class TestE3SessionsContract(E3Fixture, unittest.TestCase):
+    """D11: the stdout result contract carries the session ids used (call
+    order) — the dispatcher's TRANSCRIPT emission (SC-6) reads it. Skip /
+    --model none paths report the empty list; no key is ever removed."""
+
+    def test_e3_model_none_result_carries_empty_sessions(self):
+        result = self.run_main("--ledger", self.ledger_file())
+        self.assertIn("sessions", result)
+        self.assertEqual(result["sessions"], [])
+
+    def test_e3_skip_results_carry_empty_sessions(self):
+        result = self.run_main("--ledger", self.ledger_file(opt_out=True))
+        self.assertEqual(result.get("sessions"), [])
+        result = self.run_main("--ledger",
+                               self.ledger_file(sweep_head=self.head))
+        self.assertEqual(result.get("sessions"), [])
+
+
+FAKE_CLAUDE = (
+    "#!/usr/bin/env python3\n"
+    "import json, os, re, sys\n"
+    "args = sys.argv[1:]\n"
+    "prompt = args[args.index('-p') + 1]\n"
+    "sid = args[args.index('--session-id') + 1] "
+    "if '--session-id' in args else None\n"
+    "ids = re.findall(r'\"finding_id\": \"(f\\d+)\"', prompt)\n"
+    "with open(os.environ['SWEEPFIX_FAKE_LOG'], 'a') as fh:\n"
+    "    fh.write(json.dumps({'session_id': sid, 'ids': ids}) + '\\n')\n"
+    "print(json.dumps([{'finding_id': i, 'verdict': 'not_fixed',\n"
+    "                   'evidence_hunk_id': None, 'confidence': 80,\n"
+    "                   'one_line': 'e2e'} for i in ids]))\n")
+
+
+class TestE3ChunkOverrideEndToEnd(E3Fixture, unittest.TestCase):
+    """The env chunk knob works through a REAL script invocation: a fake
+    `claude` on PATH records every spawn (argv session id + the finding
+    ids in its prompt); OMNIFORGE_SWEEP_CHUNK_THRESHOLD=4 against 5
+    findings yields two spawns and a two-entry sessions list."""
+
+    def test_e3_env_chunk_override_two_spawns_and_sessions(self):
+        bindir = self.root / "bin"
+        bindir.mkdir()
+        fake = bindir / "claude"
+        fake.write_text(FAKE_CLAUDE)
+        fake.chmod(0o755)
+        log = self.root / "fake_claude_log.jsonl"
+        self.findings_file.write_text(json.dumps([
+            e3_finding("f%d" % i, "run() is unguarded", "src/app.py", 2)
+            for i in range(1, 6)]))
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith(("OMNIFORGE_", "SWEEPFIX_"))
+               and k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+        env["OMNIFORGE_SWEEP_CHUNK_THRESHOLD"] = "4"
+        env["OMNIFORGE_SESSION_ID"] = "e2e-env-sid"
+        env["SWEEPFIX_FAKE_LOG"] = str(log)
+        env["PATH"] = str(bindir) + os.pathsep + env.get("PATH", "")
+        proc = subprocess.run(
+            [sys.executable, os.path.join(SCRIPTS, "omni_sweep.py"),
+             "--repo-root", self.path, "--reviewed-head", self.reviewed,
+             "--head", self.head, "--findings", str(self.findings_file),
+             "--model", "claude-spawn"],
+            capture_output=True, text=True, env=env, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        result = json.loads(proc.stdout)
+        calls = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual(len(calls), 2)                # threshold 4 < 5
+        self.assertEqual(calls[0]["ids"], ["f1", "f2", "f3"])  # ceil(5/2)
+        self.assertEqual(calls[1]["ids"], ["f4", "f5"])
+        self.assertEqual(calls[0]["session_id"], "e2e-env-sid")
+        self.assertNotEqual(calls[1]["session_id"], "e2e-env-sid")
+        self.assertIsNotNone(calls[1]["session_id"])
+        self.assertEqual(result["sessions"][0], "e2e-env-sid")
+        self.assertEqual(result["sessions"][1], calls[1]["session_id"])
+        self.assertEqual([v["finding_id"] for v in result["verdicts"]],
+                         ["f1", "f2", "f3", "f4", "f5"])
 
 
 if __name__ == "__main__":
